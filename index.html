@@ -217,13 +217,11 @@
               </p>
             </div>
           </div>
-
           <div
             class="w-full h-4 border-t border-l border-gray-600 border-r border-b border-white mb-4 p-[2px] bg-white"
           >
             <div class="h-full bg-[#000080] w-full animate-pulse"></div>
           </div>
-
           <button
             id="btn-boot-start"
             class="win-btn px-6 py-1 text-xs font-bold active:border-t-black active:border-l-black active:border-r-white active:border-b-white focus:outline-dotted"
@@ -232,7 +230,6 @@
           </button>
         </div>
       </div>
-
       <div class="mt-4 text-[10px] text-gray-500 font-pixel">
         POWERED BY NEXTAMP
       </div>
@@ -657,7 +654,6 @@
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return;
         const s = JSON.parse(raw);
-
         if (s.vol) {
           $("#main-vol").value = s.vol;
           masterGainNode.gain.value = parseFloat(s.vol);
@@ -677,7 +673,6 @@
           $('input[data-key="semitones"]').value = s.pitch;
           $("#val-pitch").textContent = s.pitch;
         }
-
         if (s.isShuffle) {
           isShuffle = true;
           $("#tog-shuffle").classList.add("active-indicator");
@@ -686,49 +681,53 @@
           isRepeat = true;
           $("#tog-repeat").classList.add("active-indicator");
         }
-
         isEqOn = s.isEqOn !== undefined ? s.isEqOn : true;
         $("#txt-eq-status").textContent = isEqOn ? "ON" : "OFF";
         $("#btn-eq-toggle").classList.toggle("pressed", isEqOn);
-
         if (s.playlistId) currentPlaylistId = s.playlistId;
-
         window.savedEqGains = s.eqGains || [];
       }
 
-      // --- 1. BOOT SEQUENCE & AUDIO UNLOCK ---
+      // --- 1. BOOT SEQUENCE & RELAY LOGIC ---
       const audioContext = new AudioContext();
       let isEngineHot = false;
-
-      // Reverting to original file-based boot sequence
       const bootBtn = $("#btn-boot-start");
       const audioStartup = $("#audio-startup");
       const audioLoop = $("#audio-loop");
 
-      // Connect Loop to Context (Standard Bridge for Background Play)
+      // Setup Loop Bridge
       const loopSource = audioContext.createMediaElementSource(audioLoop);
       loopSource.connect(audioContext.destination);
+
+      // FORCE RELAY: Start Loop NOW (Waiting Mode)
+      function engageLoop() {
+        if (audioLoop.paused) {
+          audioLoop.play().catch((e) => console.warn("Loop Start Blocked:", e));
+        }
+      }
+
+      function disengageLoop() {
+        if (!audioLoop.paused) {
+          audioLoop.pause();
+          audioLoop.currentTime = 0; // Reset for next time
+        }
+      }
 
       bootBtn.onclick = async () => {
         try {
           audioStartup.volume = 0.5;
-          audioLoop.volume = 0.2; // Original volume request
+          audioLoop.volume = 1.0;
 
           if (audioContext.state === "suspended") {
             await audioContext.resume();
           }
 
-          // Play both immediately
+          // Boot Sequence: Play Startup -> Then Enter App -> Then Engage Loop (Waiting for Music)
           await audioStartup.play();
-          audioLoop
-            .play()
-            .catch((e) => console.warn("Loop playback warning:", e));
 
           audioStartup.onended = () => {
             enterApp();
           };
-
-          // Fallback
           audioStartup.onerror = () => enterApp();
         } catch (e) {
           console.error("Audio unlock failed:", e);
@@ -741,10 +740,12 @@
         isEngineHot = true;
         $("#engine-status").style.backgroundColor = "#00ff00";
         $("#engine-status").style.boxShadow = "0 0 4px #0f0";
-
         $("#boot-screen").style.opacity = "0";
         $("#boot-screen").style.transition = "opacity 0.5s";
         setTimeout(() => $("#boot-screen").classList.add("hidden"), 500);
+
+        // App Ready: Start Loop (Waiting for user to play music)
+        engageLoop();
       }
 
       async function wakeUpAudioEngine() {
@@ -754,10 +755,6 @@
           isEngineHot = true;
           $("#engine-status").style.backgroundColor = "#00ff00";
           $("#engine-status").style.boxShadow = "0 0 4px #0f0";
-
-          if (audioLoop.paused) {
-            audioLoop.play().catch((e) => {});
-          }
         } catch (e) {
           console.error(e);
         }
@@ -805,7 +802,6 @@
       analyser.connect(pannerNode);
       pannerNode.connect(masterGainNode);
       masterGainNode.connect(audioContext.destination);
-
       masterGainNode.gain.value = 0.8;
       analyser.fftSize = 256;
 
@@ -837,7 +833,6 @@
           f.type = "peaking";
           f.frequency.value = freq;
           f.Q.value = 1.4;
-
           let savedVal =
             window.savedEqGains && window.savedEqGains[i] !== undefined
               ? window.savedEqGains[i]
@@ -847,7 +842,6 @@
             slider.value = savedVal;
             updateThumb(slider, `thumb-${i}`);
           }
-
           f.gain.value = isEqOn ? savedVal : 0;
           eqNodes.push(f);
           if (prev) prev.connect(f);
@@ -875,6 +869,11 @@
         stretch.connect(eqChain.input);
         eqChain.output.connect(analyser);
         await stretch.addBuffers(channelBuffers);
+
+        // *** CRITICAL SWAP POINT ***
+        // Engine is ready to play -> STOP LOOP
+        disengageLoop();
+
         controlValues.active = true;
         controlsChanged();
         isChangingTrack = false;
@@ -889,6 +888,10 @@
           );
           stretch.schedule(obj);
         }
+
+        // Sync Relay: If paused, start loop. If playing, stop loop.
+        if (!controlValues.active) engageLoop();
+        else disengageLoop();
       }
 
       // --- 3. DATA LAYER ---
@@ -898,7 +901,6 @@
       let currentTrackIndex = -1;
       let selectedIndices = new Set();
       let lastSelectedIndex = -1;
-
       const DB_NAME = "NextampUltimateDB";
       const dbReq = indexedDB.open(DB_NAME, 8);
 
@@ -970,11 +972,17 @@
       // --- 4. CONTROLS ---
       async function playTrack(idx) {
         if (isChangingTrack) return;
+
+        // *** CRITICAL RELAY START ***
+        // Engage Loop IMMEDIATELY to cover loading gap
+        engageLoop();
+
         isChangingTrack = true;
         if (!isEngineHot) await wakeUpAudioEngine();
         let list = getCurrentDisplayList();
         if (idx < 0 || idx >= list.length) {
           isChangingTrack = false;
+          engageLoop(); // Keep loop if failed
           return;
         }
 
@@ -985,7 +993,7 @@
 
         try {
           const buf = await t.blob.arrayBuffer();
-          await loadAudioEngine(buf);
+          await loadAudioEngine(buf); // Loop stops inside here when ready
           $("#marquee").textContent = `${idx + 1}. ${t.name} (${
             t.sampleRate || 44100
           }hz)`;
@@ -994,6 +1002,7 @@
           console.error(e);
           $("#marquee").textContent = "Error loading file.";
           isChangingTrack = false;
+          engageLoop(); // Error? Start loop again.
         }
       }
 
@@ -1015,7 +1024,12 @@
 
         if (next < list.length) playTrack(next);
         else if (isRepeat) playTrack(0);
-        else if (!auto) playTrack(0);
+        else if (!auto) {
+          // End of playlist: Stop music, engage loop
+          playTrack(0); // Optional: Loop back to start or stop
+          // If strictly stop:
+          // controlValues.active = false; controlsChanged();
+        }
       }
 
       function handlePrevTrack() {
@@ -1036,11 +1050,14 @@
         else if (stretch) {
           controlValues.active = !controlValues.active;
           controlsChanged(0.1);
+        } else {
+          // No music, just engage loop
+          engageLoop();
         }
       };
       $("#btn-pause").onclick = () => {
         controlValues.active = false;
-        controlsChanged();
+        controlsChanged(); // This triggers engageLoop()
       };
       $("#btn-stop").onclick = () => {
         controlValues.active = false;
@@ -1049,6 +1066,8 @@
         $("#time-display").textContent = "00:00";
         $("#btn-play").classList.remove("pressed");
         $("#marquee").textContent = "Stopped.";
+
+        engageLoop(); // Music stopped -> Start Loop
       };
       $("#btn-next").onclick = () => handleNextTrack(false);
       $("#btn-prev").onclick = () => handlePrevTrack();
@@ -1158,7 +1177,6 @@
       function draw() {
         requestAnimationFrame(draw);
 
-        // --- UPDATE LOCK SCREEN PROGRESS ---
         if ("mediaSession" in navigator && stretch && controlValues.active) {
           try {
             navigator.mediaSession.setPositionState({
@@ -1166,11 +1184,8 @@
               playbackRate: controlValues.rate || 1,
               position: stretch.inputTime || 0,
             });
-          } catch (error) {
-            // Ignore errors
-          }
+          } catch (error) {}
         }
-
         if (stretch && !holding) {
           const pb = $("#playback");
           pb.max = audioDuration;
@@ -1181,7 +1196,6 @@
           )
             .toString()
             .padStart(2, "0")}`;
-
           if (
             controlValues.active &&
             t >= audioDuration - 0.2 &&
@@ -1221,7 +1235,6 @@
           renderPlaylistUI();
         }
       };
-
       window.renderPlaylistUI = () => {
         const box = $("#pl-box");
         box.innerHTML = "";
@@ -1244,7 +1257,6 @@
             d.innerHTML = `<div class="flex truncate w-full pointer-events-none"><span class="w-6 text-right mr-2 flex-shrink-0">${
               i + 1
             }.</span><span class="truncate">${t.name}</span></div>`;
-
             d.ondragstart = (e) => {
               e.dataTransfer.setData("text/plain", i);
               d.classList.add("dragging");
@@ -1260,12 +1272,11 @@
               d.classList.remove("drag-over");
               handleDragDrop(parseInt(e.dataTransfer.getData("text/plain")), i);
             };
-
             d.onclick = (e) => {
               e.stopPropagation();
               if (e.shiftKey && lastSelectedIndex !== -1) {
-                const start = Math.min(lastSelectedIndex, i);
-                const end = Math.max(lastSelectedIndex, i);
+                const start = Math.min(lastSelectedIndex, i),
+                  end = Math.max(lastSelectedIndex, i);
                 selectedIndices.clear();
                 for (let k = start; k <= end; k++) selectedIndices.add(k);
               } else if (e.ctrlKey || e.metaKey) {
@@ -1285,9 +1296,7 @@
           });
         }
         $("#pl-count").textContent = `${displayList.length} TRACKS`;
-
         const hasSel = selectedIndices.size > 0;
-
         const toggleDisableStyle = (btnId, isDisabled) => {
           const btn = $(btnId);
           btn.disabled = isDisabled;
@@ -1305,35 +1314,29 @@
             else btn.classList.add("text-black");
           }
         };
-
         toggleDisableStyle("#btn-del-track", !hasSel);
         toggleDisableStyle("#btn-move-up", !hasSel);
         toggleDisableStyle("#btn-move-down", !hasSel);
-
         $("#btn-del-pl").style.display =
           currentPlaylistId === "main" ? "none" : "block";
       };
-
       window.moveTrack = (dir) => {
         if (selectedIndices.size !== 1) return;
-        const idx = Array.from(selectedIndices)[0];
-        const newIdx = idx + dir;
+        const idx = Array.from(selectedIndices)[0],
+          newIdx = idx + dir;
         handleDragDrop(idx, newIdx);
       };
-
       window.handleDragDrop = async (srcIdx, targetIdx) => {
         let list = getCurrentDisplayList();
         if (targetIdx < 0 || targetIdx >= list.length || srcIdx === targetIdx)
           return;
         const item = list.splice(srcIdx, 1)[0];
         list.splice(targetIdx, 0, item);
-
         if (currentTrackIndex === srcIdx) currentTrackIndex = targetIdx;
         else if (currentTrackIndex === targetIdx && srcIdx > targetIdx)
           currentTrackIndex++;
         else if (currentTrackIndex === targetIdx && srcIdx < targetIdx)
           currentTrackIndex--;
-
         if (currentPlaylistId !== "main") {
           playlists[currentPlaylistId].trackIds = list.map((t) => t.id);
           await savePlaylistsToDB(playlists[currentPlaylistId]);
@@ -1342,7 +1345,6 @@
         selectedIndices.add(targetIdx);
         renderPlaylistUI();
       };
-
       window.handleDeleteTracks = async () => {
         if (selectedIndices.size === 0) return;
         if (confirm(`Remove ${selectedIndices.size} selected track(s)?`)) {
@@ -1362,7 +1364,6 @@
           renderPlaylistUI();
         }
       };
-
       window.handleDeletePlaylist = () => {
         if (currentPlaylistId === "main") return;
         if (
@@ -1376,7 +1377,6 @@
           renderPlaylistSelect();
         }
       };
-
       const fileInput = $("#upload-file");
       $("#btn-add-file").onclick = () => fileInput.click();
       $("#btn-pl-add").onclick = () => fileInput.click();
@@ -1386,7 +1386,6 @@
         e.preventDefault();
         handleFiles(e.dataTransfer.files);
       };
-
       async function handleFiles(files) {
         if (!isEngineHot) await wakeUpAudioEngine();
         for (const f of files) {
@@ -1401,7 +1400,6 @@
         }
         renderPlaylistUI();
       }
-
       window.createNewPlaylist = () => {
         const n = prompt("Playlist Name:");
         if (n && n.trim().length > 0) {
@@ -1496,7 +1494,6 @@
         controlsChanged();
         saveSettings();
       };
-
       let isShuffle = false,
         isRepeat = false;
       $("#tog-shuffle").onclick = function () {
@@ -1510,8 +1507,6 @@
         saveSettings();
       };
       window.toggleSection = (id) => $(`#${id}`).classList.toggle("hidden");
-
-      // --- PWA INSTALL HANDLER ---
       let deferredPrompt;
       window.addEventListener("beforeinstallprompt", (e) => {
         e.preventDefault();
@@ -1522,12 +1517,9 @@
         $("#btn-install-pwa").classList.add("hidden");
         if (deferredPrompt) {
           deferredPrompt.prompt();
-          const { outcome } = await deferredPrompt.userChoice;
-          console.log(`User response to install prompt: ${outcome}`);
           deferredPrompt = null;
         }
       };
-
       setInterval(() => {
         if (stretch && controlValues.active && !holding && !isChangingTrack) {
           const t = stretch.inputTime || 0;
