@@ -334,6 +334,22 @@
                   id="visualizer-container"
                   title="Click to change visualizer style"
                 >
+                  <div
+                    class="flex-1 border border-gray-700 relative w-full bg-[#111] overflow-hidden cursor-pointer"
+                    id="visualizer-container"
+                  >
+                    <div
+                      id="v-status-indicator"
+                      class="absolute top-1 right-1 font-pixel theme-text-main text-[6px] z-30 opacity-70 pointer-events-none"
+                    >
+                      VIS: BAR
+                    </div>
+
+                    <canvas
+                      id="visualizer"
+                      class="w-full h-full absolute top-0 left-0 block"
+                    ></canvas>
+                  </div>
                   <canvas
                     id="visualizer"
                     class="w-full h-full absolute top-0 left-0 block"
@@ -1542,9 +1558,17 @@
 
       const cvs = $("#visualizer"),
         ctx = cvs.getContext("2d");
+      const visualModeNames = ["BAR", "LINE", "WAVE", "OFF"];
       let visualMode = 0;
       $("#visualizer-container").onclick = () => {
-        visualMode = (visualMode + 1) % 3;
+        visualMode = (visualMode + 1) % 4;
+
+        // อัปเดตข้อความที่มุมบนขวาโดยตรง
+        const indicator = $("#v-status-indicator");
+        indicator.textContent = `VIS: ${visualModeNames[visualMode]}`;
+
+        // หากเป็นโหมด OFF อาจจะปรับความโปร่งแสงให้จางลงอีกนิด
+        indicator.style.opacity = visualMode === 3 ? "0.4" : "0.7";
       };
       function resizeCvs() {
         const r = cvs.parentElement.getBoundingClientRect();
@@ -1557,10 +1581,8 @@
       let lastUpdateTime = 0;
       function draw(time) {
         requestAnimationFrame(draw);
-        if (time - lastUpdateTime > 1000) {
-          updatePositionState();
-          lastUpdateTime = time;
-        }
+
+        // ส่วนอัปเดตเวลาและ Slider (ทำงานปกติแม้ปิด Visualizer)
         if (stretch && !holding) {
           const pb = $("#playback");
           pb.max = audioDuration;
@@ -1574,11 +1596,19 @@
           )
             handleNextTrack(true);
         }
-        const bufferLength = analyser.frequencyBinCount,
-          dataArray = new Uint8Array(bufferLength);
+
+        // ล้าง Canvas เป็นสีพื้นหลังเสมอ
         ctx.fillStyle = "#111";
         ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+        // --- เพิ่มเงื่อนไขหยุด Render ตรงนี้ ---
+        if (visualMode === 3) return; // ถ้าเป็นโหมด OFF ให้หยุดวาดทันที
+
+        const bufferLength = analyser.frequencyBinCount,
+          dataArray = new Uint8Array(bufferLength);
+
         if (visualMode === 0) {
+          // Mode: BAR
           analyser.getByteFrequencyData(dataArray);
           let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
           gradient.addColorStop(0, currentTheme.eq1);
@@ -1594,6 +1624,7 @@
             x += barWidth;
           }
         } else if (visualMode === 1) {
+          // Mode: LINE
           analyser.getByteFrequencyData(dataArray);
           ctx.lineWidth = 2;
           ctx.strokeStyle = currentTheme.text;
@@ -1609,6 +1640,7 @@
           }
           ctx.stroke();
         } else if (visualMode === 2) {
+          // Mode: WAVE
           analyser.getByteTimeDomainData(dataArray);
           ctx.lineWidth = 2;
           ctx.strokeStyle = "#00ffff";
