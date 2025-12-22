@@ -334,12 +334,6 @@
                   00:00
                 </div>
 
-                <!-- <div
-                  class="absolute bottom-0.5 left-0.5 font-pixel theme-text-sec text-[8px] leading-none z-30 opacity-80"
-                >
-                  ● READY
-                </div> -->
-
                 <div
                   class="absolute top-0.5 left-0.5 font-pixel theme-text-main text-[5px] z-30 opacity-70 pointer-events-none"
                 >
@@ -348,7 +342,7 @@
 
                 <canvas
                   id="visualizer"
-                  class="w-full h-[60%] absolute bottom-0 left-0 block"
+                  class="w-full h-[70%] absolute bottom-0 left-0 block"
                 ></canvas>
               </div>
 
@@ -1682,7 +1676,7 @@
           if (!window.peakHoldFrames)
             window.peakHoldFrames = new Array(barCount).fill(0);
 
-          const holdFrames = 50;
+          const holdFrames = 80;
 
           for (let i = 0; i < barCount; i++) {
             const x = i * barWidth;
@@ -1697,8 +1691,8 @@
             gradient.addColorStop(0, currentTheme.eq1);
             gradient.addColorStop(0.6, currentTheme.eq2);
             gradient.addColorStop(1, currentTheme.eq3);
-            ctx.fillStyle = gradient;
 
+            ctx.fillStyle = "#000000";
             ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
 
             if (barHeight >= window.peaks[i]) {
