@@ -1669,6 +1669,7 @@
           analyser.getByteFrequencyData(dataArray);
 
           const barCount = 18;
+          const barGap = 6; // <<< padding ระหว่างแท่ง
           const barWidth = cvs.width / barCount;
           const step = Math.floor(bufferLength / barCount);
 
@@ -1678,9 +1679,12 @@
 
           const holdFrames = 80;
           const displayScale = 0.7;
+          const minBarHeight = 3; // <<< baseline "_" ตอนเงียบ
+          const silenceThreshold = 2; // ค่าต่ำกว่านี้ถือว่าเงียบ
 
           for (let i = 0; i < barCount; i++) {
-            const x = i * barWidth;
+            const x = i * barWidth + barGap / 2;
+            const drawWidth = barWidth - barGap;
 
             let sum = 0;
             for (let j = 0; j < step; j++) {
@@ -1689,7 +1693,13 @@
 
             const average = sum / step;
             const rawHeight = (average / 255) * cvs.height;
-            const displayHeight = rawHeight * displayScale;
+            let displayHeight = rawHeight * displayScale;
+
+            // ===== เงียบ → แสดง "_" =====
+            const isSilent = average <= silenceThreshold;
+            if (isSilent) {
+              displayHeight = minBarHeight;
+            }
 
             let gradient = ctx.createLinearGradient(
               0,
@@ -1705,28 +1715,32 @@
             ctx.fillRect(
               x,
               cvs.height - displayHeight,
-              barWidth - 1,
+              drawWidth,
               displayHeight
             );
 
-            // ===== peak ใช้ค่าจริง =====
-            if (rawHeight >= window.peaks[i]) {
-              window.peaks[i] = rawHeight;
-              window.peakHoldFrames[i] = holdFrames;
-            } else {
-              if (window.peakHoldFrames[i] > 0) {
-                window.peakHoldFrames[i]--;
+            // ===== peak (ไม่ขยับตอนเงียบ) =====
+            if (!isSilent) {
+              if (rawHeight >= window.peaks[i]) {
+                window.peaks[i] = rawHeight;
+                window.peakHoldFrames[i] = holdFrames;
               } else {
-                window.peaks[i] -= 1.2;
+                if (window.peakHoldFrames[i] > 0) {
+                  window.peakHoldFrames[i]--;
+                } else {
+                  window.peaks[i] -= 1.2;
+                }
               }
+            } else {
+              window.peaks[i] = 0;
+              window.peakHoldFrames[i] = 0;
             }
 
-            // วาด peak ด้วยสเกลแสดงผล
             const displayPeak = window.peaks[i] * displayScale;
 
             if (displayPeak > 0) {
               ctx.fillStyle = "#FFFFFF";
-              ctx.fillRect(x, cvs.height - displayPeak - 2, barWidth - 1, 2);
+              ctx.fillRect(x, cvs.height - displayPeak - 2, drawWidth, 2);
             }
           }
         } else if (visualMode === 1) {
