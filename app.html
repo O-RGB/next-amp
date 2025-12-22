@@ -1259,18 +1259,44 @@
       }
 
       // ฟังก์ชันสร้างเสียงก้องจำลอง (Digital Reverb)
-      function createImpulseResponse(duration = 2, decay = 2) {
+      function createImpulseResponse(
+        duration = 3.5,
+        decay = 3,
+        preDelay = 0.02 // วินาที
+      ) {
         const sampleRate = audioContext.sampleRate;
         const length = sampleRate * duration;
         const impulse = audioContext.createBuffer(2, length, sampleRate);
 
-        for (let channel = 0; channel < 2; channel++) {
-          const data = impulse.getChannelData(channel);
+        const preDelaySamples = Math.floor(preDelay * sampleRate);
+
+        for (let ch = 0; ch < 2; ch++) {
+          const data = impulse.getChannelData(ch);
+
           for (let i = 0; i < length; i++) {
-            // สร้าง noise ที่ค่อยๆ จางหายไปตามเวลา
-            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+            const t = i / length;
+
+            // exponential decay (ฟังเป็นธรรมชาติกว่า)
+            const envelope = Math.exp(-decay * t);
+
+            // noise พื้นฐาน
+            let noise = Math.random() * 2 - 1;
+
+            // high-frequency damping
+            const hfDamping = Math.pow(1 - t, 2);
+
+            data[i] = noise * envelope * hfDamping;
+          }
+
+          // Early reflections (tap echoes)
+          for (let r = 0; r < 8; r++) {
+            const delay = preDelaySamples + r * 120;
+            if (delay < length) {
+              data[delay] += (Math.random() * 2 - 1) * (0.4 / (r + 1));
+            }
           }
         }
+
         return impulse;
       }
 
@@ -1283,11 +1309,11 @@
           console.log("Reverb impulse loaded successfully!");
         } catch (e) {
           console.error("Failed to load reverb impulse:", e);
-          reverbNode.buffer = createImpulseResponse(2, 2);
         }
       }
 
-      loadReverbImpulse("assets/sounds/room.wav");
+      reverbNode.buffer = createImpulseResponse(4, 3);
+      // loadReverbImpulse("assets/sounds/room.wav");
 
       async function loadAudioEngine(arrayBuffer, trackObj) {
         if (!isEngineHot) await initAudioEngine(); // Ensure engine is hot
