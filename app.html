@@ -1320,20 +1320,20 @@
         return impulse;
       }
 
-      async function loadReverbImpulse(url) {
-        try {
-          const response = await fetch(url);
-          const arrayBuffer = await response.arrayBuffer();
-          const impulseBuffer = await audioContext.decodeAudioData(arrayBuffer);
-          reverbNode.buffer = impulseBuffer;
-          console.log("Reverb impulse loaded successfully!");
-        } catch (e) {
-          console.error("Failed to load reverb impulse:", e);
-        }
-      }
+      // async function loadReverbImpulse(url) {
+      //   try {
+      //     const response = await fetch(url);
+      //     const arrayBuffer = await response.arrayBuffer();
+      //     const impulseBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      //     reverbNode.buffer = impulseBuffer;
+      //     console.log("Reverb impulse loaded successfully!");
+      //   } catch (e) {
+      //     console.error("Failed to load reverb impulse:", e);
+      //   }
+      // }
 
-      // reverbNode.buffer = createImpulseResponse(4, 3);
-      loadReverbImpulse("assets/sounds/hall.wav");
+      reverbNode.buffer = createImpulseResponse(4, 3);
+      // loadReverbImpulse("assets/sounds/hall.wav");
 
       async function loadAudioEngine(arrayBuffer, trackObj) {
         if (!isEngineHot) await initAudioEngine(); // Ensure engine is hot
