@@ -46,10 +46,10 @@
     <style>
       :root {
         /* CLASSIC WINAMP THEME COLORS */
-        --theme-window: #000080; /* Classic Blue Bars */
-        --theme-text: #00ff00; /* Bright Green Text */
-        --theme-text-sec: #ffcc00; /* Gold/Orange kbps Text */
-        --theme-highlight: #000080; /* Blue Selection Background */
+        --theme-window: #000080;
+        --theme-text: #00ff00;
+        --theme-text-sec: #ffcc00;
+        --theme-highlight: #000080;
 
         /* EQ GRADIENT (Green -> Yellow -> Red) */
         --eq-col-1: #00ff00;
@@ -57,7 +57,6 @@
         --eq-col-3: #ff0000;
       }
 
-      /* APP-LIKE BEHAVIOR */
       html,
       body {
         height: 100%;
@@ -74,7 +73,6 @@
         padding-right: max(4px, env(safe-area-inset-right));
       }
 
-      /* BUTTON STYLES */
       .win-btn {
         background-color: #c0c0c0;
         color: black;
@@ -101,11 +99,10 @@
         background-color: #a0a0a0;
       }
 
-      /* RETRO TEXT BUTTON (SHUFFLE/REPEAT) */
       .retro-txt-btn {
-        background-color: #111; /* Dark background to match player face */
-        border: 1px solid #444; /* Subtle border */
-        color: #888; /* Dimmed state */
+        background-color: #111;
+        border: 1px solid #444;
+        color: #888;
         font-family: "Chakra Petch", sans-serif;
         font-size: 9px;
         text-align: center;
@@ -131,7 +128,6 @@
         text-shadow: 0 0 2px var(--theme-text-sec);
       }
 
-      /* THEME CLASSES */
       .theme-bar {
         background-color: var(--theme-window);
         color: white;
@@ -147,7 +143,6 @@
         color: white;
       }
 
-      /* EQ & VISUALIZER */
       .eq-bar-bg {
         background: linear-gradient(to top, #333 0%, #333 100%);
         width: 4px;
@@ -169,7 +164,6 @@
         text-shadow: 0px 0px 2px rgba(0, 255, 0, 0.4);
       }
 
-      /* SLIDERS */
       input[type="range"] {
         -webkit-appearance: none;
         background: transparent;
@@ -312,12 +306,12 @@
 
     <audio
       id="audio-startup"
-      src="next-amp/assets/sounds/startup.mp3"
+      src="/assets/sounds/startup.mp3"
       preload="auto"
     ></audio>
     <audio
       id="audio-loop"
-      src="next-amp/assets/sounds/allow-sound.mp3"
+      src="/assets/sounds/allow-sound.mp3"
       loop
       preload="auto"
     ></audio>
@@ -733,16 +727,16 @@
             />
             <div class="flex gap-2">
               <button
-                onclick="confirmNewPlaylist()"
-                class="win-btn flex-1 h-6 text-[10px]"
-              >
-                CREATE
-              </button>
-              <button
                 onclick="closeNewPlaylistModal()"
                 class="win-btn flex-1 h-6 text-[10px]"
               >
                 CANCEL
+              </button>
+              <button
+                onclick="confirmNewPlaylist()"
+                class="win-btn flex-1 h-6 text-[10px]"
+              >
+                CREATE
               </button>
             </div>
           </div>
@@ -844,16 +838,16 @@
             </div>
             <div class="flex gap-2">
               <button
-                onclick="applyThemeSettings()"
-                class="win-btn flex-1 h-6 text-[10px]"
-              >
-                APPLY
-              </button>
-              <button
                 onclick="closeSettingsModal()"
                 class="win-btn flex-1 h-6 text-[10px]"
               >
                 CANCEL
+              </button>
+              <button
+                onclick="applyThemeSettings()"
+                class="win-btn flex-1 h-6 text-[10px]"
+              >
+                APPLY
               </button>
             </div>
           </div>
@@ -873,9 +867,8 @@
       import SignalsmithStretch from "https://cdn.jsdelivr.net/npm/signalsmith-stretch@latest/SignalsmithStretch.mjs";
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => document.querySelectorAll(s);
-      const STORAGE_KEY = "nextamp_settings_v6_classic";
+      const STORAGE_KEY = "nextamp_settings_v7_final";
 
-      // THEME DEFAULTS FROM IMAGE
       const defaultTheme = {
         window: "#000080",
         text: "#00ff00",
@@ -898,18 +891,33 @@
         r.style.setProperty("--eq-col-3", t.eq3);
       }
 
-      // MODALS
+      // MODALS - FIXED CLOSE BUG & SWAPPED POSITIONS
       window.customAlert = (msg) => {
         $("#modal-generic-msg").textContent = msg;
-        $(
-          "#modal-generic-btns"
-        ).innerHTML = `<button onclick="$('#modal-generic').classList.add('hidden')" class="win-btn w-20 h-6 text-[10px]">OK</button>`;
+        const btns = $("#modal-generic-btns");
+        btns.innerHTML = "";
+        const ok = document.createElement("button");
+        ok.className = "win-btn w-20 h-6 text-[10px]";
+        ok.textContent = "OK";
+        ok.onclick = () => $("#modal-generic").classList.add("hidden");
+        btns.appendChild(ok);
         $("#modal-generic").classList.remove("hidden");
       };
+
       window.customConfirm = (msg, callback) => {
         $("#modal-generic-msg").textContent = msg;
         const btns = $("#modal-generic-btns");
         btns.innerHTML = "";
+
+        // NO/CANCEL on LEFT
+        const no = document.createElement("button");
+        no.className = "win-btn w-20 h-6 text-[10px]";
+        no.textContent = "NO";
+        no.onclick = () => {
+          $("#modal-generic").classList.add("hidden");
+        };
+
+        // YES/OK on RIGHT
         const yes = document.createElement("button");
         yes.className = "win-btn w-20 h-6 text-[10px]";
         yes.textContent = "YES";
@@ -917,13 +925,9 @@
           $("#modal-generic").classList.add("hidden");
           callback();
         };
-        const no = document.createElement("button");
-        no.className = "win-btn w-20 h-6 text-[10px]";
-        no.textContent = "NO";
-        no.onclick = () => {
-          $("#modal-generic").classList.add("hidden");
-        };
-        btns.append(yes, no);
+
+        btns.appendChild(no);
+        btns.appendChild(yes);
         $("#modal-generic").classList.remove("hidden");
       };
 
@@ -1648,7 +1652,6 @@
         else {
           displayList.forEach((t, i) => {
             const d = document.createElement("div");
-            // Highlight color
             if (selectedIndices.has(i)) d.classList.add("theme-highlight-bg");
             else d.className += " theme-text-main hover:bg-[#222]";
             let textClass = i === currentTrackIndex ? "font-bold" : "";
@@ -1857,6 +1860,8 @@
         s.value = currentPlaylistId;
       };
       $("#playlist-select").onchange = (e) => switchPlaylist(e.target.value);
+
+      // FIXED "SELECT TRACKS FIRST" MODAL CLOSING LOGIC
       window.openAddToModal = () => {
         if (!selectedIndices.size) return customAlert("Select tracks first");
         const d = $("#modal-list");
