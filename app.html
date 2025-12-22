@@ -348,7 +348,7 @@
 
                 <canvas
                   id="visualizer"
-                  class="w-full h-[80%] absolute top-0 left-0 block"
+                  class="w-full h-[60%] absolute top-0 left-0 block"
                 ></canvas>
               </div>
 
@@ -1674,19 +1674,18 @@
         if (visualMode === 0) {
           analyser.getByteFrequencyData(dataArray);
 
-          // 1. ตั้งค่าจำนวน Bar และความกว้าง
           const barCount = 25;
-          const barWidth = cvs.width / barCount; // คำนวณให้เต็มความกว้าง Canvas
+          const barWidth = cvs.width / barCount;
           const step = Math.floor(bufferLength / barCount);
 
-          // เตรียมตัวแปรสำหรับ Peak และ Timer
           if (!window.peaks) window.peaks = new Array(barCount).fill(0);
           if (!window.peakHoldFrames)
             window.peakHoldFrames = new Array(barCount).fill(0);
 
-          const holdFrames = 30; // ค้างไว้ประมาณ 0.2 วินาที
+          const holdFrames = 50;
 
           for (let i = 0; i < barCount; i++) {
+            const x = i * barWidth;
             let sum = 0;
             for (let j = 0; j < step; j++) {
               sum += dataArray[i * step + j];
@@ -1694,36 +1693,27 @@
             let average = sum / step;
             let barHeight = (average / 255) * cvs.height;
 
-            // วาดแท่งกราฟ (Bar) ใช้สีตามธีม
             let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
             gradient.addColorStop(0, currentTheme.eq1);
             gradient.addColorStop(0.6, currentTheme.eq2);
             gradient.addColorStop(1, currentTheme.eq3);
             ctx.fillStyle = gradient;
 
-            // วาด Bar (เว้นช่องว่าง 1px)
-            ctx.fillRect(
-              i * barWidth,
-              cvs.height - barHeight,
-              barWidth - 1,
-              barHeight
-            );
+            ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
 
-            // 2. ส่วนของ Peak Indicator (_) แบบเฉื่อย
             if (barHeight >= window.peaks[i]) {
               window.peaks[i] = barHeight;
               window.peakHoldFrames[i] = holdFrames;
             } else {
               if (window.peakHoldFrames[i] > 0) {
-                window.peakHoldFrames[i]--; // นับถอยหลังช่วงที่ค้างไว้
+                window.peakHoldFrames[i]--;
               } else {
-                window.peaks[i] -= 1.2; // ค่อยๆ ดิ่งลงหลังจากหยุดค้าง
+                window.peaks[i] -= 1.2;
               }
             }
 
-            // วาดตัว Peak (_) เป็นสีขาวตามต้องการ
             if (window.peaks[i] > 0) {
-              ctx.fillStyle = "#FFFFFF"; // เปลี่ยนเป็นสีขาว
+              ctx.fillStyle = "#FFFFFF";
               ctx.fillRect(
                 i * barWidth,
                 cvs.height - window.peaks[i] - 2,
