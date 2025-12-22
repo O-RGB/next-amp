@@ -1668,7 +1668,7 @@
         if (visualMode === 0) {
           analyser.getByteFrequencyData(dataArray);
 
-          const barCount = 18;
+          const barCount = 25;
           const barWidth = cvs.width / barCount;
           const step = Math.floor(bufferLength / barCount);
 
@@ -1677,24 +1677,43 @@
             window.peakHoldFrames = new Array(barCount).fill(0);
 
           const holdFrames = 80;
-          const displayScale = 0.7; // แสดงผลแค่ 70%
+          const displayScale = 0.7; // แสดงผลสูงสุด 70%
+
+          // ===== tuning =====
+          const curve = 0.6; // 0.5–0.7 : ดันเสียงเบา (hi-freq)
+          const minVisual = 0.02; // กัน bar หาย (2%)
 
           for (let i = 0; i < barCount; i++) {
             const x = i * barWidth;
 
+            // ===== average spectrum =====
             let sum = 0;
             for (let j = 0; j < step; j++) {
               sum += dataArray[i * step + j];
             }
 
-            // ค่าจริงของเสียง (ไม่ limit)
             const average = sum / step;
-            const rawHeight = (average / 255) * cvs.height;
 
-            // ความสูงที่ใช้แสดงผลเท่านั้น
+            // ===== normalize =====
+            const norm = average / 255;
+
+            // ===== power curve (ไม่ limit เสียง) =====
+            const curved = Math.pow(norm, curve);
+
+            // ===== frequency weighting =====
+            const positionWeight = 0.5 + (1 - i / barCount) * 0.5;
+
+            // ===== raw height (true signal space) =====
+            let rawHeight = curved * positionWeight * cvs.height;
+
+            // ===== noise floor (visual only) =====
+            rawHeight = Math.max(rawHeight, cvs.height * minVisual);
+
+            // ===== display scale =====
             const displayHeight = rawHeight * displayScale;
 
-            let gradient = ctx.createLinearGradient(
+            // ===== gradient =====
+            const gradient = ctx.createLinearGradient(
               0,
               cvs.height,
               0,
@@ -1712,7 +1731,7 @@
               displayHeight
             );
 
-            // ===== peak ใช้ค่าจริง =====
+            // ===== peak (use raw signal) =====
             if (rawHeight >= window.peaks[i]) {
               window.peaks[i] = rawHeight;
               window.peakHoldFrames[i] = holdFrames;
@@ -1724,13 +1743,11 @@
               }
             }
 
-            // วาด peak ด้วยสเกลแสดงผล
+            // ===== render peak with display scale =====
             const displayPeak = window.peaks[i] * displayScale;
 
-            if (displayPeak > 0) {
-              ctx.fillStyle = "#FFFFFF";
-              ctx.fillRect(x, cvs.height - displayPeak - 2, barWidth - 1, 2);
-            }
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(x, cvs.height - displayPeak - 2, barWidth - 1, 2);
           }
         } else if (visualMode === 1) {
           analyser.getByteFrequencyData(dataArray);
