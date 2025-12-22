@@ -1014,6 +1014,12 @@
                 $("#val-rate").textContent = val.toFixed(2);
                 controlsChanged();
                 saveSettings();
+              } else if (el.dataset.key === "reverb") {
+                const val = parseFloat(el.value);
+                // ปรับค่าความก้อง (0 = ปิด, 2 = ก้องมาก)
+                reverbGain.gain.value = val;
+                $("#val-reverb").textContent = val.toFixed(1);
+                saveSettings();
               } else if (el.dataset.key === "semitones") {
                 controlValues.semitones = val;
                 $("#val-pitch").textContent = val;
@@ -1168,6 +1174,8 @@
 
       let stretch = null,
         eqNodes = [],
+        reverbNode = audioContext.createConvolver(),
+        reverbGain = audioContext.createGain(),
         analyser = audioContext.createAnalyser();
       let masterGainNode = audioContext.createGain(),
         pannerNode = audioContext.createStereoPanner();
@@ -1176,6 +1184,7 @@
       let stereoPath = audioContext.createGain();
       let monoPath = audioContext.createGain();
 
+      reverbGain.gain.value = 0;
       monoPath.channelCount = 1;
       monoPath.channelCountMode = "explicit";
       monoPath.channelInterpretation = "speakers";
@@ -1249,6 +1258,25 @@
         return { input: first, output: prev };
       }
 
+      // ฟังก์ชันสร้างเสียงก้องจำลอง (Digital Reverb)
+      function createImpulseResponse(duration = 2, decay = 2) {
+        const sampleRate = audioContext.sampleRate;
+        const length = sampleRate * duration;
+        const impulse = audioContext.createBuffer(2, length, sampleRate);
+
+        for (let channel = 0; channel < 2; channel++) {
+          const data = impulse.getChannelData(channel);
+          for (let i = 0; i < length; i++) {
+            // สร้าง noise ที่ค่อยๆ จางหายไปตามเวลา
+            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+          }
+        }
+        return impulse;
+      }
+
+      // สั่งให้ Reverb Node ใช้เสียงก้องที่เราสร้าง
+      reverbNode.buffer = createImpulseResponse(2, 2);
+
       async function loadAudioEngine(arrayBuffer, trackObj) {
         if (!isEngineHot) await initAudioEngine(); // Ensure engine is hot
         checkAndResumeAudioContext();
@@ -1264,7 +1292,14 @@
         stretch = await SignalsmithStretch(audioContext);
         const eqChain = initEQ();
         stretch.connect(eqChain.input);
+        // แบ่งสัญญาณ:
+        // 1. ส่งไป EQ ปกติ (Dry)
         eqChain.output.connect(analyser);
+
+        // 2. ส่งไป Reverb (Wet)
+        eqChain.output.connect(reverbNode);
+        reverbNode.connect(reverbGain);
+        reverbGain.connect(analyser); // รวมกลับไปที่ Analyser
         await stretch.addBuffers(channelBuffers);
         controlValues.active = true;
         controlsChanged();
