@@ -1670,6 +1670,7 @@
 
           const barCount = 18;
           const barWidth = cvs.width / barCount;
+          const step = Math.floor(bufferLength / barCount);
 
           if (!window.peaks) window.peaks = new Array(barCount).fill(0);
           if (!window.peakHoldFrames)
@@ -1678,39 +1679,18 @@
           const holdFrames = 80;
           const displayScale = 0.7;
 
-          // ปรับค่าความไว (ยิ่งมาก ยิ่งทำให้เสียงที่เบาดูเด่นขึ้น)
-          const sensitivity = 1.2;
-
           for (let i = 0; i < barCount; i++) {
             const x = i * barWidth;
 
-            // --- 1. การคำนวณช่วงดัชนีแบบ Logarithmic ---
-            // วิธีนี้จะทำให้ Bar แรกๆ เก็บค่าความถี่ต่ำ (Bass) และ Bar ท้ายๆ เก็บค่าความถี่สูง (Treble) ได้สมดุลขึ้น
-            const start = Math.floor(Math.pow(i / barCount, 2) * bufferLength);
-            const end = Math.ceil(
-              Math.pow((i + 1) / barCount, 2) * bufferLength
-            );
-
             let sum = 0;
-            let count = 0;
-            for (let j = start; j < end && j < bufferLength; j++) {
-              sum += dataArray[j];
-              count++;
+            for (let j = 0; j < step; j++) {
+              sum += dataArray[i * step + j];
             }
 
-            let average = count > 0 ? sum / count : 0;
-
-            // --- 2. การทำ Weighting (Boost เสียงสูง) ---
-            // เพิ่ม Gain ให้กับ Bar ท้ายๆ เพราะธรรมชาติของเสียงแหลมพลังงานจะน้อยกว่าเบส
-            const boost = 1 + (i / barCount) * 0.8;
-            let rawHeight = (average / 255) * cvs.height * sensitivity * boost;
-
-            // จำกัดความสูงไม่ให้เกินหน้าจอ
-            if (rawHeight > cvs.height) rawHeight = cvs.height;
-
+            const average = sum / step;
+            const rawHeight = (average / 255) * cvs.height;
             const displayHeight = rawHeight * displayScale;
 
-            // --- 3. การวาด Gradient ---
             let gradient = ctx.createLinearGradient(
               0,
               cvs.height,
@@ -1729,7 +1709,7 @@
               displayHeight
             );
 
-            // --- 4. การจัดการ Peak (ค่าสูงสุด) ---
+            // ===== peak ใช้ค่าจริง =====
             if (rawHeight >= window.peaks[i]) {
               window.peaks[i] = rawHeight;
               window.peakHoldFrames[i] = holdFrames;
@@ -1737,11 +1717,13 @@
               if (window.peakHoldFrames[i] > 0) {
                 window.peakHoldFrames[i]--;
               } else {
-                window.peaks[i] -= 1.5; // ค่อยๆ ตกลงมา
+                window.peaks[i] -= 1.2;
               }
             }
 
+            // วาด peak ด้วยสเกลแสดงผล
             const displayPeak = window.peaks[i] * displayScale;
+
             if (displayPeak > 0) {
               ctx.fillStyle = "#FFFFFF";
               ctx.fillRect(x, cvs.height - displayPeak - 2, barWidth - 1, 2);
