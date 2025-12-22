@@ -183,20 +183,6 @@
       .drag-over {
         border-top: 2px solid #00ff00;
       }
-
-      /* Boot Screen Animation */
-      @keyframes blink {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0;
-        }
-      }
-      .animate-blink {
-        animation: blink 1s infinite;
-      }
     </style>
   </head>
   <body class="flex items-center justify-center w-full h-full">
@@ -227,7 +213,7 @@
             <div class="text-left">
               <h1 class="text-sm font-bold text-black">Audio Engine Setup</h1>
               <p class="text-[11px] text-gray-600">
-                Click start to initialize audio context.
+                Initialize background playback support.
               </p>
             </div>
           </div>
@@ -257,6 +243,7 @@
       src="/assets/sounds/startup.mp3"
       preload="auto"
     ></audio>
+
     <audio
       id="audio-loop"
       src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//oeAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAAAAAAAAAAAAA//oeZnLmZ2ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm//oeZnLmZ2ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm//oeZnLmZ2ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm"
@@ -710,31 +697,34 @@
         window.savedEqGains = s.eqGains || [];
       }
 
-      // --- 1. BOOT SEQUENCE & AUDIO UNLOCK ---
+      // --- 1. BOOT SEQUENCE & AUDIO UNLOCK (THE PASSPORT TRICK) ---
       const audioContext = new AudioContext();
       let isEngineHot = false;
 
-      // [UPDATED] Boot Handler using SILENT LOOP
       const bootBtn = $("#btn-boot-start");
       const audioStartup = $("#audio-startup");
-      const audioLoop = $("#audio-loop");
+      const audioLoop = $("#audio-loop"); // The Silent Passport
+
+      // IMPORTANT: Bind Silent Audio to Destination to enable Background Play
+      const silentSource = audioContext.createMediaElementSource(audioLoop);
+      silentSource.connect(audioContext.destination);
 
       bootBtn.onclick = async () => {
         try {
           audioStartup.volume = 0.5;
-          // Silent loop volume (doesn't matter since it's silent, but keeping it active)
-          audioLoop.volume = 1.0;
 
-          // Resume AudioContext
+          // Force Resume AudioContext
           if (audioContext.state === "suspended") {
             await audioContext.resume();
           }
 
-          // Play both
-          await audioStartup.play();
+          // Play Silent Loop immediately (Critical for iOS/Android Background)
           audioLoop
             .play()
             .catch((e) => console.warn("Loop playback warning:", e));
+
+          // Play Startup Sound
+          await audioStartup.play();
 
           // Logic: When startup finishes, enter app
           audioStartup.onended = () => {
@@ -816,6 +806,8 @@
       let audioDuration = 1;
       let isChangingTrack = false;
 
+      // Graph Connection: Source(Stretch) -> EQ -> Analyser -> Panner -> Gain -> Destination
+      // Note: Stretch connects later in loadAudioEngine
       analyser.connect(pannerNode);
       pannerNode.connect(masterGainNode);
       masterGainNode.connect(audioContext.destination);
@@ -873,6 +865,10 @@
 
       async function loadAudioEngine(arrayBuffer) {
         if (audioContext.state === "suspended") await wakeUpAudioEngine();
+
+        // Ensure Passport is valid
+        if (audioLoop.paused) audioLoop.play().catch((e) => {});
+
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         audioDuration = audioBuffer.duration;
         const channelBuffers = [];
@@ -902,6 +898,12 @@
           );
           stretch.schedule(obj);
         }
+
+        // Sync Silent Loop State
+        if (controlValues.active && audioLoop.paused) {
+          audioLoop.play().catch((e) => {});
+        }
+        // Do NOT pause audioLoop when user pauses music, to keep engine ready.
       }
 
       // --- 3. DATA LAYER ---
@@ -1062,6 +1064,9 @@
         $("#time-display").textContent = "00:00";
         $("#btn-play").classList.remove("pressed");
         $("#marquee").textContent = "Stopped.";
+
+        // Only pause silent loop if user explicitly stops
+        audioLoop.pause();
       };
       $("#btn-next").onclick = () => handleNextTrack(false);
       $("#btn-prev").onclick = () => handlePrevTrack();
@@ -1171,7 +1176,7 @@
       function draw() {
         requestAnimationFrame(draw);
 
-        // --- UPDATE LOCK SCREEN PROGRESS ---
+        // --- UPDATE LOCK SCREEN PROGRESS (BACKGROUND SUPPORT) ---
         if ("mediaSession" in navigator && stretch && controlValues.active) {
           try {
             navigator.mediaSession.setPositionState({
@@ -1180,10 +1185,10 @@
               position: stretch.inputTime || 0,
             });
           } catch (error) {
-            // Ignore errors (browser support)
+            // Ignore errors
           }
         }
-        // -----------------------------------
+        // -------------------------------------------------------
 
         if (stretch && !holding) {
           const pb = $("#playback");
