@@ -867,7 +867,7 @@
       import SignalsmithStretch from "https://cdn.jsdelivr.net/npm/signalsmith-stretch@latest/SignalsmithStretch.mjs";
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => document.querySelectorAll(s);
-      const STORAGE_KEY = "nextamp_settings_v8_final";
+      const STORAGE_KEY = "nextamp_settings_v9_stable";
 
       const defaultTheme = {
         window: "#000080",
@@ -1157,6 +1157,11 @@
       let masterGainNode = audioContext.createGain(),
         pannerNode = audioContext.createStereoPanner(),
         monoGainNode = audioContext.createGain();
+
+      // === CRITICAL FIX: Safe Node Config ===
+      monoGainNode.channelCountMode = "explicit";
+      monoGainNode.channelInterpretation = "speakers";
+
       let isMono = false,
         audioDuration = 1,
         isChangingTrack = false,
@@ -1908,20 +1913,16 @@
         saveSettings();
       };
 
-      // FIXED MONO SWITCH LOGIC (PREVENT AUDIO DROPOUT)
+      // FIXED MONO SWITCH LOGIC (SAFE FOR MOBILE)
       const updateMonoStereoState = () => {
         try {
           if (isMono) {
             monoGainNode.channelCount = 1;
-            monoGainNode.channelCountMode = "explicit";
-            monoGainNode.channelInterpretation = "speakers"; // Safe downmix
             $("#btn-mono-stereo").textContent = "MONO";
             $("#btn-mono-stereo").classList.remove("theme-text-main");
             $("#btn-mono-stereo").classList.add("theme-text-sec");
           } else {
             monoGainNode.channelCount = 2;
-            monoGainNode.channelCountMode = "max";
-            monoGainNode.channelInterpretation = "speakers";
             $("#btn-mono-stereo").textContent = "STEREO";
             $("#btn-mono-stereo").classList.add("theme-text-main");
             $("#btn-mono-stereo").classList.remove("theme-text-sec");
@@ -1932,7 +1933,7 @@
       };
 
       $("#btn-mono-stereo").onclick = async () => {
-        if (audioContext.state === "suspended") await audioContext.resume(); // Fix for mobile dropout
+        if (audioContext.state === "suspended") await audioContext.resume();
         isMono = !isMono;
         updateMonoStereoState();
         saveSettings();
