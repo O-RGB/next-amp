@@ -1914,8 +1914,13 @@
       };
 
       // FIXED MONO SWITCH LOGIC (SAFE FOR MOBILE)
+      // หาฟังก์ชัน updateMonoStereoState แล้วแก้เป็นแบบนี้ครับ
       const updateMonoStereoState = () => {
         try {
+          // --- แก้ไขจุดนี้ ---
+          // 1. Disconnect ออกจาก pannerNode ก่อน เพื่อไม่ให้ Audio Thread บนมือถือค้าง
+          monoGainNode.disconnect();
+
           if (isMono) {
             monoGainNode.channelCount = 1;
             $("#btn-mono-stereo").textContent = "MONO";
@@ -1927,8 +1932,12 @@
             $("#btn-mono-stereo").classList.add("theme-text-main");
             $("#btn-mono-stereo").classList.remove("theme-text-sec");
           }
+
+          // 2. Connect กลับไปที่ pannerNode
+          monoGainNode.connect(pannerNode);
+          // ------------------
         } catch (e) {
-          console.error(e);
+          console.error("Mono switch error:", e);
         }
       };
 
