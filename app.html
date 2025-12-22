@@ -1552,11 +1552,13 @@
       const cvs = $("#visualizer"),
         ctx = cvs.getContext("2d");
       let visualMode = 0;
+      let repeatMode = 0;
       const VIS_MODES = ["SPEC", "WAVE", "OSCI", "OFF"];
       $("#visualizer-container").onclick = () => {
         visualMode = (visualMode + 1) % 4;
         updateVisStatus(); // เรียกฟังก์ชันเปลี่ยนสีตัวอักษร
       };
+
       function updateVisStatus() {
         const statusEl = $("#vis-mode-name");
         statusEl.textContent = VIS_MODES[visualMode];
@@ -1568,6 +1570,7 @@
           statusEl.style.opacity = "1";
         }
       }
+
       // เรียกครั้งแรกเพื่อให้แสดงชื่อโหมดเริ่มต้น
       setTimeout(updateVisStatus, 100);
       function resizeCvs() {
@@ -2007,8 +2010,7 @@
       };
       window.closeAddToModal = () => $("#modal-add-to").classList.add("hidden");
 
-      let isShuffle = false,
-        repeatMode = 0;
+      let isShuffle = false;
       $("#tog-shuffle").onclick = function () {
         isShuffle = !isShuffle;
         this.classList.toggle("active", isShuffle);
