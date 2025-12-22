@@ -1258,11 +1258,10 @@
         return { input: first, output: prev };
       }
 
-      // ฟังก์ชันสร้างเสียงก้องจำลอง (Digital Reverb)
       function createImpulseResponse(
-        duration = 3.5,
-        decay = 3,
-        preDelay = 0.02 // วินาที
+        duration = 4.5, // เพิ่มความยาวให้ก้องนานขึ้น
+        decay = 2.2, // ลด decay ให้เสียงค่อย ๆ จางช้าขึ้น
+        preDelay = 0.035 // เพิ่ม pre-delay เล็กน้อย
       ) {
         const sampleRate = audioContext.sampleRate;
         const length = sampleRate * duration;
@@ -1276,23 +1275,44 @@
           for (let i = 0; i < length; i++) {
             const t = i / length;
 
-            // exponential decay (ฟังเป็นธรรมชาติกว่า)
+            // ปรับ envelope curve ให้นุ่มนวลขึ้น
             const envelope = Math.exp(-decay * t);
 
-            // noise พื้นฐาน
             let noise = Math.random() * 2 - 1;
 
-            // high-frequency damping
-            const hfDamping = Math.pow(1 - t, 2);
+            // เพิ่มการกรองความถี่สูงให้นุ่มนวลมากขึ้น
+            const hfDamping = Math.pow(1 - t * 0.7, 3);
 
-            data[i] = noise * envelope * hfDamping;
+            // เพิ่ม low-pass filter effect
+            const warmth = 1 - t * 0.3;
+
+            data[i] = noise * envelope * hfDamping * warmth;
           }
 
-          // Early reflections (tap echoes)
-          for (let r = 0; r < 8; r++) {
-            const delay = preDelaySamples + r * 120;
-            if (delay < length) {
-              data[delay] += (Math.random() * 2 - 1) * (0.4 / (r + 1));
+          // เพิ่ม early reflections ที่มีลักษณะธรรมชาติมากขึ้น
+          const reflections = [
+            { delay: 0.025, gain: 0.5 },
+            { delay: 0.045, gain: 0.42 },
+            { delay: 0.068, gain: 0.35 },
+            { delay: 0.095, gain: 0.28 },
+            { delay: 0.125, gain: 0.22 },
+            { delay: 0.16, gain: 0.18 },
+            { delay: 0.2, gain: 0.15 },
+            { delay: 0.245, gain: 0.12 },
+          ];
+
+          for (const ref of reflections) {
+            const delaySamples = Math.floor(ref.delay * sampleRate);
+            if (delaySamples < length) {
+              // สร้างเสียงสะท้อนที่นุ่มนวล
+              for (let i = 0; i < 50; i++) {
+                const idx = delaySamples + i;
+                if (idx < length) {
+                  const diffusion = (Math.random() * 2 - 1) * ref.gain;
+                  const fade = 1 - i / 50;
+                  data[idx] += diffusion * fade;
+                }
+              }
             }
           }
         }
