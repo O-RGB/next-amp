@@ -1677,15 +1677,21 @@
             window.peakHoldFrames = new Array(barCount).fill(0);
 
           const holdFrames = 80;
+          const maxHeight = cvs.height * 0.7; // จำกัดที่ 70%
 
           for (let i = 0; i < barCount; i++) {
             const x = i * barWidth;
+
             let sum = 0;
             for (let j = 0; j < step; j++) {
               sum += dataArray[i * step + j];
             }
+
             let average = sum / step;
+
+            // คำนวณความสูง และ clamp
             let barHeight = (average / 255) * cvs.height;
+            barHeight = Math.min(barHeight, maxHeight);
 
             let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
             gradient.addColorStop(0, currentTheme.eq1);
@@ -1695,6 +1701,7 @@
 
             ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
 
+            // peak hold (ต้อง clamp ด้วย)
             if (barHeight >= window.peaks[i]) {
               window.peaks[i] = barHeight;
               window.peakHoldFrames[i] = holdFrames;
@@ -1706,10 +1713,12 @@
               }
             }
 
+            window.peaks[i] = Math.min(window.peaks[i], maxHeight);
+
             if (window.peaks[i] > 0) {
               ctx.fillStyle = "#FFFFFF";
               ctx.fillRect(
-                i * barWidth,
+                x,
                 cvs.height - window.peaks[i] - 2,
                 barWidth - 1,
                 2
