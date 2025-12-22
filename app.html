@@ -1691,8 +1691,8 @@
             gradient.addColorStop(0, currentTheme.eq1);
             gradient.addColorStop(0.6, currentTheme.eq2);
             gradient.addColorStop(1, currentTheme.eq3);
+            ctx.fillStyle = gradient;
 
-            ctx.fillStyle = "#000000";
             ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
 
             if (barHeight >= window.peaks[i]) {
