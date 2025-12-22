@@ -1560,14 +1560,16 @@
         ctx = cvs.getContext("2d");
       const visualModeNames = ["BAR", "LINE", "WAVE", "OFF"];
       let visualMode = 0;
+      // ฟังก์ชันควบคุมการคลิกเพื่อเปลี่ยนโหมด
       $("#visualizer-container").onclick = () => {
+        // วนลูป 0 -> 1 -> 2 -> 3 (OFF) และกลับมาที่ 0
         visualMode = (visualMode + 1) % 4;
 
-        // อัปเดตข้อความที่มุมบนขวาโดยตรง
+        // อัปเดตข้อความสถานะที่มุมบนขวา
         const indicator = $("#v-status-indicator");
         indicator.textContent = `VIS: ${visualModeNames[visualMode]}`;
 
-        // หากเป็นโหมด OFF อาจจะปรับความโปร่งแสงให้จางลงอีกนิด
+        // ปรับความโปร่งแสงให้จางลงเมื่ออยู่ในโหมด OFF
         indicator.style.opacity = visualMode === 3 ? "0.4" : "0.7";
       };
       function resizeCvs() {
@@ -1579,10 +1581,15 @@
       setTimeout(resizeCvs, 500);
 
       let lastUpdateTime = 0;
+      // แก้ไขฟังก์ชัน draw() หลักเพื่อรองรับการปิด Render
       function draw(time) {
         requestAnimationFrame(draw);
 
-        // ส่วนอัปเดตเวลาและ Slider (ทำงานปกติแม้ปิด Visualizer)
+        // ส่วนอัปเดตเวลาและ Slider (คงไว้ตามเดิมเพื่อให้ระบบทำงานต่อเนื่อง)
+        if (time - lastUpdateTime > 1000) {
+          updatePositionState();
+          lastUpdateTime = time;
+        }
         if (stretch && !holding) {
           const pb = $("#playback");
           pb.max = audioDuration;
@@ -1597,18 +1604,18 @@
             handleNextTrack(true);
         }
 
-        // ล้าง Canvas เป็นสีพื้นหลังเสมอ
+        // ล้างหน้าจอ Canvas เป็นสีดำพื้นหลัง
         ctx.fillStyle = "#111";
         ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-        // --- เพิ่มเงื่อนไขหยุด Render ตรงนี้ ---
-        if (visualMode === 3) return; // ถ้าเป็นโหมด OFF ให้หยุดวาดทันที
+        // --- จุดสำคัญ: ถ้าเป็นโหมด 3 (OFF) ให้หยุดวาดทันทีเพื่อประหยัด CPU ---
+        if (visualMode === 3) return;
 
         const bufferLength = analyser.frequencyBinCount,
           dataArray = new Uint8Array(bufferLength);
 
         if (visualMode === 0) {
-          // Mode: BAR
+          // Mode 0: BAR (กราฟแท่งความถี่)
           analyser.getByteFrequencyData(dataArray);
           let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
           gradient.addColorStop(0, currentTheme.eq1);
@@ -1624,7 +1631,7 @@
             x += barWidth;
           }
         } else if (visualMode === 1) {
-          // Mode: LINE
+          // Mode 1: LINE (เส้นกราฟความถี่)
           analyser.getByteFrequencyData(dataArray);
           ctx.lineWidth = 2;
           ctx.strokeStyle = currentTheme.text;
@@ -1640,7 +1647,7 @@
           }
           ctx.stroke();
         } else if (visualMode === 2) {
-          // Mode: WAVE
+          // Mode 2: WAVE (รูปคลื่นเสียงจริง)
           analyser.getByteTimeDomainData(dataArray);
           ctx.lineWidth = 2;
           ctx.strokeStyle = "#00ffff";
