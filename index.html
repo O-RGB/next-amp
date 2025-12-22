@@ -177,9 +177,54 @@
       .drag-over {
         border-top: 2px solid #00ff00;
       }
+
+      /* Boot Screen Animation */
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0;
+        }
+      }
+      .animate-blink {
+        animation: blink 1s infinite;
+      }
     </style>
   </head>
   <body class="flex items-center justify-center w-full h-full p-4">
+    <div
+      id="boot-screen"
+      class="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center font-pixel text-win-green p-4 text-center"
+    >
+      <div
+        class="mb-8 border-2 border-win-green p-1 inline-block shadow-[0_0_10px_#00ff00]"
+      >
+        <div class="border border-win-green px-4 py-2 bg-win-green/10">
+          <h1 class="text-3xl font-bold tracking-widest mb-1">NEXTAMP OS</h1>
+          <div class="text-[10px] text-win-green/70">VER 2.0.1 REMASTERED</div>
+        </div>
+      </div>
+
+      <div id="boot-msg" class="text-sm mb-6 space-y-1">
+        <p>> CHECKING SYSTEM...</p>
+        <p>> AUDIO ENGINE: <span class="text-yellow-500">STANDBY</span></p>
+        <p>> WAITING FOR USER INPUT...</p>
+      </div>
+
+      <button
+        id="btn-boot-start"
+        class="border-2 border-win-green bg-black text-win-green hover:bg-win-green hover:text-black px-6 py-3 font-bold text-lg animate-blink shadow-[0_0_15px_#00ff00]"
+      >
+        [ TAP TO INITIALIZE ]
+      </button>
+
+      <div class="mt-8 text-[10px] text-gray-500">
+        For iOS: Please ensure Silent Mode is OFF
+      </div>
+    </div>
+
     <button
       id="btn-install-pwa"
       class="hidden fixed top-2 right-2 z-50 bg-win-green text-black px-3 py-1 text-xs font-bold border-2 border-white shadow-lg animate-bounce"
@@ -228,7 +273,7 @@
                   id="marquee"
                   class="font-pixel text-win-green text-sm whitespace-nowrap overflow-hidden leading-none mb-1 text-shadow pt-1"
                 >
-                  Touch to Start...
+                  Ready.
                 </div>
                 <div
                   class="flex-1 border border-gray-700 relative w-full bg-[#111] overflow-hidden"
@@ -552,7 +597,13 @@
       </div>
     </div>
 
-    <input type="file" id="upload-file" hidden multiple accept="audio/*" />
+    <input
+      type="file"
+      id="upload-file"
+      hidden
+      multiple
+      accept="audio/*,.mp3,.wav,.m4a,.ogg"
+    />
 
     <script type="module">
       import SignalsmithStretch from "https://cdn.jsdelivr.net/npm/signalsmith-stretch@latest/SignalsmithStretch.mjs";
@@ -561,7 +612,7 @@
       const $$ = (s) => document.querySelectorAll(s);
       const STORAGE_KEY = "nextamp_settings_v1";
 
-      // --- 0. SETTINGS PERSISTENCE (AUTO-SAVE) ---
+      // --- 0. SETTINGS PERSISTENCE ---
       function saveSettings() {
         const settings = {
           vol: $("#main-vol").value,
@@ -620,32 +671,67 @@
         window.savedEqGains = s.eqGains || [];
       }
 
-      // --- 1. SILENT WAKE UP & MEDIA SESSION ---
+      // --- 1. BOOT SEQUENCE & AUDIO UNLOCK ---
       const audioContext = new AudioContext();
       let isEngineHot = false;
+
+      // New Boot Handler
+      $("#btn-boot-start").onclick = async () => {
+        try {
+          await audioContext.resume();
+          // Play System Check Sound (Beep Loop)
+          const now = audioContext.currentTime;
+
+          // Beep 1
+          playBeep(now, 880, 0.1);
+          // Beep 2
+          playBeep(now + 0.15, 1760, 0.1);
+          // Beep 3 (Low)
+          playBeep(now + 0.3, 440, 0.2);
+
+          isEngineHot = true;
+          $("#engine-status").style.backgroundColor = "#00ff00";
+          $("#engine-status").style.boxShadow = "0 0 4px #0f0";
+
+          // Hide Boot Screen
+          setTimeout(() => {
+            $("#boot-screen").style.opacity = "0";
+            $("#boot-screen").style.transition = "opacity 0.5s";
+            setTimeout(() => $("#boot-screen").classList.add("hidden"), 500);
+          }, 600);
+        } catch (e) {
+          alert("Audio Init Failed: " + e);
+        }
+      };
+
+      function playBeep(time, freq, dur) {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.frequency.value = freq;
+        osc.type = "square";
+        gain.gain.value = 0.1;
+
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+
+        osc.start(time);
+        osc.stop(time + dur);
+      }
+
+      // Auto-wake just in case, but boot screen is primary
       async function wakeUpAudioEngine() {
         if (isEngineHot) return;
         try {
           await audioContext.resume();
-          const osc = audioContext.createOscillator();
-          const gain = audioContext.createGain();
-          osc.frequency.value = 1;
-          gain.gain.value = 0.001;
-          osc.connect(gain);
-          gain.connect(audioContext.destination);
-          osc.start(0);
           isEngineHot = true;
           $("#engine-status").style.backgroundColor = "#00ff00";
           $("#engine-status").style.boxShadow = "0 0 4px #0f0";
-          $("#marquee").textContent = "Nextamp Ready.";
         } catch (e) {
-          console.error("Wake up failed", e);
+          console.error(e);
         }
       }
-      window.addEventListener("pointerdown", wakeUpAudioEngine, { once: true });
-      window.addEventListener("keydown", wakeUpAudioEngine, { once: true });
 
-      // [NEW] Media Session Handler
+      // Media Session Handler
       function updateMediaSession(trackName) {
         if ("mediaSession" in navigator) {
           navigator.mediaSession.metadata = new MediaMetadata({
@@ -870,7 +956,6 @@
           $("#marquee").textContent = `${idx + 1}. ${t.name} (${
             t.sampleRate || 44100
           }hz)`;
-          // [NEW] Call media session
           updateMediaSession(t.name);
         } catch (e) {
           console.error(e);
@@ -1050,8 +1135,6 @@
             .toString()
             .padStart(2, "0")}`;
 
-          // [UPDATED] Check for track end handled in setInterval primarily for background,
-          // but we keep this here for smooth UI updates when active.
           if (
             controlValues.active &&
             t >= audioDuration - 0.2 &&
@@ -1158,7 +1241,6 @@
 
         const hasSel = selectedIndices.size > 0;
 
-        // [UPDATED] Toggle Disabled Styles (Opacity removed, text color logic added)
         const toggleDisableStyle = (btnId, isDisabled) => {
           const btn = $(btnId);
           btn.disabled = isDisabled;
@@ -1399,12 +1481,9 @@
         }
       };
 
-      // [NEW] Background Interval Check
-      // This ensures tracks change even when the tab is backgrounded
       setInterval(() => {
         if (stretch && controlValues.active && !holding && !isChangingTrack) {
           const t = stretch.inputTime || 0;
-          // If track is near end, trigger next
           if (t >= audioDuration - 0.2) {
             handleNextTrack(true);
           }
