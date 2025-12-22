@@ -1045,7 +1045,7 @@
           .padStart(2, "0")}`;
       };
 
-      // STORAGE
+      // STORAGE (MODIFIED TO FIX EQ RESET)
       function saveSettings() {
         const settings = {
           vol: $("#main-vol").value,
@@ -1056,7 +1056,10 @@
           repeatMode: repeatMode,
           isEqOn: isEqOn,
           playlistId: currentPlaylistId,
-          eqGains: eqNodes.map((n) => n.gain.value),
+          // CRITICAL: Read from input sliders, not from audio nodes
+          eqGains: Array.from(document.querySelectorAll("input[data-idx]")).map(
+            (inp) => parseFloat(inp.value)
+          ),
           isMono: isMono,
           theme: currentTheme,
         };
@@ -1157,13 +1160,10 @@
       let masterGainNode = audioContext.createGain(),
         pannerNode = audioContext.createStereoPanner();
 
-      // === CRITICAL FIX: DUAL PATH MONO/STEREO ===
-      // แทนที่จะแก้ channelCount เราสร้าง 2 เส้นทาง (Stereo/Mono)
-      // แล้วสลับ gain เอา วิธีนี้ work 100% บนมือถือ
+      // DUAL PATH MONO/STEREO
       let stereoPath = audioContext.createGain();
       let monoPath = audioContext.createGain();
 
-      // ตั้งค่า Mono Path ให้บีบเสียงรวมกัน
       monoPath.channelCount = 1;
       monoPath.channelCountMode = "explicit";
       monoPath.channelInterpretation = "speakers";
@@ -1173,7 +1173,6 @@
         isChangingTrack = false,
         playDebounceTimer = null;
 
-      // เชื่อมต่อทั้ง 2 เส้นทางแบบขนาน
       analyser.connect(stereoPath);
       analyser.connect(monoPath);
       stereoPath.connect(pannerNode);
@@ -1197,6 +1196,7 @@
       let controlValues = { active: false, rate: 1, semitones: 0 },
         isEqOn = true;
 
+      // FIXED initEQ to keep visual state
       function initEQ() {
         eqNodes.forEach((n) => {
           try {
@@ -1211,16 +1211,25 @@
           f.type = "peaking";
           f.frequency.value = freq;
           f.Q.value = 1.4;
-          let savedVal =
-            window.savedEqGains && window.savedEqGains[i] !== undefined
-              ? window.savedEqGains[i]
-              : 0;
+
+          // Read current slider value OR saved value
           const slider = document.querySelector(`input[data-idx="${i}"]`);
+          let targetVal = 0;
           if (slider) {
-            slider.value = savedVal;
+            targetVal = parseFloat(slider.value);
+          } else {
+            targetVal =
+              window.savedEqGains && window.savedEqGains[i] !== undefined
+                ? window.savedEqGains[i]
+                : 0;
+          }
+
+          if (slider) {
+            slider.value = targetVal;
             updateThumb(slider, `thumb-${i}`);
           }
-          f.gain.value = isEqOn ? savedVal : 0;
+
+          f.gain.value = isEqOn ? targetVal : 0;
           eqNodes.push(f);
           if (prev) prev.connect(f);
           else first = f;
@@ -1228,6 +1237,7 @@
         });
         return { input: first, output: prev };
       }
+
       async function loadAudioEngine(arrayBuffer, trackObj) {
         checkAndResumeAudioContext();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
@@ -1686,16 +1696,19 @@
               d.classList.remove("drag-over");
               handleDragDrop(parseInt(e.dataTransfer.getData("text/plain")), i);
             };
-            let lastTap = 0;
+
+            // FIXED DOUBLE TAP FOR MOBILE
+            let lastTapTime = 0;
             d.ontouchend = (e) => {
               const currentTime = new Date().getTime();
-              const tapLength = currentTime - lastTap;
-              if (tapLength < 500 && tapLength > 0) {
-                playTrack(i);
+              const tapLength = currentTime - lastTapTime;
+              if (tapLength < 300 && tapLength > 0) {
                 e.preventDefault();
+                playTrack(i);
               }
-              lastTap = currentTime;
+              lastTapTime = currentTime;
             };
+
             d.onclick = (e) => {
               e.stopPropagation();
               if (e.shiftKey && lastSelectedIndex !== -1) {
@@ -1924,10 +1937,9 @@
         saveSettings();
       };
 
-      // FIXED MONO SWITCH LOGIC (SAFE FOR MOBILE - DUAL PATH)
+      // DUAL PATH MONO/STEREO SWITCH
       const updateMonoStereoState = () => {
         if (isMono) {
-          // ปิด Stereo, เปิด Mono
           stereoPath.gain.value = 0;
           monoPath.gain.value = 1;
 
@@ -1935,7 +1947,6 @@
           $("#btn-mono-stereo").classList.remove("theme-text-main");
           $("#btn-mono-stereo").classList.add("theme-text-sec");
         } else {
-          // เปิด Stereo, ปิด Mono
           stereoPath.gain.value = 1;
           monoPath.gain.value = 0;
 
