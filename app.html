@@ -1673,35 +1673,76 @@
 
         if (visualMode === 0) {
           analyser.getByteFrequencyData(dataArray);
-          let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
-          gradient.addColorStop(0, currentTheme.eq1);
-          gradient.addColorStop(0.6, currentTheme.eq2);
-          gradient.addColorStop(1, currentTheme.eq3);
-          ctx.fillStyle = gradient;
 
-          // --- ส่วนที่แก้ไข: กำหนดจำนวนแท่งเป็น 20 ---
-          const barCount = 20;
+          // 1. วาดพื้นหลัง Grid สีเขียวจางๆ
+          ctx.strokeStyle = "rgba(0, 255, 0, 0.05)"; // สีเขียวจางมาก
+          ctx.lineWidth = 1;
+          const gridSpacing = 10;
+
+          // ตีเส้นแนวนอน
+          for (let y = 0; y < cvs.height; y += gridSpacing) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(cvs.width, y);
+            ctx.stroke();
+          }
+          // ตีเส้นแนวตั้ง
+          for (let x = 0; x < cvs.width; x += gridSpacing) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, cvs.height);
+            ctx.stroke();
+          }
+
+          // 2. ตั้งค่าการวาด Bar
+          const barCount = 25;
           const barWidth = cvs.width / barCount;
-          const step = Math.floor(bufferLength / barCount); // คำนวณว่าจะข้ามกี่จุดข้อมูลต่อ 1 แท่ง
+          const step = Math.floor(bufferLength / barCount);
+
+          // เตรียมตัวแปรสำหรับ Peak (ขีดด้านบน)
+          if (!window.peaks) window.peaks = new Array(barCount).fill(0);
 
           for (let i = 0; i < barCount; i++) {
-            // หาค่าเฉลี่ยหรือค่าสูงสุดในช่วงข้อมูลนั้นๆ เพื่อความแม่นยำ
             let sum = 0;
             for (let j = 0; j < step; j++) {
               sum += dataArray[i * step + j];
             }
             let average = sum / step;
-
             let barHeight = (average / 255) * cvs.height;
 
-            // วาดแท่งโดยเว้นระยะห่าง (Gap) เล็กน้อยเพื่อให้ดูสวยงาม
-            // ลบออก 2-4 พิกเซลเพื่อให้แท่งไม่ติดกัน
+            // วาดแท่งกราฟ (Bar)
+            let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
+            gradient.addColorStop(0, currentTheme.eq1);
+            gradient.addColorStop(0.6, currentTheme.eq2);
+            gradient.addColorStop(1, currentTheme.eq3);
+            ctx.fillStyle = gradient;
             ctx.fillRect(
               i * barWidth,
               cvs.height - barHeight,
               barWidth - 2,
               barHeight
             );
+
+            // 3. ส่วนของ Peak Indicator (_)
+            // ถ้าความสูงปัจจุบันมากกว่าค่า Peak เดิม ให้ตั้งค่า Peak ใหม่
+            if (barHeight > window.peaks[i]) {
+              window.peaks[i] = barHeight;
+            } else {
+              // ถ้าไม่สูงกว่า ให้ Peak ค่อยๆ หล่นลงมาทีละน้อย
+              window.peaks[i] -= 0.8;
+            }
+
+            // วาดตัว Peak (_)
+            if (window.peaks[i] > 0) {
+              ctx.fillStyle = currentTheme.text; // ใช้สีเดียวกับข้อความหลัก
+              // วาดเป็นขีดหนา 2 พิกเซล
+              ctx.fillRect(
+                i * barWidth,
+                cvs.height - window.peaks[i] - 2,
+                barWidth - 2,
+                2
+              );
+            }
           }
         } else if (visualMode === 1) {
           analyser.getByteFrequencyData(dataArray);
