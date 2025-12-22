@@ -37,7 +37,6 @@
     </script>
     <style>
       :root {
-        /* CLASSIC WINAMP THEME COLORS */
         --theme-window: #000080;
         --theme-text: #00ff00;
         --theme-text-sec: #ffcc00;
@@ -52,25 +51,29 @@
       html,
       body {
         /* iOS Safari Fixes */
-        height: 100dvh; /* ใช้ dvh เพื่อหลบ URL bar อัตโนมัติ */
+        height: 100dvh;
         width: 100vw;
-        position: fixed; /* ล็อกตำแหน่งไม่ให้ body เด้ง */
+        position: fixed;
         inset: 0;
-        overflow: hidden; /* ห้าม scroll ที่ body */
+        overflow: hidden;
         overscroll-behavior: none;
         touch-action: none;
         user-select: none;
         -webkit-user-select: none;
-        
-        background-color: #111;
-        
-        /* Safe Area สำหรับติ่งหน้าจอและขอบล่าง iPhone */
-        padding-top: max(4px, env(safe-area-inset-top));
+        color: #e5e5e5;
+
+        /* --- NEW BACKGROUND: Deep Tech Green Gradient --- */
+        /* Dark center with green tint, fading to absolute black edges */
+        background: radial-gradient(circle at center, #003504 0%, #020617 80%);
+
+        /* Safe Area padding */
+        padding-top: max(8px, env(safe-area-inset-top));
         padding-bottom: max(4px, env(safe-area-inset-bottom));
         padding-left: max(4px, env(safe-area-inset-left));
         padding-right: max(4px, env(safe-area-inset-right));
       }
 
+      /* --- CLASSIC BUTTONS --- */
       .win-btn {
         background-color: #c0c0c0;
         color: black;
@@ -92,11 +95,17 @@
         border-left: 2px solid #000;
         border-right: 2px solid #fff;
         border-bottom: 2px solid #fff;
-      }
-      .win-btn.pressed {
         background-color: #a0a0a0;
       }
 
+      /* Outer Glow - Matching the Green-400 */
+      .sci-fi-container-glow {
+        box-shadow: 0 0 25px rgba(0, 226, 83, 0.15),
+          0 0 50px rgba(0, 227, 83, 0.05);
+        border-radius: 2px;
+      }
+
+      /* Classic Text Button */
       .retro-txt-btn {
         background-color: #111;
         border: 1px solid #444;
@@ -116,16 +125,17 @@
       .retro-txt-btn.active {
         color: var(--theme-text) !important;
         border-color: var(--theme-text);
-        box-shadow: 0 0 3px var(--theme-text);
+        box-shadow: 0 0 4px var(--theme-text);
         text-shadow: 0 0 2px var(--theme-text);
       }
       .retro-txt-btn.active-gold {
         color: var(--theme-text-sec) !important;
         border-color: var(--theme-text-sec);
-        box-shadow: 0 0 3px var(--theme-text-sec);
+        box-shadow: 0 0 4px var(--theme-text-sec);
         text-shadow: 0 0 2px var(--theme-text-sec);
       }
 
+      /* Theme & EQ colors */
       .theme-bar {
         background-color: var(--theme-window);
         color: white;
@@ -137,8 +147,9 @@
         color: var(--theme-text-sec);
       }
       .theme-highlight-bg {
-        background-color: var(--theme-highlight);
-        color: white;
+        background-color: rgba(0, 219, 80, 0.2); /* Transparent Green-400 */
+        color: #fff;
+        border: 1px solid var(--theme-text);
       }
 
       .eq-bar-bg {
@@ -156,12 +167,13 @@
           var(--eq-col-2) 70%,
           var(--eq-col-3) 100%
         );
-        box-shadow: 0 0 2px var(--eq-col-1);
+        box-shadow: 0 0 4px var(--eq-col-1);
       }
       .text-shadow {
-        text-shadow: 0px 0px 2px rgba(0, 255, 0, 0.4);
+        text-shadow: 0px 0px 3px rgba(0, 221, 81, 0.6);
       }
 
+      /* Sliders */
       input[type="range"] {
         -webkit-appearance: none;
         background: transparent;
@@ -272,10 +284,12 @@
       INSTALL APP
     </button>
 
-    <div class="w-full h-full md:max-w-sm mx-auto overflow-hidden flex flex-col pb-1">
-      
-      <div class="flex-none flex flex-col gap-2 origin-center transition-transform duration-300">
-        
+    <div
+      class="w-full h-full md:max-w-sm mx-auto overflow-hidden flex flex-col pb-1 sci-fi-container-glow relative z-10"
+    >
+      <div
+        class="flex-none flex flex-col gap-2 origin-center transition-transform duration-300"
+      >
         <div
           class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-20 shadow-lg"
         >
@@ -283,18 +297,17 @@
             class="theme-bar h-5 flex justify-between items-center px-1 text-[10px] font-bold cursor-grab"
           >
             <div class="flex items-center gap-1">
-              <i class="ph-bold ph-music-note"></i><span>NEXTAMP</span>
+              <i class="ph-bold ph-music-note"></i><span>NEXTAMP PRO</span>
             </div>
             <div class="flex gap-1 items-center">
               <div
                 id="engine-status"
                 class="w-2 h-2 rounded-full bg-red-900 border border-black mr-1"
-                title="Engine Status (Red: Standby, Green: Active)"
+                title="Engine Status"
               ></div>
               <button
                 onclick="openSettingsModal()"
                 class="w-3 h-3 bg-btn-face text-black flex items-center justify-center border border-white text-[8px] leading-none"
-                title="Settings"
               >
                 O
               </button>
@@ -314,7 +327,7 @@
                   id="marquee"
                   class="font-pixel theme-text-main text-sm whitespace-nowrap overflow-hidden leading-none mb-1 text-shadow pt-1"
                 >
-                  Click anywhere to start...
+                  System Ready.
                 </div>
                 <div
                   class="flex-1 border border-gray-700 relative w-full bg-[#111] overflow-hidden cursor-pointer"
@@ -566,7 +579,7 @@
               </button>
             </div>
           </div>
-          
+
           <div
             class="flex-1 bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 overflow-y-auto custom-scroll p-1 font-pixel text-xs mb-2 shadow-inner select-none min-h-0"
             id="pl-box"
@@ -634,10 +647,7 @@
             id="modal-generic-msg"
             class="text-white text-xs mb-4 text-center font-ui px-2"
           ></div>
-          <div
-            class="flex gap-2 justify-center"
-            id="modal-generic-btns"
-          ></div>
+          <div class="flex gap-2 justify-center" id="modal-generic-btns"></div>
         </div>
       </div>
       <div
@@ -705,8 +715,8 @@
           <div
             class="theme-bar px-2 py-1 text-[10px] font-bold mb-3 flex justify-between"
           >
-            <span>APPEARANCE SETTINGS</span>
-            <button onclick="closeSettingsModal()">X</button>
+            <span>APPEARANCE SETTINGS</span
+            ><button onclick="closeSettingsModal()">X</button>
           </div>
           <div class="space-y-3 mb-4">
             <div class="flex items-center justify-between">
@@ -806,7 +816,6 @@
         </div>
       </div>
     </div>
-  </div>
 
     <input
       type="file"
