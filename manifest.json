@@ -7,7 +7,7 @@
   "theme_color": "#000080",
   "icons": [
     {
-      "src": "https://next-amp-one.vercel.app/assets/logo/logo.png",
+      "src": "https://next-amp-player.vercel.app/assets/logo/logo.png",
       "sizes": "512x512",
       "type": "image/png"
     }
