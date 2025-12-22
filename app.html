@@ -1258,49 +1258,51 @@
         return { input: first, output: prev };
       }
 
-      function createDeepWarmImpulseResponse(
-        duration = 6.0,
-        decay = 1.8,
-        darkness = 0.96
-      ) {
+      function createLushWarmImpulse(duration = 5.0, decay = 3.0) {
         const sampleRate = audioContext.sampleRate;
         const length = sampleRate * duration;
         const impulse = audioContext.createBuffer(2, length, sampleRate);
 
-        const decayRate = Math.pow(Math.E, -decay / duration);
+        // กำหนดระยะเวลาการสะท้อน (Delay Times) ที่ไม่เป็นเลขคู่กัน เพื่อลดเสียงสะท้อนที่ซ้อนทับ
+        const delayTimes = [0.031, 0.043, 0.061, 0.073, 0.089, 0.113];
 
         for (let ch = 0; ch < 2; ch++) {
           const data = impulse.getChannelData(ch);
-          let currentEnvelope = 1.0;
-          let lastOut = 0;
 
-          for (let i = 0; i < length; i++) {
-            let rawNoise = Math.random() * 2 - 1;
-
-            let filteredNoise = rawNoise * (1 - darkness) + lastOut * darkness;
-            lastOut = filteredNoise;
-
-            data[i] = filteredNoise * currentEnvelope;
-
-            if (i > 100) {
-              data[i] += data[i - 100] * 0.3;
-            }
-
-            currentEnvelope *= decayRate;
+          // สร้าง Noise ตั้งต้นแค่สั้นๆ เป็นตัวจุดชนวน (Impulse)
+          for (let i = 0; i < 500; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / 500, 2);
           }
 
-          for (let j = 0; j < 6; j++) {
-            const pos = Math.floor(Math.random() * 0.15 * sampleRate);
-            if (pos < length) {
-              data[pos] += Math.random() * 0.2;
+          // --- ส่วนสำคัญ: ทำให้กังวาล (Feedback/Comb Simulation) ---
+          // เราจะจำลองการสะท้อนกลับไปมาหลายๆ รอบ
+          for (let d = 0; d < delayTimes.length; d++) {
+            const delaySamples = Math.floor(
+              delayTimes[d] * sampleRate * (1 + ch * 0.01)
+            );
+            const feedback = 0.7 - d * 0.05; // ค่อยๆ ลด Feedback ในแต่ละชั้น
+
+            for (let i = delaySamples; i < length; i++) {
+              // ดึงเสียงจากอดีตกลับมาบวกใหม่ + กรองเสียงแหลมทิ้ง (Low-pass)
+              const val = data[i - delaySamples] * feedback;
+              data[i] += val;
+
+              // กรองเสียงแหลมให้ "นุ่ม" แบบเพลง Slowed
+              data[i] = data[i] * 0.4 + (data[i - 1] || 0) * 0.6;
             }
+          }
+
+          // ปรับระดับเสียงให้สมดุลและใส่ Fade out นุ่มๆ ตอนท้าย
+          for (let i = 0; i < length; i++) {
+            const envelope = Math.exp(-decay * (i / length));
+            data[i] *= envelope * 0.15; // ลด Gain ลงเพื่อไม่ให้เสียงแตก
           }
         }
 
         return impulse;
       }
 
-      reverbNode.buffer = createDeepWarmImpulseResponse();
+      reverbNode.buffer = createLushWarmImpulse();
 
       async function loadAudioEngine(arrayBuffer, trackObj) {
         if (!isEngineHot) await initAudioEngine();
