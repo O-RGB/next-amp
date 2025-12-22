@@ -725,9 +725,9 @@
 
       // Watchers
       setInterval(checkAndResumeAudioContext, 1000); // Check every 1s
-      document.addEventListener("visibilitychange", checkAndResumeAudioContext);
-      document.addEventListener("touchstart", checkAndResumeAudioContext);
-      document.addEventListener("click", checkAndResumeAudioContext);
+      ["visibilitychange", "touchstart", "click"].forEach((evt) =>
+        document.addEventListener(evt, checkAndResumeAudioContext)
+      );
 
       // Boot Sequence
       bootBtn.onclick = async () => {
@@ -767,36 +767,6 @@
         $("#boot-screen").style.opacity = "0";
         $("#boot-screen").style.transition = "opacity 0.5s";
         setTimeout(() => $("#boot-screen").classList.add("hidden"), 500);
-      }
-
-      // Media Session Handler
-      function updateMediaSession(trackName) {
-        if ("mediaSession" in navigator) {
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: trackName,
-            artist: "Nextamp Player",
-            album: "My Playlist",
-            artwork: [
-              {
-                src: "https://cdn-icons-png.flaticon.com/512/3669/3669986.png",
-                sizes: "512x512",
-                type: "image/png",
-              },
-            ],
-          });
-          navigator.mediaSession.setActionHandler("play", () =>
-            $("#btn-play").click()
-          );
-          navigator.mediaSession.setActionHandler("pause", () =>
-            $("#btn-pause").click()
-          );
-          navigator.mediaSession.setActionHandler("previoustrack", () =>
-            $("#btn-prev").click()
-          );
-          navigator.mediaSession.setActionHandler("nexttrack", () =>
-            $("#btn-next").click()
-          );
-        }
       }
 
       // --- 2. CORE ENGINE ---
@@ -885,7 +855,7 @@
         controlsChanged();
         isChangingTrack = false;
 
-        // Update Metadata
+        // Update Metadata & Position
         updateMediaSession(trackName);
       }
 
@@ -898,9 +868,68 @@
           );
           stretch.schedule(obj);
         }
+        // Force update position state whenever playback state changes
+        updatePositionState();
       }
 
-      // --- 3. DATA LAYER ---
+      // --- 3. MEDIA SESSION & LOCK SCREEN SYNC ---
+      function updateMediaSession(trackName) {
+        if ("mediaSession" in navigator) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: trackName,
+            artist: "Nextamp Player",
+            album: "My Playlist",
+            artwork: [
+              {
+                src: "https://cdn-icons-png.flaticon.com/512/3669/3669986.png",
+                sizes: "512x512",
+                type: "image/png",
+              },
+            ],
+          });
+
+          // Action Handlers
+          navigator.mediaSession.setActionHandler("play", () =>
+            $("#btn-play").click()
+          );
+          navigator.mediaSession.setActionHandler("pause", () =>
+            $("#btn-pause").click()
+          );
+          navigator.mediaSession.setActionHandler("previoustrack", () =>
+            $("#btn-prev").click()
+          );
+          navigator.mediaSession.setActionHandler("nexttrack", () =>
+            $("#btn-next").click()
+          );
+
+          // [NEW] Seek Handler for Lock Screen
+          navigator.mediaSession.setActionHandler("seekto", (details) => {
+            if (details.seekTime !== undefined && stretch) {
+              stretch.schedule({ input: details.seekTime });
+              updatePositionState();
+            }
+          });
+
+          updatePositionState();
+        }
+      }
+
+      // [IMPORTANT] Tells OS the REAL time, not loop time
+      function updatePositionState() {
+        if ("mediaSession" in navigator && stretch) {
+          try {
+            navigator.mediaSession.setPositionState({
+              duration: audioDuration || 0,
+              playbackRate: controlValues.active ? controlValues.rate : 0,
+              position: stretch.inputTime || 0,
+            });
+          } catch (e) {
+            // Ignore errors if state isn't ready
+          }
+        }
+      }
+
+      // --- 4. DATA LAYER ---
       let LIBRARY = [];
       let playlists = { main: { name: "Main Library", trackIds: [] } };
       let currentPlaylistId = "main";
@@ -976,7 +1005,7 @@
           .filter((t) => t);
       }
 
-      // --- 4. CONTROLS ---
+      // --- 5. CONTROLS ---
       async function playTrack(idx) {
         if (isChangingTrack) return;
         isChangingTrack = true;
@@ -1058,11 +1087,12 @@
         $("#time-display").textContent = "00:00";
         $("#btn-play").classList.remove("pressed");
         $("#marquee").textContent = "Stopped.";
+        updatePositionState();
       };
       $("#btn-next").onclick = () => handleNextTrack(false);
       $("#btn-prev").onclick = () => handlePrevTrack();
 
-      // --- 5. UI & EQ ---
+      // --- 6. UI & EQ ---
       const eqContainer = $("#eq-container");
       const eqCanvas = $("#eq-graph");
       const eqCtx = eqCanvas.getContext("2d");
@@ -1164,20 +1194,15 @@
       window.addEventListener("resize", resizeCvs);
       setTimeout(resizeCvs, 500);
 
-      function draw() {
+      // --- VISUALIZER LOOP ---
+      let lastUpdateTime = 0;
+      function draw(time) {
         requestAnimationFrame(draw);
 
-        // --- UPDATE LOCK SCREEN PROGRESS (Auto-Resume checked) ---
-        if ("mediaSession" in navigator && stretch && controlValues.active) {
-          try {
-            navigator.mediaSession.setPositionState({
-              duration: audioDuration || 0,
-              playbackRate: controlValues.rate || 1,
-              position: stretch.inputTime || 0,
-            });
-          } catch (error) {
-            // Ignore errors
-          }
+        // [IMPORTANT] Sync Lock Screen time periodically (every 1 sec)
+        if (time - lastUpdateTime > 1000) {
+          updatePositionState();
+          lastUpdateTime = time;
         }
 
         if (stretch && !holding) {
@@ -1218,9 +1243,9 @@
           x += barWidth;
         }
       }
-      draw();
+      requestAnimationFrame(draw);
 
-      // --- 6. PLAYLIST UI ---
+      // --- 7. PLAYLIST UI ---
       $("#pl-box").onclick = (e) => {
         if (
           e.target.id === "pl-box" ||
@@ -1474,12 +1499,15 @@
       pb.onmousedown = pb.ontouchstart = () => (holding = true);
       pb.onmouseup = pb.ontouchend = () => {
         holding = false;
-        if (stretch)
+        if (stretch) {
           stretch.schedule({
             input: parseFloat(pb.value),
             rate: controlValues.rate,
             semitones: controlValues.semitones,
           });
+          // Sync Lock Screen Time Immediately
+          updatePositionState();
+        }
       };
       pb.oninput = () => {
         if (!stretch) return;
