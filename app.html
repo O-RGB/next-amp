@@ -1257,6 +1257,7 @@
         });
         return { input: first, output: prev };
       }
+
       function createDeepWarmImpulseResponse(
         duration = 6.0,
         decay = 1.8,
@@ -1299,7 +1300,7 @@
         return impulse;
       }
 
-      reverbNode.buffer = createImpulseResponse();
+      reverbNode.buffer = createDeepWarmImpulseResponse();
 
       async function loadAudioEngine(arrayBuffer, trackObj) {
         if (!isEngineHot) await initAudioEngine();
