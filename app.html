@@ -319,17 +319,14 @@
             </div>
           </div>
           <div class="p-2">
-            <!-- Main Display Area - Winamp Style -->
             <div
-              class="border-2 border-gray-600 border-r-white/50 border-b-white/50 p-2 mb-2 flex gap-2 h-[94px] shadow-inner relative overflow-hidden"
+              class="grid grid-cols-5 border border-gray-600 border-r-white/50 border-b-white/50 p-2 mb-2 flex gap-2 h-[94px] shadow-inner relative overflow-hidden"
             >
-              <!-- GRID 1: Visualizer Box (200px) - BLACK BACKGROUND -->
               <div
-                class="w-[200px] bg-black border border-gray-700 relative overflow-hidden cursor-pointer"
+                class="col-span-2 bg-black border border-gray-700 relative overflow-hidden cursor-pointer"
                 id="visualizer-container"
                 title="Click to change visualizer style"
               >
-                <!-- Time Display - Absolute positioned -->
                 <div
                   id="time-display"
                   class="absolute top-1 right-1 font-pixel text-2xl theme-text-main leading-none tracking-widest text-shadow z-20"
@@ -337,38 +334,32 @@
                   00:00
                 </div>
 
-                <!-- Status Line - Bottom Left -->
                 <div
                   class="absolute bottom-0.5 left-0.5 font-pixel theme-text-sec text-[8px] leading-none z-30 opacity-80"
                 >
                   ● READY
                 </div>
 
-                <!-- VIS Label -->
                 <div
                   class="absolute top-0.5 left-0.5 font-pixel theme-text-main text-[5px] z-30 opacity-70 pointer-events-none"
                 >
                   VIS:<span id="v-status-indicator">SPEC</span>
                 </div>
 
-                <!-- Visualizer Canvas - Full size -->
                 <canvas
                   id="visualizer"
                   class="w-full h-full absolute top-0 left-0 block"
                 ></canvas>
               </div>
 
-              <!-- GRID 2: Info + Controls Panel - GRAY BACKGROUND -->
-              <div class="flex-1 flex flex-col gap-1.5 px-2 py-1 bg-[#292929]">
-                <!-- Song Title Box - Black Border -->
+              <div class="col-span-3 flex-1 flex flex-col gap-1.5 bg-[#292929]">
                 <div
                   id="marquee"
-                  class="font-pixel theme-text-main text-[11px] whitespace-nowrap overflow-hidden leading-tight text-shadow bg-black border border-gray-800 px-2 py-1.5 flex-1"
+                  class="font-pixel theme-text-main text-[11px] whitespace-nowrap overflow-hidden text-ellipsis leading-tight text-shadow bg-black border border-gray-800 px-2 py-1.5"
                 >
-                  System Ready.
+                  System Ready.https://claude.ai/chat/419e3fe9-b98d-44d5-a1e4-4847fecb3b4a
                 </div>
 
-                <!-- Metadata Line: kbps, khz, stereo/mono -->
                 <div class="flex justify-between items-center">
                   <div class="flex gap-2 items-center">
                     <span
@@ -392,9 +383,7 @@
                   </button>
                 </div>
 
-                <!-- Volume & Balance on Same Line -->
                 <div class="flex gap-3 items-center">
-                  <!-- Volume Control -->
                   <div class="flex flex-col flex-1">
                     <div
                       class="flex justify-between text-[8px] theme-text-main font-pixel mb-0.5"
@@ -413,7 +402,6 @@
                     />
                   </div>
 
-                  <!-- Balance Control -->
                   <div class="flex flex-col flex-1">
                     <div
                       class="flex justify-between text-[8px] theme-text-sec font-pixel mb-0.5"
@@ -435,7 +423,6 @@
               </div>
             </div>
 
-            <!-- Playback Progress -->
             <div class="flex flex-col gap-1 mb-2">
               <div class="relative h-4">
                 <input
