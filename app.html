@@ -348,7 +348,7 @@
 
                 <canvas
                   id="visualizer"
-                  class="w-full h-full absolute top-0 left-0 block"
+                  class="w-full h-[80%] absolute top-0 left-0 block"
                 ></canvas>
               </div>
 
@@ -1675,7 +1675,7 @@
           analyser.getByteFrequencyData(dataArray);
 
           // 1. ตั้งค่าจำนวน Bar และความกว้าง
-          const barCount = 23;
+          const barCount = 25;
           const barWidth = cvs.width / barCount; // คำนวณให้เต็มความกว้าง Canvas
           const step = Math.floor(bufferLength / barCount);
 
@@ -1684,7 +1684,7 @@
           if (!window.peakHoldFrames)
             window.peakHoldFrames = new Array(barCount).fill(0);
 
-          const holdFrames = 20; // ค้างไว้ประมาณ 0.2 วินาที
+          const holdFrames = 30; // ค้างไว้ประมาณ 0.2 วินาที
 
           for (let i = 0; i < barCount; i++) {
             let sum = 0;
