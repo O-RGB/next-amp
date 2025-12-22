@@ -73,6 +73,21 @@
         padding-right: max(4px, env(safe-area-inset-right));
       }
 
+      /* AD CONTAINER STYLE */
+      #ad-container {
+        width: 100%;
+        min-height: 50px;
+        background: #000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 8px;
+        border-bottom: 1px solid #333;
+        color: #444;
+        font-family: "Chakra Petch", sans-serif;
+        font-size: 10px;
+      }
+
       .win-btn {
         background-color: #c0c0c0;
         color: black;
@@ -253,56 +268,10 @@
       }
     </style>
   </head>
-  <body class="flex items-center justify-center w-full h-full">
+  <body class="flex flex-col items-center w-full h-full">
     <div id="slider-tooltip">0</div>
 
-    <div
-      id="boot-screen"
-      class="fixed inset-0 z-[100] bg-[#111] flex flex-col items-center justify-center font-ui select-none"
-    >
-      <div
-        class="w-72 bg-[#c0c0c0] border-t-2 border-l-2 border-white border-r-2 border-b-2 border-black p-1 shadow-lg flex flex-col"
-      >
-        <div
-          class="theme-bar w-full text-[12px] font-bold px-2 py-1 mb-4 flex justify-between items-center"
-        >
-          <div class="flex items-center gap-2">
-            <i class="ph-bold ph-music-note"></i
-            ><span>System Initialization</span>
-          </div>
-          <button
-            class="bg-[#c0c0c0] text-black w-4 h-4 flex items-center justify-center border border-white text-[10px] shadow-sm leading-none"
-          >
-            X
-          </button>
-        </div>
-        <div class="px-4 pb-4 flex flex-col items-center text-center">
-          <div class="mb-4 flex items-center gap-4">
-            <i class="ph-fill ph-speaker-high text-4xl text-gray-600"></i>
-            <div class="text-left">
-              <h1 class="text-sm font-bold text-black">Audio Engine Setup</h1>
-              <p class="text-[11px] text-gray-600">
-                Tap start to initialize background service.
-              </p>
-            </div>
-          </div>
-          <div
-            class="w-full h-4 border-t border-l border-gray-600 border-r border-b border-white mb-4 p-[2px] bg-white"
-          >
-            <div class="h-full theme-bar w-full animate-pulse"></div>
-          </div>
-          <button
-            id="btn-boot-start"
-            class="win-btn px-6 py-1 text-xs font-bold focus:outline-dotted"
-          >
-            Start Application
-          </button>
-        </div>
-      </div>
-      <div class="mt-4 text-[10px] text-gray-500 font-pixel">
-        POWERED BY NEXTAMP
-      </div>
-    </div>
+    <div id="ad-container">[ ADVERTISEMENT SPACE ]</div>
 
     <audio
       id="audio-startup"
@@ -322,7 +291,7 @@
       INSTALL APP
     </button>
 
-    <div class="w-full h-full md:max-w-sm mx-auto">
+    <div class="w-full h-full md:max-w-sm mx-auto overflow-hidden">
       <div
         class="flex flex-col gap-2 origin-center transition-transform duration-300 h-full"
       >
@@ -339,7 +308,7 @@
               <div
                 id="engine-status"
                 class="w-2 h-2 rounded-full bg-red-900 border border-black mr-1"
-                title="Engine Status"
+                title="Engine Status (Red: Standby, Green: Active)"
               ></div>
               <button
                 onclick="openSettingsModal()"
@@ -364,7 +333,7 @@
                   id="marquee"
                   class="font-pixel theme-text-main text-sm whitespace-nowrap overflow-hidden leading-none mb-1 text-shadow pt-1"
                 >
-                  Ready.
+                  Click anywhere to start...
                 </div>
                 <div
                   class="flex-1 border border-gray-700 relative w-full bg-[#111] overflow-hidden cursor-pointer"
@@ -1045,7 +1014,7 @@
           .padStart(2, "0")}`;
       };
 
-      // STORAGE (MODIFIED TO FIX EQ RESET)
+      // STORAGE (EQ FIX: Read from sliders)
       function saveSettings() {
         const settings = {
           vol: $("#main-vol").value,
@@ -1056,7 +1025,6 @@
           repeatMode: repeatMode,
           isEqOn: isEqOn,
           playlistId: currentPlaylistId,
-          // CRITICAL: Read from input sliders, not from audio nodes
           eqGains: Array.from(document.querySelectorAll("input[data-idx]")).map(
             (inp) => parseFloat(inp.value)
           ),
@@ -1115,15 +1083,40 @@
       // AUDIO ENGINE
       const audioContext = new AudioContext();
       let isEngineHot = false;
-      const bootBtn = $("#btn-boot-start"),
-        audioStartup = $("#audio-startup"),
+      const audioStartup = $("#audio-startup"),
         audioLoop = $("#audio-loop");
       const loopSource = audioContext.createMediaElementSource(audioLoop);
       loopSource.connect(audioContext.destination);
+
+      // AUTO INIT ON FIRST CLICK
+      const initAudioEngine = async () => {
+        if (isEngineHot) return;
+        try {
+          if (audioContext.state === "suspended") await audioContext.resume();
+          isEngineHot = true;
+          audioStartup.volume = 0.5;
+          audioLoop.volume = 0.05;
+          await audioStartup.play();
+          audioLoop.play().catch((e) => {});
+
+          // Visual Cue: Change Engine Status to Green
+          $("#engine-status").style.backgroundColor = "#00ff00";
+          $("#engine-status").style.boxShadow = "0 0 4px #0f0";
+          $("#marquee").textContent = "Ready.";
+        } catch (e) {
+          console.error("Init failed", e);
+        }
+      };
+
+      // Listen for the first click anywhere to start the engine
+      document.addEventListener("click", initAudioEngine, { once: true });
+      document.addEventListener("touchstart", initAudioEngine, { once: true });
+
       const checkAndResumeAudioContext = () => {
         if (
-          audioContext.state === "suspended" ||
-          audioContext.state === "interrupted"
+          isEngineHot &&
+          (audioContext.state === "suspended" ||
+            audioContext.state === "interrupted")
         )
           audioContext.resume();
         if (isEngineHot && audioLoop.paused) audioLoop.play().catch((e) => {});
@@ -1132,27 +1125,6 @@
       ["visibilitychange", "touchstart", "click"].forEach((evt) =>
         document.addEventListener(evt, checkAndResumeAudioContext)
       );
-      bootBtn.onclick = async () => {
-        try {
-          if (audioContext.state === "suspended") await audioContext.resume();
-          audioStartup.volume = 0.5;
-          audioLoop.volume = 0.05;
-          await audioStartup.play();
-          audioLoop.play().catch((e) => {});
-          audioStartup.onended = () => enterApp();
-          audioStartup.onerror = () => enterApp();
-        } catch (e) {
-          enterApp();
-        }
-      };
-      function enterApp() {
-        if (isEngineHot) return;
-        isEngineHot = true;
-        $("#engine-status").style.backgroundColor = "#00ff00";
-        $("#engine-status").style.boxShadow = "0 0 4px #0f0";
-        $("#boot-screen").style.opacity = "0";
-        setTimeout(() => $("#boot-screen").classList.add("hidden"), 500);
-      }
 
       let stretch = null,
         eqNodes = [],
@@ -1196,7 +1168,7 @@
       let controlValues = { active: false, rate: 1, semitones: 0 },
         isEqOn = true;
 
-      // FIXED initEQ to keep visual state
+      // FIXED EQ INIT
       function initEQ() {
         eqNodes.forEach((n) => {
           try {
@@ -1212,7 +1184,6 @@
           f.frequency.value = freq;
           f.Q.value = 1.4;
 
-          // Read current slider value OR saved value
           const slider = document.querySelector(`input[data-idx="${i}"]`);
           let targetVal = 0;
           if (slider) {
@@ -1239,6 +1210,7 @@
       }
 
       async function loadAudioEngine(arrayBuffer, trackObj) {
+        if (!isEngineHot) await initAudioEngine(); // Ensure engine is hot
         checkAndResumeAudioContext();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         audioDuration = audioBuffer.duration;
@@ -1398,6 +1370,7 @@
       }
 
       async function playTrack(idx) {
+        if (!isEngineHot) await initAudioEngine(); // Force init if first track play
         if (playDebounceTimer) clearTimeout(playDebounceTimer);
         let list = getCurrentDisplayList();
         if (idx < 0 || idx >= list.length) return;
@@ -1444,6 +1417,7 @@
         playTrack(prev);
       }
       $("#btn-play").onclick = async () => {
+        if (!isEngineHot) await initAudioEngine();
         checkAndResumeAudioContext();
         const list = getCurrentDisplayList();
         if (!stretch && list.length > 0)
@@ -1697,7 +1671,7 @@
               handleDragDrop(parseInt(e.dataTransfer.getData("text/plain")), i);
             };
 
-            // FIXED DOUBLE TAP FOR MOBILE
+            // DOUBLE TAP FOR MOBILE
             let lastTapTime = 0;
             d.ontouchend = (e) => {
               const currentTime = new Date().getTime();
@@ -1828,6 +1802,7 @@
         handleFiles(e.dataTransfer.files);
       };
       async function handleFiles(files) {
+        if (!isEngineHot) await initAudioEngine();
         checkAndResumeAudioContext();
         if (!isEngineHot) await audioContext.resume();
         for (const f of files) {
