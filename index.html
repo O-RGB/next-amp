@@ -55,6 +55,12 @@
         user-select: none;
         -webkit-user-select: none;
         background-color: #111;
+
+        /* SAFE AREA PADDING LOGIC */
+        padding-top: max(16px, env(safe-area-inset-top));
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+        padding-left: max(16px, env(safe-area-inset-left));
+        padding-right: max(16px, env(safe-area-inset-right));
       }
 
       /* Nextamp Styles */
@@ -191,19 +197,27 @@
       .animate-blink {
         animation: blink 1s infinite;
       }
+
+      /* Safe area for boot screen */
+      #boot-screen {
+        padding-top: max(16px, env(safe-area-inset-top));
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+        padding-left: max(16px, env(safe-area-inset-left));
+        padding-right: max(16px, env(safe-area-inset-right));
+      }
     </style>
   </head>
-  <body class="flex items-center justify-center w-full h-full p-4">
+  <body class="flex items-center justify-center w-full h-full">
     <div
       id="boot-screen"
-      class="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center font-pixel text-win-green p-4 text-center"
+      class="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center font-pixel text-win-green text-center"
     >
       <div
         class="mb-8 border-2 border-win-green p-1 inline-block shadow-[0_0_10px_#00ff00]"
       >
         <div class="border border-win-green px-4 py-2 bg-win-green/10">
           <h1 class="text-3xl font-bold tracking-widest mb-1">NEXTAMP OS</h1>
-          <div class="text-[10px] text-win-green/70">VER 2.0.1 REMASTERED</div>
+          <div class="text-[10px] text-win-green/70">VER 2.0.3 PRO AUDIO</div>
         </div>
       </div>
 
@@ -221,9 +235,17 @@
       </button>
 
       <div class="mt-8 text-[10px] text-gray-500">
-        For iOS: Please ensure Silent Mode is OFF
+        Click to unlock audio system
       </div>
     </div>
+
+    <audio id="startup-sound" preload="auto">
+      <source
+        src="data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAADAAALMAADBQcJCAkKCgoLDAwMDQ0NDg4ODxAQEBISEhMTExQUFBYWFhcXFxgYGBkZGRoaGhsbGxwcHB0dHR4eHh8fHyAgICEhISIiIiMjIyQkJCUlJSYmJicnJygoKCkpKSoqKisrKywsLC0tLS4uLi8vLzAwMDExMTIyMjMzMzQ0NDU1NTY2Njc3Nzg4ODk5OTo6Ojs7Ozw8PD09PT4+Pj8/P0BAQEFBQUJCQkNDQ0REREVFRUZGRkdHR0hISElJSUpKSktLS0xMTE1NTU5OTk9PT1BQUFFRUVJSUlNTU1RUVFVVVVZWVldXV1hYWFlZWVpaWltbW1xcXF1dXV5eXl9fX2BgYGFhYWJiYmNjY2RkZGVlZWZmZmdnZ2hoaGlpaWpqamtra2xsbG1tbW5ubm9vb3BwcHFxcXJycnNzc3R0dHV1dXZ2dnd3d3h4eHl5eXp6ent7e3x8fH19fX5+fn9/f4CAgIGBgYKCgoODg4SEhIWFhYaGhoeHh4iIiImJiYqKiouLi4yMjI2NjY6Ojo+Pj5CQkJGRkZKSkpOTk5SUlJWVlZaWlpeXl5iYmJmZmZqampubm5ycnJ2dnZ6enp+fn6CgoKGhoaKioqOjo6SkpKWlpaampqenp6ioqKqqqqurq6ysrK2tra6urq+vr7CwsLGxsbKysrOzs7S0tLW1tba2tre3t7i4uLm5ubq6uru7u7y8vL29vb6+vr+/v8DAwMHBwcLCwsPDw8TExMXFxcbGxsfHx8jIyMnJycrKysvLy8zMzM3Nzc7Ozs/Pz9DQ0NHR0dLS0tPT09TU1NXV1dbW1tfX19jY2NnZ2dra2tvb29zc3N3d3d7e3t/f3+Dg4OHh4eLi4uPj4+Tk5OXl5ebm5ufn5+jo6Onp6erq6uvr6+zs7O3t7e7u7u/v7/Dw8PHx8fLy8vPz8/T09PX19fb29vf39/j4+Pn5+fr6+vv7+/z8/P39/f7+/v///wAAADpMQU1FMy4xMDABAAAAAAAANiAAJwcAAQAAACwwAAA0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQxAAACkABQAAAAAAoACgAAAAAEAAIAAAAAAAQAAgAAAAAABAAAAAAAAAAAAAAAD/8AAAAAAAAAAAP/wAAAAAAAAAA///+5DEAAAKQAFAAAAAACgAKAAAAAAQAAgAAAAAABAACAAAAAAAEAAAAAAAAAAAAAAAP/wAAAAAAAAAAA//AAAAAAAAAAD//"
+        ;
+        type="audio/mpeg"
+      />
+    </audio>
 
     <button
       id="btn-install-pwa"
@@ -675,50 +697,48 @@
       const audioContext = new AudioContext();
       let isEngineHot = false;
 
-      // New Boot Handler
-      $("#btn-boot-start").onclick = async () => {
+      // [UPDATED] Boot Handler using <audio> element logic
+      const bootBtn = $("#btn-boot-start");
+      const startupAudio = $("#startup-sound");
+
+      bootBtn.onclick = async () => {
         try {
-          await audioContext.resume();
-          // Play System Check Sound (Beep Loop)
-          const now = audioContext.currentTime;
+          // 1. Play the <audio> tag (iOS requires this on click)
+          await startupAudio.play();
 
-          // Beep 1
-          playBeep(now, 880, 0.1);
-          // Beep 2
-          playBeep(now + 0.15, 1760, 0.1);
-          // Beep 3 (Low)
-          playBeep(now + 0.3, 440, 0.2);
+          // 2. Resume AudioContext immediately
+          if (audioContext.state === "suspended") {
+            await audioContext.resume();
+          }
 
-          isEngineHot = true;
-          $("#engine-status").style.backgroundColor = "#00ff00";
-          $("#engine-status").style.boxShadow = "0 0 4px #0f0";
+          // 3. Wait for audio to end before hiding boot screen
+          // (Similar to the React logic: audio.addEventListener("ended"))
+          startupAudio.onended = () => {
+            enterApp();
+          };
 
-          // Hide Boot Screen
+          // Fallback: If audio is very short or fails to fire ended, force enter after 1s
           setTimeout(() => {
-            $("#boot-screen").style.opacity = "0";
-            $("#boot-screen").style.transition = "opacity 0.5s";
-            setTimeout(() => $("#boot-screen").classList.add("hidden"), 500);
-          }, 600);
+            if (!isEngineHot) enterApp();
+          }, 1000);
         } catch (e) {
-          alert("Audio Init Failed: " + e);
+          console.error("Audio unlock failed:", e);
+          // Even if it fails, try to enter
+          enterApp();
         }
       };
 
-      function playBeep(time, freq, dur) {
-        const osc = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        osc.frequency.value = freq;
-        osc.type = "square";
-        gain.gain.value = 0.1;
+      function enterApp() {
+        if (isEngineHot) return;
+        isEngineHot = true;
+        $("#engine-status").style.backgroundColor = "#00ff00";
+        $("#engine-status").style.boxShadow = "0 0 4px #0f0";
 
-        osc.connect(gain);
-        gain.connect(audioContext.destination);
-
-        osc.start(time);
-        osc.stop(time + dur);
+        $("#boot-screen").style.opacity = "0";
+        $("#boot-screen").style.transition = "opacity 0.5s";
+        setTimeout(() => $("#boot-screen").classList.add("hidden"), 500);
       }
 
-      // Auto-wake just in case, but boot screen is primary
       async function wakeUpAudioEngine() {
         if (isEngineHot) return;
         try {
