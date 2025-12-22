@@ -1332,8 +1332,8 @@
         }
       }
 
-      reverbNode.buffer = createImpulseResponse(4, 3);
-      // loadReverbImpulse("assets/sounds/room.wav");
+      // reverbNode.buffer = createImpulseResponse(4, 3);
+      loadReverbImpulse("assets/sounds/hall.wav");
 
       async function loadAudioEngine(arrayBuffer, trackObj) {
         if (!isEngineHot) await initAudioEngine(); // Ensure engine is hot
