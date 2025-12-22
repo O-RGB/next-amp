@@ -147,9 +147,9 @@
         color: var(--theme-text-sec);
       }
       .theme-highlight-bg {
-        background-color: rgba(0, 219, 80, 0.2); /* Transparent Green-400 */
+        background-color: var(--theme-highlight); /* Transparent Green-400 */
         color: #fff;
-        border: 1px solid var(--theme-text);
+        outline: 1px solid var(--theme-window);
       }
 
       .eq-bar-bg {
@@ -1681,7 +1681,7 @@
             const d = document.createElement("div");
             if (selectedIndices.has(i)) d.classList.add("theme-highlight-bg");
             else d.className += " theme-text-main hover:bg-[#222]";
-            let textClass = i === currentTrackIndex ? "font-bold" : "";
+            let textClass = i === currentTrackIndex ? "font-bold text-white" : "";
             d.className += ` cursor-pointer px-1 flex justify-between select-none ${textClass}`;
             d.draggable = true;
             d.innerHTML = `<div class="flex truncate w-full pointer-events-none"><span class="w-6 text-right mr-2 flex-shrink-0">${
