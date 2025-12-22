@@ -319,71 +319,123 @@
             </div>
           </div>
           <div class="p-2">
+            <!-- Main Display Area - Winamp Style -->
             <div
-              class="bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 border-r-gray p-2 mb-2 flex gap-3 h-[94px] shadow-inner relative overflow-hidden"
+              class="border-2 border-gray-600 border-r-white/50 border-b-white/50 p-2 mb-2 flex gap-2 h-[94px] shadow-inner relative overflow-hidden"
             >
-              <div class="w-[65%] flex flex-col min-w-0 relative">
-                <div
-                  id="marquee"
-                  class="font-pixel theme-text-main text-sm whitespace-nowrap overflow-hidden leading-none mb-1 text-shadow pt-1"
-                >
-                  System Ready.
-                </div>
-                <div
-                  class="flex-1 border border-gray-700 relative w-full bg-[#111] overflow-hidden cursor-pointer"
-                  id="visualizer-container"
-                  title="Click to change visualizer style"
-                >
-                  <!-- font-pixel
-   VIS:
-                   
-                     -->
-                  <div
-                    class="absolute top-1 right-1 font-pixel theme-text-main text-[5px] z-30 opacity-70 pointer-events-none"
-                  >
-                    VIS:
-                    <span id="v-status-indicator" class="theme-text-main"
-                      >SPECTRUM</span
-                    >
-                  </div>
-                  <canvas
-                    id="visualizer"
-                    class="w-full h-full absolute top-0 left-0 block"
-                  ></canvas>
-                </div>
-              </div>
+              <!-- GRID 1: Visualizer Box (200px) - BLACK BACKGROUND -->
               <div
-                class="flex-1 flex flex-col justify-between items-end bg-[#111] p-1 border border-gray-700 shrink-0 z-10 min-w-[80px]"
+                class="w-[200px] bg-black border border-gray-700 relative overflow-hidden cursor-pointer"
+                id="visualizer-container"
+                title="Click to change visualizer style"
               >
+                <!-- Time Display - Absolute positioned -->
                 <div
                   id="time-display"
-                  class="font-pixel text-3xl theme-text-main leading-none tracking-widest text-shadow mt-[-2px]"
+                  class="absolute top-1 right-1 font-pixel text-2xl theme-text-main leading-none tracking-widest text-shadow z-20"
                 >
                   00:00
                 </div>
-                <div class="text-right w-full flex flex-col gap-[2px]">
-                  <div
-                    id="info-bitrate"
-                    class="font-pixel theme-text-sec text-[10px] leading-none"
-                  >
-                    -- k
-                  </div>
-                  <div
-                    id="info-samplerate"
-                    class="font-pixel theme-text-sec text-[10px] leading-none"
-                  >
-                    -- khz
+
+                <!-- Status Line - Bottom Left -->
+                <div
+                  class="absolute bottom-0.5 left-0.5 font-pixel theme-text-sec text-[8px] leading-none z-30 opacity-80"
+                >
+                  ● READY
+                </div>
+
+                <!-- VIS Label -->
+                <div
+                  class="absolute top-0.5 left-0.5 font-pixel theme-text-main text-[5px] z-30 opacity-70 pointer-events-none"
+                >
+                  VIS:<span id="v-status-indicator">SPEC</span>
+                </div>
+
+                <!-- Visualizer Canvas - Full size -->
+                <canvas
+                  id="visualizer"
+                  class="w-full h-full absolute top-0 left-0 block"
+                ></canvas>
+              </div>
+
+              <!-- GRID 2: Info + Controls Panel - GRAY BACKGROUND -->
+              <div class="flex-1 flex flex-col gap-1.5 px-2 py-1 bg-[#292929]">
+                <!-- Song Title Box - Black Border -->
+                <div
+                  id="marquee"
+                  class="font-pixel theme-text-main text-[11px] whitespace-nowrap overflow-hidden leading-tight text-shadow bg-black border border-gray-800 px-2 py-1.5 flex-1"
+                >
+                  System Ready.
+                </div>
+
+                <!-- Metadata Line: kbps, khz, stereo/mono -->
+                <div class="flex justify-between items-center">
+                  <div class="flex gap-2 items-center">
+                    <span
+                      id="info-bitrate"
+                      class="font-pixel theme-text-sec text-[9px] leading-none"
+                    >
+                      -- kbps
+                    </span>
+                    <span
+                      id="info-samplerate"
+                      class="font-pixel theme-text-sec text-[9px] leading-none"
+                    >
+                      -- khz
+                    </span>
                   </div>
                   <button
                     id="btn-mono-stereo"
-                    class="font-pixel theme-text-main text-[10px] mt-1 leading-none text-center border border-gray-800 w-full hover:bg-gray-800 cursor-pointer py-[1px]"
+                    class="font-pixel theme-text-main text-[8px] leading-none border border-gray-600 px-1 py-[1px] bg-black hover:bg-gray-800 cursor-pointer"
                   >
                     STEREO
                   </button>
                 </div>
+
+                <!-- Volume & Balance on Same Line -->
+                <div class="flex gap-3 items-center">
+                  <!-- Volume Control -->
+                  <div class="flex flex-col flex-1">
+                    <div
+                      class="flex justify-between text-[8px] theme-text-main font-pixel mb-0.5"
+                    >
+                      <span>VOL</span><span id="txt-vol">80%</span>
+                    </div>
+                    <input
+                      type="range"
+                      id="main-vol"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value="0.8"
+                      class="w-full h-2 bg-black"
+                      data-tooltip-type="percent"
+                    />
+                  </div>
+
+                  <!-- Balance Control -->
+                  <div class="flex flex-col flex-1">
+                    <div
+                      class="flex justify-between text-[8px] theme-text-sec font-pixel mb-0.5"
+                    >
+                      <span>L</span><span>BAL</span><span>R</span>
+                    </div>
+                    <input
+                      type="range"
+                      id="main-bal"
+                      min="-1"
+                      max="1"
+                      step="0.1"
+                      value="0"
+                      class="w-full h-2 bg-black"
+                      data-tooltip-type="balance"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
+            <!-- Playback Progress -->
             <div class="flex flex-col gap-1 mb-2">
               <div class="relative h-4">
                 <input
@@ -397,44 +449,9 @@
                   data-tooltip-type="time"
                 />
               </div>
-              <div class="flex justify-between items-center gap-2 px-1">
-                <div class="flex flex-col flex-1">
-                  <div
-                    class="flex justify-between text-[8px] theme-text-main font-pixel"
-                  >
-                    <span>VOL</span><span id="txt-vol">80%</span>
-                  </div>
-                  <input
-                    type="range"
-                    id="main-vol"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value="0.8"
-                    class="w-full h-2 bg-black border border-gray-600"
-                    data-tooltip-type="percent"
-                  />
-                </div>
-                <div class="flex flex-col w-[80px]">
-                  <div
-                    class="flex justify-between text-[8px] theme-text-sec font-pixel"
-                  >
-                    <span>L</span><span>BAL</span><span>R</span>
-                  </div>
-                  <input
-                    type="range"
-                    id="main-bal"
-                    min="-1"
-                    max="1"
-                    step="0.1"
-                    value="0"
-                    class="w-full h-2 bg-black border border-gray-600"
-                    data-tooltip-type="balance"
-                  />
-                </div>
-              </div>
             </div>
 
+            <!-- Control Buttons -->
             <div class="flex justify-between items-end">
               <div class="flex gap-[2px]">
                 <button id="btn-prev" class="win-btn w-8 h-8" title="Prev">
