@@ -51,7 +51,7 @@
         --theme-text-sec: #ffcc00;
         --theme-highlight: #000080;
 
-        /* EQ GRADIENT (Green -> Yellow -> Red) */
+        /* EQ GRADIENT */
         --eq-col-1: #00ff00;
         --eq-col-2: #ffff00;
         --eq-col-3: #ff0000;
@@ -306,12 +306,12 @@
 
     <audio
       id="audio-startup"
-      src="/assets/sounds/startup.mp3"
+      src="next-amp/assets/sounds/startup.mp3"
       preload="auto"
     ></audio>
     <audio
       id="audio-loop"
-      src="/assets/sounds/allow-sound.mp3"
+      src="next-amp/assets/sounds/allow-sound.mp3"
       loop
       preload="auto"
     ></audio>
@@ -867,7 +867,7 @@
       import SignalsmithStretch from "https://cdn.jsdelivr.net/npm/signalsmith-stretch@latest/SignalsmithStretch.mjs";
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => document.querySelectorAll(s);
-      const STORAGE_KEY = "nextamp_settings_v7_final";
+      const STORAGE_KEY = "nextamp_settings_v8_final";
 
       const defaultTheme = {
         window: "#000080",
@@ -891,7 +891,7 @@
         r.style.setProperty("--eq-col-3", t.eq3);
       }
 
-      // MODALS - FIXED CLOSE BUG & SWAPPED POSITIONS
+      // MODALS
       window.customAlert = (msg) => {
         $("#modal-generic-msg").textContent = msg;
         const btns = $("#modal-generic-btns");
@@ -908,16 +908,12 @@
         $("#modal-generic-msg").textContent = msg;
         const btns = $("#modal-generic-btns");
         btns.innerHTML = "";
-
-        // NO/CANCEL on LEFT
         const no = document.createElement("button");
         no.className = "win-btn w-20 h-6 text-[10px]";
         no.textContent = "NO";
         no.onclick = () => {
           $("#modal-generic").classList.add("hidden");
         };
-
-        // YES/OK on RIGHT
         const yes = document.createElement("button");
         yes.className = "win-btn w-20 h-6 text-[10px]";
         yes.textContent = "YES";
@@ -925,7 +921,6 @@
           $("#modal-generic").classList.add("hidden");
           callback();
         };
-
         btns.appendChild(no);
         btns.appendChild(yes);
         $("#modal-generic").classList.remove("hidden");
@@ -1912,26 +1907,37 @@
         updateRepeatBtn();
         saveSettings();
       };
+
+      // FIXED MONO SWITCH LOGIC (PREVENT AUDIO DROPOUT)
       const updateMonoStereoState = () => {
-        if (isMono) {
-          monoGainNode.channelCount = 1;
-          monoGainNode.channelCountMode = "explicit";
-          $("#btn-mono-stereo").textContent = "MONO";
-          $("#btn-mono-stereo").classList.remove("theme-text-main");
-          $("#btn-mono-stereo").classList.add("theme-text-sec");
-        } else {
-          monoGainNode.channelCount = 2;
-          monoGainNode.channelCountMode = "max";
-          $("#btn-mono-stereo").textContent = "STEREO";
-          $("#btn-mono-stereo").classList.add("theme-text-main");
-          $("#btn-mono-stereo").classList.remove("theme-text-sec");
+        try {
+          if (isMono) {
+            monoGainNode.channelCount = 1;
+            monoGainNode.channelCountMode = "explicit";
+            monoGainNode.channelInterpretation = "speakers"; // Safe downmix
+            $("#btn-mono-stereo").textContent = "MONO";
+            $("#btn-mono-stereo").classList.remove("theme-text-main");
+            $("#btn-mono-stereo").classList.add("theme-text-sec");
+          } else {
+            monoGainNode.channelCount = 2;
+            monoGainNode.channelCountMode = "max";
+            monoGainNode.channelInterpretation = "speakers";
+            $("#btn-mono-stereo").textContent = "STEREO";
+            $("#btn-mono-stereo").classList.add("theme-text-main");
+            $("#btn-mono-stereo").classList.remove("theme-text-sec");
+          }
+        } catch (e) {
+          console.error(e);
         }
       };
-      $("#btn-mono-stereo").onclick = () => {
+
+      $("#btn-mono-stereo").onclick = async () => {
+        if (audioContext.state === "suspended") await audioContext.resume(); // Fix for mobile dropout
         isMono = !isMono;
         updateMonoStereoState();
         saveSettings();
       };
+
       window.toggleSection = (id) => $(`#${id}`).classList.toggle("hidden");
       let deferredPrompt;
       window.addEventListener("beforeinstallprompt", (e) => {
