@@ -705,6 +705,10 @@
       const audioStartup = $("#audio-startup");
       const audioLoop = $("#audio-loop");
 
+      // Connect Loop to Context (Standard Bridge for Background Play)
+      const loopSource = audioContext.createMediaElementSource(audioLoop);
+      loopSource.connect(audioContext.destination);
+
       bootBtn.onclick = async () => {
         try {
           audioStartup.volume = 0.5;
