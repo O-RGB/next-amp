@@ -1678,13 +1678,30 @@
           gradient.addColorStop(0.6, currentTheme.eq2);
           gradient.addColorStop(1, currentTheme.eq3);
           ctx.fillStyle = gradient;
-          const barWidth = (cvs.width / bufferLength) * 2.5;
-          let x = 0;
-          for (let i = 0; i < bufferLength; i++) {
-            let barHeight = (dataArray[i] / 255) * cvs.height;
-            if (barHeight > 0)
-              ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
-            x += barWidth;
+
+          // --- ส่วนที่แก้ไข: กำหนดจำนวนแท่งเป็น 20 ---
+          const barCount = 20;
+          const barWidth = cvs.width / barCount;
+          const step = Math.floor(bufferLength / barCount); // คำนวณว่าจะข้ามกี่จุดข้อมูลต่อ 1 แท่ง
+
+          for (let i = 0; i < barCount; i++) {
+            // หาค่าเฉลี่ยหรือค่าสูงสุดในช่วงข้อมูลนั้นๆ เพื่อความแม่นยำ
+            let sum = 0;
+            for (let j = 0; j < step; j++) {
+              sum += dataArray[i * step + j];
+            }
+            let average = sum / step;
+
+            let barHeight = (average / 255) * cvs.height;
+
+            // วาดแท่งโดยเว้นระยะห่าง (Gap) เล็กน้อยเพื่อให้ดูสวยงาม
+            // ลบออก 2-4 พิกเซลเพื่อให้แท่งไม่ติดกัน
+            ctx.fillRect(
+              i * barWidth,
+              cvs.height - barHeight,
+              barWidth - 2,
+              barHeight
+            );
           }
         } else if (visualMode === 1) {
           analyser.getByteFrequencyData(dataArray);
@@ -1744,8 +1761,7 @@
             const d = document.createElement("div");
             if (selectedIndices.has(i)) d.classList.add("theme-highlight-bg");
             else d.className += " theme-text-main hover:bg-[#222]";
-            let textClass =
-              i === currentTrackIndex ? "font-bold text-white" : "";
+            let textClass = i === currentTrackIndex ? "text-white" : "";
             d.className += ` cursor-pointer px-1 flex justify-between select-none ${textClass}`;
             d.draggable = true;
             d.innerHTML = `<div class="flex truncate w-full pointer-events-none"><span class="w-6 text-right mr-2 flex-shrink-0">${
