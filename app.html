@@ -1670,33 +1670,60 @@
 
           const barCount = 25;
           const barWidth = cvs.width / barCount;
-          const step = (bufferLength / barCount) | 0;
-
-          const INV_255 = 1 / 255;
-          const displayScale = 0.7;
-          const holdFrames = 60;
+          const step = Math.floor(bufferLength / barCount);
 
           if (!window.peaks) window.peaks = new Array(barCount).fill(0);
           if (!window.peakHoldFrames)
             window.peakHoldFrames = new Array(barCount).fill(0);
 
+          const holdFrames = 80;
+          const displayScale = 0.7; // แสดงผลสูงสุด 70%
+
+          // ===== tuning =====
+          const curve = 0.6; // 0.5–0.7 : ดันเสียงเบา (hi-freq)
+          const minVisual = 0.02; // กัน bar หาย (2%)
+
           for (let i = 0; i < barCount; i++) {
             const x = i * barWidth;
 
+            // ===== average spectrum =====
             let sum = 0;
-            const base = i * step;
             for (let j = 0; j < step; j++) {
-              sum += dataArray[base + j];
+              sum += dataArray[i * step + j];
             }
 
             const average = sum / step;
 
-            // ===== ultra-light mapping =====
-            const norm = average * INV_255;
-            const level = Math.log1p(norm * 9); // log compression
-            const rawHeight = level * cvs.height;
+            // ===== normalize =====
+            const norm = average / 255;
+
+            // ===== power curve (ไม่ limit เสียง) =====
+            const curved = Math.pow(norm, curve);
+
+            // ===== frequency weighting =====
+            const positionWeight = 0.5 + (1 - i / barCount) * 0.5;
+
+            // ===== raw height (true signal space) =====
+            let rawHeight = curved * positionWeight * cvs.height;
+
+            // ===== noise floor (visual only) =====
+            rawHeight = Math.max(rawHeight, cvs.height * minVisual);
+
+            // ===== display scale =====
             const displayHeight = rawHeight * displayScale;
 
+            // ===== gradient =====
+            const gradient = ctx.createLinearGradient(
+              0,
+              cvs.height,
+              0,
+              cvs.height - cvs.height * displayScale
+            );
+            gradient.addColorStop(0, currentTheme.eq1);
+            gradient.addColorStop(0.6, currentTheme.eq2);
+            gradient.addColorStop(1, currentTheme.eq3);
+
+            ctx.fillStyle = gradient;
             ctx.fillRect(
               x,
               cvs.height - displayHeight,
@@ -1704,22 +1731,23 @@
               displayHeight
             );
 
-            // ===== peak =====
-            if (rawHeight > window.peaks[i]) {
+            // ===== peak (use raw signal) =====
+            if (rawHeight >= window.peaks[i]) {
               window.peaks[i] = rawHeight;
               window.peakHoldFrames[i] = holdFrames;
-            } else if (window.peakHoldFrames[i] > 0) {
-              window.peakHoldFrames[i]--;
             } else {
-              window.peaks[i] -= 1;
+              if (window.peakHoldFrames[i] > 0) {
+                window.peakHoldFrames[i]--;
+              } else {
+                window.peaks[i] -= 1.2;
+              }
             }
 
-            ctx.fillRect(
-              x,
-              cvs.height - window.peaks[i] * displayScale - 2,
-              barWidth - 1,
-              2
-            );
+            // ===== render peak with display scale =====
+            const displayPeak = window.peaks[i] * displayScale;
+
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(x, cvs.height - displayPeak - 2, barWidth - 1, 2);
           }
         } else if (visualMode === 1) {
           analyser.getByteFrequencyData(dataArray);
