@@ -1639,114 +1639,73 @@
       function draw(time) {
         requestAnimationFrame(draw);
 
+        // ===== logic อื่น ๆ =====
         if (time - lastUpdateTime > 1000) {
           updatePositionState();
           lastUpdateTime = time;
         }
-        if (stretch && !holding) {
-          const pb = $("#playback");
-          pb.max = audioDuration;
-          const t = stretch.inputTime || 0;
-          pb.value = t;
-          $("#time-display").textContent = formatTime(t);
-          if (
-            controlValues.active &&
-            t >= audioDuration - 0.2 &&
-            !isChangingTrack
-          )
-            handleNextTrack(true);
-        }
 
+        // ===== clear canvas =====
         ctx.fillStyle = "#111";
         ctx.fillRect(0, 0, cvs.width, cvs.height);
 
         if (visualMode === 3) return;
 
-        const bufferLength = analyser.frequencyBinCount,
-          dataArray = new Uint8Array(bufferLength);
+        // ===== limit FPS visualizer =====
+        if (time - lastVizTime < 1000 / VIZ_FPS) return;
+        lastVizTime = time;
+
+        const bufferLength = dataArray.length;
 
         if (visualMode === 0) {
           analyser.getByteFrequencyData(dataArray);
 
-          const barCount = 18;
           const step = Math.floor(bufferLength / barCount);
-
-          // ===== padding รอบนอก =====
-          const padding = {
-            top: 4,
-            bottom: 4,
-            left: 4,
-            right: 4,
-          };
-
           const drawWidth = cvs.width - padding.left - padding.right;
           const drawHeight = cvs.height - padding.top - padding.bottom;
-
           const barWidth = drawWidth / barCount;
 
-          if (!window.peaks) window.peaks = new Array(barCount).fill(0);
-          if (!window.peakHoldFrames)
-            window.peakHoldFrames = new Array(barCount).fill(0);
-
-          const holdFrames = 80;
-          const displayScale = 0.7;
-          const minBarHeight = 3;
+          ctx.fillStyle = eqGradient;
 
           for (let i = 0; i < barCount; i++) {
-            const x = padding.left + i * barWidth;
-
+            const base = i * step;
             let sum = 0;
+
             for (let j = 0; j < step; j++) {
-              sum += dataArray[i * step + j];
+              sum += dataArray[base + j];
             }
 
-            const average = sum / step;
+            const avg = sum / step;
+            const rawHeight = (avg * drawHeight) >> 8;
+            let h = rawHeight * displayScale;
 
-            const rawHeight = (average / 255) * drawHeight;
-            let displayHeight = rawHeight * displayScale;
+            if (h < minBarHeight) h = minBarHeight;
 
-            // ===== baseline "_" ตอนเงียบ =====
-            if (displayHeight < minBarHeight) {
-              displayHeight = minBarHeight;
-            }
+            const x = padding.left + i * barWidth;
+            const y = padding.top + drawHeight - h;
 
-            const y = padding.top + drawHeight - displayHeight;
+            ctx.fillRect(x, y, barWidth - 1, h);
 
-            let gradient = ctx.createLinearGradient(
-              0,
-              padding.top + drawHeight,
-              0,
-              padding.top
-            );
-            gradient.addColorStop(0, currentTheme.eq1);
-            gradient.addColorStop(0.6, currentTheme.eq2);
-            gradient.addColorStop(1, currentTheme.eq3);
-
-            ctx.fillStyle = gradient;
-            ctx.fillRect(x, y, barWidth - 1, displayHeight);
-
-            // ===== peak (ใช้ raw height จริง) =====
-            if (rawHeight >= window.peaks[i]) {
-              window.peaks[i] = rawHeight;
-              window.peakHoldFrames[i] = holdFrames;
+            // peak
+            if (rawHeight >= peaks[i]) {
+              peaks[i] = rawHeight;
+              peakHoldFrames[i] = holdFrames;
+            } else if (peakHoldFrames[i] > 0) {
+              peakHoldFrames[i]--;
             } else {
-              if (window.peakHoldFrames[i] > 0) {
-                window.peakHoldFrames[i]--;
-              } else {
-                window.peaks[i] -= 1.2;
-              }
+              peaks[i] -= 1.2;
             }
 
-            const displayPeak = window.peaks[i] * displayScale;
-
-            if (displayPeak > 0) {
-              ctx.fillStyle = "#FFFFFF";
+            const peakY = peaks[i] * displayScale;
+            if (peakY > 0) {
+              ctx.fillStyle = "#fff";
               ctx.fillRect(
                 x,
-                padding.top + drawHeight - displayPeak - 2,
+                padding.top + drawHeight - peakY - 2,
                 barWidth - 1,
                 2
               );
+              ctx.fillStyle = eqGradient;
             }
           }
         } else if (visualMode === 1) {
