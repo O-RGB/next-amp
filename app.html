@@ -1668,7 +1668,10 @@
         if (visualMode === 0) {
           analyser.getByteFrequencyData(dataArray);
 
+          let average = sum / step;
           const barCount = 25;
+          let maxHeight = cvs.height * 0.8;
+          let barHeight = (average / 255) * maxHeight;
           const barWidth = cvs.width / barCount;
           const step = Math.floor(bufferLength / barCount);
 
@@ -1687,13 +1690,18 @@
             let average = sum / step;
             let barHeight = (average / 255) * cvs.height;
 
-            let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
+            let gradient = ctx.createLinearGradient(
+              0,
+              cvs.height,
+              0,
+              cvs.height - maxHeight
+            );
             gradient.addColorStop(0, currentTheme.eq1);
             gradient.addColorStop(0.6, currentTheme.eq2);
             gradient.addColorStop(1, currentTheme.eq3);
 
             ctx.fillStyle = "#000000";
-            ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
+            ctx.fillRect(x, cvs.height - barHeight, barWidth - 2, barHeight);
 
             if (barHeight >= window.peaks[i]) {
               window.peaks[i] = barHeight;
@@ -1709,9 +1717,9 @@
             if (window.peaks[i] > 0) {
               ctx.fillStyle = "#FFFFFF";
               ctx.fillRect(
-                i * barWidth,
+                x,
                 cvs.height - window.peaks[i] - 2,
-                barWidth - 1,
+                barWidth - 2,
                 2
               );
             }
