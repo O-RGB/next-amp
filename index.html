@@ -1155,19 +1155,30 @@
         eqNodes = [],
         analyser = audioContext.createAnalyser();
       let masterGainNode = audioContext.createGain(),
-        pannerNode = audioContext.createStereoPanner(),
-        monoGainNode = audioContext.createGain();
+        pannerNode = audioContext.createStereoPanner();
 
-      // === CRITICAL FIX: Safe Node Config ===
-      monoGainNode.channelCountMode = "explicit";
-      monoGainNode.channelInterpretation = "speakers";
+      // === CRITICAL FIX: DUAL PATH MONO/STEREO ===
+      // แทนที่จะแก้ channelCount เราสร้าง 2 เส้นทาง (Stereo/Mono)
+      // แล้วสลับ gain เอา วิธีนี้ work 100% บนมือถือ
+      let stereoPath = audioContext.createGain();
+      let monoPath = audioContext.createGain();
+
+      // ตั้งค่า Mono Path ให้บีบเสียงรวมกัน
+      monoPath.channelCount = 1;
+      monoPath.channelCountMode = "explicit";
+      monoPath.channelInterpretation = "speakers";
 
       let isMono = false,
         audioDuration = 1,
         isChangingTrack = false,
         playDebounceTimer = null;
-      analyser.connect(monoGainNode);
-      monoGainNode.connect(pannerNode);
+
+      // เชื่อมต่อทั้ง 2 เส้นทางแบบขนาน
+      analyser.connect(stereoPath);
+      analyser.connect(monoPath);
+      stereoPath.connect(pannerNode);
+      monoPath.connect(pannerNode);
+
       pannerNode.connect(masterGainNode);
       masterGainNode.connect(audioContext.destination);
       masterGainNode.gain.value = 0.8;
@@ -1913,31 +1924,24 @@
         saveSettings();
       };
 
-      // FIXED MONO SWITCH LOGIC (SAFE FOR MOBILE)
-      // หาฟังก์ชัน updateMonoStereoState แล้วแก้เป็นแบบนี้ครับ
+      // FIXED MONO SWITCH LOGIC (SAFE FOR MOBILE - DUAL PATH)
       const updateMonoStereoState = () => {
-        try {
-          // --- แก้ไขจุดนี้ ---
-          // 1. Disconnect ออกจาก pannerNode ก่อน เพื่อไม่ให้ Audio Thread บนมือถือค้าง
-          monoGainNode.disconnect();
+        if (isMono) {
+          // ปิด Stereo, เปิด Mono
+          stereoPath.gain.value = 0;
+          monoPath.gain.value = 1;
 
-          if (isMono) {
-            monoGainNode.channelCount = 1;
-            $("#btn-mono-stereo").textContent = "MONO";
-            $("#btn-mono-stereo").classList.remove("theme-text-main");
-            $("#btn-mono-stereo").classList.add("theme-text-sec");
-          } else {
-            monoGainNode.channelCount = 2;
-            $("#btn-mono-stereo").textContent = "STEREO";
-            $("#btn-mono-stereo").classList.add("theme-text-main");
-            $("#btn-mono-stereo").classList.remove("theme-text-sec");
-          }
+          $("#btn-mono-stereo").textContent = "MONO";
+          $("#btn-mono-stereo").classList.remove("theme-text-main");
+          $("#btn-mono-stereo").classList.add("theme-text-sec");
+        } else {
+          // เปิด Stereo, ปิด Mono
+          stereoPath.gain.value = 1;
+          monoPath.gain.value = 0;
 
-          // 2. Connect กลับไปที่ pannerNode
-          monoGainNode.connect(pannerNode);
-          // ------------------
-        } catch (e) {
-          console.error("Mono switch error:", e);
+          $("#btn-mono-stereo").textContent = "STEREO";
+          $("#btn-mono-stereo").classList.add("theme-text-main");
+          $("#btn-mono-stereo").classList.remove("theme-text-sec");
         }
       };
 
