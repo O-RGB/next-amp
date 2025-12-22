@@ -51,21 +51,25 @@
 
       html,
       body {
-        height: 100%;
-        width: 100%;
-        overflow: hidden;
+        /* iOS Safari Fixes */
+        height: 100dvh; /* ใช้ dvh เพื่อหลบ URL bar อัตโนมัติ */
+        width: 100vw;
+        position: fixed; /* ล็อกตำแหน่งไม่ให้ body เด้ง */
+        inset: 0;
+        overflow: hidden; /* ห้าม scroll ที่ body */
         overscroll-behavior: none;
         touch-action: none;
         user-select: none;
         -webkit-user-select: none;
+        
         background-color: #111;
+        
+        /* Safe Area สำหรับติ่งหน้าจอและขอบล่าง iPhone */
         padding-top: max(4px, env(safe-area-inset-top));
         padding-bottom: max(4px, env(safe-area-inset-bottom));
         padding-left: max(4px, env(safe-area-inset-left));
         padding-right: max(4px, env(safe-area-inset-right));
       }
-
-      /* ลบ CSS #ad-container ออกแล้ว */
 
       .win-btn {
         background-color: #c0c0c0;
@@ -268,10 +272,10 @@
       INSTALL APP
     </button>
 
-    <div class="w-full h-full md:max-w-sm mx-auto overflow-hidden pb-1">
-      <div
-        class="flex flex-col gap-2 origin-center transition-transform duration-300 h-full"
-      >
+    <div class="w-full h-full md:max-w-sm mx-auto overflow-hidden flex flex-col pb-1">
+      
+      <div class="flex-none flex flex-col gap-2 origin-center transition-transform duration-300">
+        
         <div
           class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-20 shadow-lg"
         >
@@ -527,279 +531,282 @@
             </div>
           </div>
         </div>
+      </div>
 
+      <div
+        class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-0 shadow-lg flex-1 min-h-0 flex flex-col mt-2"
+      >
         <div
-          class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-0 shadow-lg h-full"
+          class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold flex-none"
         >
+          <span>LIBRARY & PLAYLIST</span>
+        </div>
+        <div class="p-2 flex flex-col h-full relative overflow-hidden">
+          <div class="flex justify-between mb-1 flex-none">
+            <select
+              id="playlist-select"
+              class="bg-black theme-text-main border border-gray-600 text-[10px] px-1 h-5 w-32 font-pixel focus:outline-none"
+            >
+              <option value="main">Main Library</option>
+            </select>
+            <div class="flex gap-1">
+              <button
+                onclick="openNewPlaylistModal()"
+                class="win-btn px-2 h-5 text-[9px] font-bold shadow-sm"
+              >
+                NEW
+              </button>
+              <button
+                onclick="handleDeletePlaylist()"
+                id="btn-del-pl"
+                class="win-btn px-2 h-5 text-[9px] font-bold text-red-900 shadow-sm hidden"
+                title="Delete Playlist"
+              >
+                <i class="ph-bold ph-trash"></i>
+              </button>
+            </div>
+          </div>
+          
           <div
-            class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold"
+            class="flex-1 bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 overflow-y-auto custom-scroll p-1 font-pixel text-xs mb-2 shadow-inner select-none min-h-0"
+            id="pl-box"
           >
-            <span>LIBRARY & PLAYLIST</span>
-          </div>
-          <div class="p-2 flex flex-col h-full relative">
-            <div class="flex justify-between mb-1">
-              <select
-                id="playlist-select"
-                class="bg-black theme-text-main border border-gray-600 text-[10px] px-1 h-5 w-32 font-pixel focus:outline-none"
-              >
-                <option value="main">Main Library</option>
-              </select>
-              <div class="flex gap-1">
-                <button
-                  onclick="openNewPlaylistModal()"
-                  class="win-btn px-2 h-5 text-[9px] font-bold shadow-sm"
-                >
-                  NEW
-                </button>
-                <button
-                  onclick="handleDeletePlaylist()"
-                  id="btn-del-pl"
-                  class="win-btn px-2 h-5 text-[9px] font-bold text-red-900 shadow-sm hidden"
-                  title="Delete Playlist"
-                >
-                  <i class="ph-bold ph-trash"></i>
-                </button>
-              </div>
-            </div>
-            <div
-              class="flex-1 bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 overflow-y-auto custom-scroll p-1 font-pixel text-xs mb-2 shadow-inner select-none"
-              id="pl-box"
-            >
-              <div class="text-gray-500 text-center mt-10 text-[10px]">
-                Drop files or Click ADD...
-              </div>
-            </div>
-            <div class="flex justify-between items-center h-6">
-              <div class="flex gap-1">
-                <button
-                  id="btn-pl-add"
-                  class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm"
-                >
-                  <i class="ph-bold ph-plus"></i> ADD
-                </button>
-                <button
-                  onclick="handleDeleteTracks()"
-                  id="btn-del-track"
-                  class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
-                  disabled
-                >
-                  <i class="ph-bold ph-minus"></i> REM
-                </button>
-                <button
-                  onclick="openAddToModal()"
-                  class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm"
-                >
-                  <i class="ph-bold ph-list-plus"></i> TO...
-                </button>
-                <button
-                  onclick="moveTrack(-1)"
-                  id="btn-move-up"
-                  class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
-                  disabled
-                >
-                  <i class="ph-bold ph-caret-up"></i>
-                </button>
-                <button
-                  onclick="moveTrack(1)"
-                  id="btn-move-down"
-                  class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
-                  disabled
-                >
-                  <i class="ph-bold ph-caret-down"></i>
-                </button>
-              </div>
-              <div class="font-pixel theme-text-main text-[10px]" id="pl-count">
-                0 TRACKS
-              </div>
+            <div class="text-gray-500 text-center mt-10 text-[10px]">
+              Drop files or Click ADD...
             </div>
           </div>
-        </div>
 
-        <div
-          id="modal-generic"
-          class="absolute inset-0 bg-black/80 z-[200] flex items-center justify-center hidden"
-        >
-          <div class="bg-[#292929] border-2 border-white w-64 p-3 shadow-2xl">
-            <div class="theme-bar px-2 py-1 text-[10px] font-bold mb-3">
-              SYSTEM MESSAGE
-            </div>
-            <div
-              id="modal-generic-msg"
-              class="text-white text-xs mb-4 text-center font-ui px-2"
-            ></div>
-            <div
-              class="flex gap-2 justify-center"
-              id="modal-generic-btns"
-            ></div>
-          </div>
-        </div>
-        <div
-          id="modal-add-to"
-          class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
-        >
-          <div class="bg-[#292929] border-2 border-white w-48 p-2 shadow-2xl">
-            <div
-              class="theme-text-main font-pixel text-center mb-2 border-b border-gray-600 pb-1"
-            >
-              SELECT PLAYLIST
-            </div>
-            <div
-              id="modal-list"
-              class="flex flex-col gap-1 max-h-32 overflow-y-auto custom-scroll"
-            ></div>
-            <button
-              onclick="closeAddToModal()"
-              class="win-btn w-full mt-2 h-5 text-[9px]"
-            >
-              CANCEL
-            </button>
-          </div>
-        </div>
-        <div
-          id="modal-new-playlist"
-          class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
-        >
-          <div class="bg-[#292929] border-2 border-white w-56 p-3 shadow-2xl">
-            <div
-              class="theme-text-main font-pixel text-center mb-3 border-b border-gray-600 pb-1 text-xs"
-            >
-              CREATE NEW PLAYLIST
-            </div>
-            <input
-              type="text"
-              id="new-playlist-name"
-              class="w-full bg-black text-white border border-gray-500 text-xs p-1 mb-3 font-pixel focus:outline-none focus:border-win-green"
-              placeholder="Playlist Name..."
-            />
-            <div class="flex gap-2">
+          <div class="flex justify-between items-center h-6 flex-none">
+            <div class="flex gap-1">
               <button
-                onclick="closeNewPlaylistModal()"
-                class="win-btn flex-1 h-6 text-[10px]"
+                id="btn-pl-add"
+                class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm"
               >
-                CANCEL
+                <i class="ph-bold ph-plus"></i> ADD
               </button>
               <button
-                onclick="confirmNewPlaylist()"
-                class="win-btn flex-1 h-6 text-[10px]"
+                onclick="handleDeleteTracks()"
+                id="btn-del-track"
+                class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
+                disabled
               >
-                CREATE
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div
-          id="modal-settings"
-          class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
-        >
-          <div
-            class="bg-[#292929] border-2 border-white w-64 p-3 shadow-2xl overflow-y-auto max-h-[90%]"
-          >
-            <div
-              class="theme-bar px-2 py-1 text-[10px] font-bold mb-3 flex justify-between"
-            >
-              <span>APPEARANCE SETTINGS</span>
-              <button onclick="closeSettingsModal()">X</button>
-            </div>
-            <div class="space-y-3 mb-4">
-              <div class="flex items-center justify-between">
-                <span class="text-white text-[10px] font-ui">Window Color</span>
-                <input
-                  type="color"
-                  id="set-theme-window"
-                  class="h-5 w-8 p-0 border-0"
-                  onchange="previewTheme()"
-                />
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-white text-[10px] font-ui"
-                  >Text/Icon Color</span
-                >
-                <input
-                  type="color"
-                  id="set-theme-text"
-                  class="h-5 w-8 p-0 border-0"
-                  onchange="previewTheme()"
-                />
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-white text-[10px] font-ui"
-                  >Highlight Color</span
-                >
-                <input
-                  type="color"
-                  id="set-theme-high"
-                  class="h-5 w-8 p-0 border-0"
-                  onchange="previewTheme()"
-                />
-              </div>
-              <div class="border-t border-gray-600 my-2"></div>
-              <div class="text-[9px] text-gray-400 mb-1">EQ BAR GRADIENT</div>
-              <div class="flex justify-between gap-1">
-                <div class="flex flex-col items-center">
-                  <span class="text-[8px] text-gray-500">LOW</span
-                  ><input
-                    type="color"
-                    id="set-eq-1"
-                    class="h-4 w-6 p-0 border-0"
-                    onchange="previewTheme()"
-                  />
-                </div>
-                <div class="flex flex-col items-center">
-                  <span class="text-[8px] text-gray-500">MID</span
-                  ><input
-                    type="color"
-                    id="set-eq-2"
-                    class="h-4 w-6 p-0 border-0"
-                    onchange="previewTheme()"
-                  />
-                </div>
-                <div class="flex flex-col items-center">
-                  <span class="text-[8px] text-gray-500">HIGH</span
-                  ><input
-                    type="color"
-                    id="set-eq-3"
-                    class="h-4 w-6 p-0 border-0"
-                    onchange="previewTheme()"
-                  />
-                </div>
-              </div>
-              <div
-                class="border border-gray-600 h-8 w-full mt-2 relative"
-                id="theme-preview-box"
-              >
-                <div
-                  class="absolute inset-0 flex items-center justify-center text-[10px] font-bold"
-                  id="theme-preview-text"
-                >
-                  PREVIEW
-                </div>
-              </div>
-              <button
-                onclick="resetTheme()"
-                class="win-btn w-full h-6 text-[10px] text-red-900 mt-2"
-              >
-                RESET DEFAULT
-              </button>
-            </div>
-            <div class="flex gap-2">
-              <button
-                onclick="closeSettingsModal()"
-                class="win-btn flex-1 h-6 text-[10px]"
-              >
-                CANCEL
+                <i class="ph-bold ph-minus"></i> REM
               </button>
               <button
-                onclick="applyThemeSettings()"
-                class="win-btn flex-1 h-6 text-[10px]"
+                onclick="openAddToModal()"
+                class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm"
               >
-                APPLY
+                <i class="ph-bold ph-list-plus"></i> TO...
               </button>
+              <button
+                onclick="moveTrack(-1)"
+                id="btn-move-up"
+                class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
+                disabled
+              >
+                <i class="ph-bold ph-caret-up"></i>
+              </button>
+              <button
+                onclick="moveTrack(1)"
+                id="btn-move-down"
+                class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
+                disabled
+              >
+                <i class="ph-bold ph-caret-down"></i>
+              </button>
+            </div>
+            <div class="font-pixel theme-text-main text-[10px]" id="pl-count">
+              0 TRACKS
             </div>
           </div>
         </div>
       </div>
+
+      <div
+        id="modal-generic"
+        class="absolute inset-0 bg-black/80 z-[200] flex items-center justify-center hidden"
+      >
+        <div class="bg-[#292929] border-2 border-white w-64 p-3 shadow-2xl">
+          <div class="theme-bar px-2 py-1 text-[10px] font-bold mb-3">
+            SYSTEM MESSAGE
+          </div>
+          <div
+            id="modal-generic-msg"
+            class="text-white text-xs mb-4 text-center font-ui px-2"
+          ></div>
+          <div
+            class="flex gap-2 justify-center"
+            id="modal-generic-btns"
+          ></div>
+        </div>
+      </div>
+      <div
+        id="modal-add-to"
+        class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
+      >
+        <div class="bg-[#292929] border-2 border-white w-48 p-2 shadow-2xl">
+          <div
+            class="theme-text-main font-pixel text-center mb-2 border-b border-gray-600 pb-1"
+          >
+            SELECT PLAYLIST
+          </div>
+          <div
+            id="modal-list"
+            class="flex flex-col gap-1 max-h-32 overflow-y-auto custom-scroll"
+          ></div>
+          <button
+            onclick="closeAddToModal()"
+            class="win-btn w-full mt-2 h-5 text-[9px]"
+          >
+            CANCEL
+          </button>
+        </div>
+      </div>
+      <div
+        id="modal-new-playlist"
+        class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
+      >
+        <div class="bg-[#292929] border-2 border-white w-56 p-3 shadow-2xl">
+          <div
+            class="theme-text-main font-pixel text-center mb-3 border-b border-gray-600 pb-1 text-xs"
+          >
+            CREATE NEW PLAYLIST
+          </div>
+          <input
+            type="text"
+            id="new-playlist-name"
+            class="w-full bg-black text-white border border-gray-500 text-xs p-1 mb-3 font-pixel focus:outline-none focus:border-win-green"
+            placeholder="Playlist Name..."
+          />
+          <div class="flex gap-2">
+            <button
+              onclick="closeNewPlaylistModal()"
+              class="win-btn flex-1 h-6 text-[10px]"
+            >
+              CANCEL
+            </button>
+            <button
+              onclick="confirmNewPlaylist()"
+              class="win-btn flex-1 h-6 text-[10px]"
+            >
+              CREATE
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        id="modal-settings"
+        class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
+      >
+        <div
+          class="bg-[#292929] border-2 border-white w-64 p-3 shadow-2xl overflow-y-auto max-h-[90%]"
+        >
+          <div
+            class="theme-bar px-2 py-1 text-[10px] font-bold mb-3 flex justify-between"
+          >
+            <span>APPEARANCE SETTINGS</span>
+            <button onclick="closeSettingsModal()">X</button>
+          </div>
+          <div class="space-y-3 mb-4">
+            <div class="flex items-center justify-between">
+              <span class="text-white text-[10px] font-ui">Window Color</span>
+              <input
+                type="color"
+                id="set-theme-window"
+                class="h-5 w-8 p-0 border-0"
+                onchange="previewTheme()"
+              />
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-white text-[10px] font-ui"
+                >Text/Icon Color</span
+              >
+              <input
+                type="color"
+                id="set-theme-text"
+                class="h-5 w-8 p-0 border-0"
+                onchange="previewTheme()"
+              />
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-white text-[10px] font-ui"
+                >Highlight Color</span
+              >
+              <input
+                type="color"
+                id="set-theme-high"
+                class="h-5 w-8 p-0 border-0"
+                onchange="previewTheme()"
+              />
+            </div>
+            <div class="border-t border-gray-600 my-2"></div>
+            <div class="text-[9px] text-gray-400 mb-1">EQ BAR GRADIENT</div>
+            <div class="flex justify-between gap-1">
+              <div class="flex flex-col items-center">
+                <span class="text-[8px] text-gray-500">LOW</span
+                ><input
+                  type="color"
+                  id="set-eq-1"
+                  class="h-4 w-6 p-0 border-0"
+                  onchange="previewTheme()"
+                />
+              </div>
+              <div class="flex flex-col items-center">
+                <span class="text-[8px] text-gray-500">MID</span
+                ><input
+                  type="color"
+                  id="set-eq-2"
+                  class="h-4 w-6 p-0 border-0"
+                  onchange="previewTheme()"
+                />
+              </div>
+              <div class="flex flex-col items-center">
+                <span class="text-[8px] text-gray-500">HIGH</span
+                ><input
+                  type="color"
+                  id="set-eq-3"
+                  class="h-4 w-6 p-0 border-0"
+                  onchange="previewTheme()"
+                />
+              </div>
+            </div>
+            <div
+              class="border border-gray-600 h-8 w-full mt-2 relative"
+              id="theme-preview-box"
+            >
+              <div
+                class="absolute inset-0 flex items-center justify-center text-[10px] font-bold"
+                id="theme-preview-text"
+              >
+                PREVIEW
+              </div>
+            </div>
+            <button
+              onclick="resetTheme()"
+              class="win-btn w-full h-6 text-[10px] text-red-900 mt-2"
+            >
+              RESET DEFAULT
+            </button>
+          </div>
+          <div class="flex gap-2">
+            <button
+              onclick="closeSettingsModal()"
+              class="win-btn flex-1 h-6 text-[10px]"
+            >
+              CANCEL
+            </button>
+            <button
+              onclick="applyThemeSettings()"
+              class="win-btn flex-1 h-6 text-[10px]"
+            >
+              APPLY
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
+  </div>
 
     <input
       type="file"

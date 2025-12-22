@@ -6,205 +6,539 @@
 
     <meta
       name="description"
-      content="NEXTAMP โปรแกรมเล่นเพลงผ่านเว็บไซต์ ไม่ต้องติดตั้ง รองรับไฟล์เพลงคุณภาพสูง ปรับคีย์เพลง ความเร็ว และอีควอไลเซอร์ได้แบบเรียลไทม์ ใช้งานง่ายผ่านเบราว์เซอร์"
+      content="NEXTAMP โปรแกรมเล่นเพลงผ่านเว็บไซต์ ไม่ต้องติดตั้ง รองรับไฟล์เพลงคุณภาพสูง ปรับคีย์เพลง ความเร็ว และอีควอไลเซอร์ได้แบบเรียลไทม์"
     />
     <meta
       name="keywords"
-      content="nextamp, โปรแกรมเล่นเพลง, เล่นเพลงผ่านเว็บ, music player online, web music player, ไม่ต้องติดตั้ง, ปรับคีย์เพลง, เปลี่ยนคีย์เพลง, pitch shift เพลง, equalizer online, high quality audio, โปรแกรมเล่น mp3, karaoke web"
+      content="nextamp, โปรแกรมเล่นเพลง, music player, web audio, pitch shift, time stretch, equalizer, mp3 player, online music"
     />
-    <meta name="author" content="NEXTAMP" />
+    <meta name="author" content="NEXTAMP Team" />
     <meta property="og:title" content="NEXTAMP – โปรแกรมเล่นเพลงผ่านเว็บไซต์" />
-    <meta
-      property="og:description"
-      content="เล่นเพลงผ่านเว็บ ไม่ต้องติดตั้ง ปรับคีย์เพลง ความเร็ว และอีควอไลเซอร์ได้ รองรับเสียงคุณภาพสูง"
-    />
-    <meta property="og:type" content="website" />
     <meta
       property="og:image"
       content="https://next-amp-one.vercel.app/assets/logo/logo.png"
     />
-    <meta property="og:site_name" content="NEXTAMP" />
-    <meta name="theme-color" content="#111111" />
-    <title>Nextamp Player - Web Music Tool</title>
+    <title>Nextamp Player - Music Experience Evolved</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
+
     <link
-      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600&family=Inter:wght@400;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;600&family=Sarabun:wght@300;400;600&display=swap"
       rel="stylesheet"
     />
+
     <style>
-      body {
-        font-family: "Inter", sans-serif;
-        background-color: #111;
-        color: #eee;
+      :root {
+        --primary-glow: #00ff00;
+        --secondary-glow: #0080ff;
       }
-      .pixel-font {
+      body {
+        font-family: "Sarabun", "Inter", sans-serif;
+        background-color: #050505;
+        color: #e5e5e5;
+        overflow-x: hidden;
+      }
+      .font-display {
         font-family: "Chakra Petch", sans-serif;
       }
-      .btn-start {
-        background: #00ff00;
+
+      /* ปุ่ม Start สไตล์ Neon */
+      .btn-glow {
+        position: relative;
+        background: linear-gradient(90deg, #00b300, #00ff00);
         color: black;
-        box-shadow: 0 0 10px #00ff00;
-        transition: all 0.2s;
-        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
       }
-      .btn-start:hover {
-        transform: scale(1.05);
-        background: #fff;
-        box-shadow: 0 0 20px #fff;
+      .btn-glow:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0 30px rgba(0, 255, 0, 0.6);
       }
-      .btn-start:disabled {
-        background: #555;
-        color: #888;
-        box-shadow: none;
-        cursor: not-allowed;
+      .btn-glow::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-radius: inherit;
+        background: linear-gradient(
+          45deg,
+          transparent 30%,
+          rgba(255, 255, 255, 0.8),
+          transparent 70%
+        );
+        background-size: 200% 200%;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .btn-glow:hover::after {
+        opacity: 1;
+        animation: shine 1.5s infinite;
+      }
+
+      @keyframes shine {
+        0% {
+          background-position: 200% 0;
+        }
+        100% {
+          background-position: -200% 0;
+        }
+      }
+
+      /* พื้นที่โฆษณา */
+      .ad-slot {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px dashed rgba(255, 255, 255, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #666;
+        font-size: 0.8rem;
+        margin: 2rem 0;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      /* Card ดีไซน์ทั่วไป */
+      .feature-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        transition: all 0.3s;
+      }
+      .feature-card:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.2);
+        transform: translateY(-5px);
+      }
+
+      /* Card สำหรับ Highlight Tech */
+      .tech-card {
+        background: linear-gradient(
+          145deg,
+          rgba(0, 50, 0, 0.2),
+          rgba(0, 0, 0, 0.8)
+        );
+        border: 1px solid rgba(0, 255, 0, 0.2);
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.05);
+      }
+      .tech-card:hover {
+        border-color: rgba(0, 255, 0, 0.5);
+        box-shadow: 0 0 30px rgba(0, 255, 0, 0.1);
+        transform: translateY(-5px);
       }
     </style>
   </head>
-  <body>
-    <div
-      id="landing-container"
-      class="max-w-4xl mx-auto p-6 min-h-screen flex flex-col justify-center items-center"
+  <body class="flex flex-col min-h-screen">
+    <nav
+      class="w-full py-4 px-6 flex justify-between items-center border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-50"
     >
-      <img
-        src="https://next-amp-one.vercel.app/assets/logo/logo.png"
-        alt="Nextamp Logo"
-        class="w-32 h-32 mb-6 rounded-xl shadow-2xl border border-gray-800"
-      />
-
-      <h1
-        class="text-5xl font-bold mb-4 pixel-font text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500 text-center leading-tight"
-      >
-        NEXTAMP PLAYER
-      </h1>
-      <p class="text-gray-400 mb-10 text-center max-w-lg text-lg">
-        โปรแกรมเล่นเพลงและแกะเพลงบนเว็บที่ดีที่สุด <br />ปรับ Pitch, Speed และ
-        EQ ได้ทันทีโดยไม่ต้องติดตั้ง
-      </p>
-
-      <button
-        onclick="enterApp()"
-        class="btn-start px-10 py-4 text-xl font-bold rounded pixel-font mb-16 flex items-center gap-3"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="currentColor"
-          viewBox="0 0 24 24"
-          class="w-8 h-8"
+      <div class="flex items-center gap-2">
+        <img
+          src="https://next-amp-one.vercel.app/assets/logo/logo.png"
+          alt="Logo"
+          class="w-8 h-8 rounded shadow-lg"
+        />
+        <span class="font-display font-bold text-xl tracking-wider text-white"
+          >NEXTAMP</span
         >
-          <path d="M8 5v14l11-7z" />
-        </svg>
-        START PLAYER
-      </button>
+      </div>
+      <div class="hidden md:flex gap-6 text-sm text-gray-400 font-display">
+        <a href="#features" class="hover:text-green-400 transition">ฟีเจอร์</a>
+        <a href="#faq" class="hover:text-green-400 transition"
+          >คำถามที่พบบ่อย</a
+        >
+        <a href="#contact" class="hover:text-green-400 transition">ติดต่อเรา</a>
+      </div>
+    </nav>
 
-      <article
-        class="prose prose-invert prose-lg text-gray-300 w-full text-left bg-[#1a1a1a] p-8 rounded-2xl border border-gray-800 shadow-xl"
-      >
+    <header
+      class="relative w-full py-20 px-4 flex flex-col items-center justify-center text-center overflow-hidden"
+    >
+      <div
+        class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-green-500/10 rounded-full blur-[100px] pointer-events-none"
+      ></div>
+
+      <div class="relative z-10 max-w-4xl mx-auto">
         <div
-          class="ad-placeholder w-full h-24 bg-black/50 border border-dashed border-gray-700 flex items-center justify-center mb-8 rounded text-sm text-gray-500"
+          class="inline-block px-3 py-1 mb-6 rounded-full border border-green-500/30 bg-green-900/10 text-green-400 text-xs font-bold tracking-widest font-display animate-pulse"
         >
-          [ วางโค้ด Google AdSense ตรงนี้ ]
+          WEB AUDIO TECHNOLOGY 2025
         </div>
 
-        <h2 class="text-2xl text-green-400 mb-4 pixel-font font-bold">
-          NEXTAMP คืออะไร?
-        </h2>
-        <p class="mb-6">
-          Nextamp เป็น Web Application
-          สำหรับนักดนตรีและคนรักเสียงเพลงที่ต้องการความยืดหยุ่นในการฟังเพลง
-          โดยเน้นฟีเจอร์ที่โปรแกรมเล่นเพลงทั่วไปไม่มี เช่น การปรับคีย์เพลง
-          (Pitch Shifting) โดยไม่ทำให้ความเร็วเปลี่ยน
-          ซึ่งเหมาะมากสำหรับการฝึกร้องเพลง หรือแกะเพลง
+        <h1
+          class="text-5xl md:text-7xl font-bold mb-6 font-display bg-clip-text text-transparent bg-gradient-to-r from-white via-gray-200 to-gray-500"
+        >
+          NEXTAMP PLAYER
+        </h1>
+
+        <p
+          class="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed"
+        >
+          โปรแกรมเล่นเพลงบนเว็บที่ดีที่สุด ปรับ
+          <span class="text-white font-bold">Pitch</span>,
+          <span class="text-white font-bold">Speed</span> และ
+          <span class="text-white font-bold">EQ</span> ได้ทันที
+          <br class="hidden md:block" />ด้วยคุณภาพเสียงระดับ Studio Grade
+          โดยไม่ต้องติดตั้งโปรแกรม
         </p>
 
-        <h3 class="text-xl text-white mt-8 mb-3 font-bold">
-          ฟีเจอร์เด่นที่คุณต้องลอง
-        </h3>
-        <ul class="list-disc pl-6 space-y-3 mb-8">
-          <li>
-            <strong class="text-green-300">High Quality Audio Engine:</strong>
-            รองรับไฟล์ .mp3, .wav, .m4a ด้วยคุณภาพเสียงระดับ Audiophile
-          </li>
-          <li>
-            <strong class="text-green-300">10-Band Equalizer:</strong>
-            ปรับแต่งเสียงได้ละเอียด พร้อม Presets สำหรับแนวเพลงต่างๆ
-          </li>
-          <li>
-            <strong class="text-green-300">Time Stretching:</strong>
-            ยืดหรือหดความเร็วเพลงเพื่อการฝึกซ้อมดนตรี
-          </li>
-          <li>
-            <strong class="text-green-300">Privacy First:</strong>
-            ไฟล์เพลงของคุณจะถูกประมวลผลในเครื่อง (Local) ไม่มีการอัปโหลดขึ้น
-            Server
-          </li>
-        </ul>
+        <button
+          onclick="enterApp()"
+          class="btn-glow px-12 py-4 rounded-lg font-display font-bold text-lg md:text-xl tracking-wide flex items-center gap-3 mx-auto group"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="w-6 h-6 fill-current group-hover:scale-110 transition-transform"
+            viewBox="0 0 256 256"
+          >
+            <path
+              d="M240,128a15.74,15.74,0,0,1-7.61,13.66l-144,88A15.95,15.95,0,0,1,80,232a16.09,16.09,0,0,1-8-2.16A15.84,15.84,0,0,1,64,216V40a15.84,15.84,0,0,1,8-13.84,15.91,15.91,0,0,1,16.35,0l144,88A15.74,15.74,0,0,1,240,128Z"
+            ></path>
+          </svg>
+          LAUNCH PLAYER
+        </button>
+
+        <p class="mt-4 text-xs text-gray-600 font-mono">
+          เวอร์ชัน 1.0.0 • รองรับ Chrome, Edge, Safari
+        </p>
+      </div>
+    </header>
+
+    <div class="container mx-auto px-4">
+      <div class="ad-slot w-full h-[90px] md:h-[120px]">
+        <span class="opacity-50">[ พื้นที่โฆษณา - สนับสนุนผู้พัฒนา ]</span>
+      </div>
+    </div>
+
+    <main
+      class="container mx-auto px-4 py-12 grid grid-cols-1 lg:grid-cols-3 gap-12"
+    >
+      <div class="lg:col-span-2 space-y-12">
+        <section id="about" class="space-y-4">
+          <h2
+            class="text-2xl font-display font-bold text-green-400 flex items-center gap-2"
+          >
+            <span class="w-1 h-6 bg-green-500 rounded-full"></span>
+            เกี่ยวกับ Nextamp
+          </h2>
+          <div class="prose prose-invert text-gray-300 max-w-none">
+            <p>
+              <strong>Nextamp</strong>
+              ถือกำเนิดขึ้นจากกลุ่มนักพัฒนาที่รักในเสียงดนตรี
+              เราตั้งใจสร้างเครื่องมือที่ "เรียบง่ายแต่ทรงพลัง"
+              เพื่อแก้ปัญหาโปรแกรมเล่นเพลงแบบเดิมๆ ที่ต้องติดตั้งให้ยุ่งยาก
+              หรือปรับแต่งเสียงได้ไม่ละเอียดพอ
+            </p>
+            <p>
+              เราใช้เทคโนโลยี Web Audio ขั้นสูง ทำให้คุณสามารถฟังเพลงคุณภาพสูง
+              แกะเพลง หรือฝึกซ้อมดนตรีได้จากทุกที่ โดยไม่จำกัดระบบปฏิบัติการ
+              และที่สำคัญคือ <strong>"ใช้งานฟรี"</strong>
+            </p>
+          </div>
+        </section>
+
+        <section id="features" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div
+            class="tech-card p-5 rounded-xl md:col-span-2 relative overflow-hidden group"
+          >
+            <div
+              class="absolute top-0 right-0 bg-green-900 text-green-400 text-[10px] font-bold px-3 py-1 rounded-bl-lg border-l border-b border-green-700/50 shadow-lg"
+            >
+              CORE TECHNOLOGY
+            </div>
+
+            <div
+              class="flex flex-col md:flex-row gap-4 items-start md:items-center"
+            >
+              <div
+                class="bg-black/50 p-3 rounded-full border border-green-500/30 text-green-400"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="w-8 h-8"
+                  fill="currentColor"
+                  viewBox="0 0 256 256"
+                >
+                  <path
+                    d="M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM128,152a24,24,0,0,1-24,24H72a8,8,0,0,1,0-16h32a8,8,0,0,0,0-16H72a8,8,0,0,1,0-16h32a24,24,0,0,1,24,24Zm80-24H176a8,8,0,0,1,0-16h32a8,8,0,0,0,0-16H176a8,8,0,0,1,0-16h32a24,24,0,0,1,24,24v32a24,24,0,0,1-24,24H176a8,8,0,0,1,0-16h32a8,8,0,0,0,0-16Z"
+                  ></path>
+                </svg>
+              </div>
+              <div>
+                <h3
+                  class="font-display font-bold text-xl text-white mb-1 flex items-center gap-2"
+                >
+                  Pitch & Speed Control
+                </h3>
+                <p class="text-sm text-gray-300 mb-2">
+                  เปลี่ยนคีย์และเร่งความเร็วเพลงโดยเสียง
+                  <strong>ไม่เพี้ยนและเป็นธรรมชาติที่สุด</strong>
+                  (Artifact-free)
+                </p>
+              </div>
+            </div>
+
+            <div
+              class="mt-4 pt-4 border-t border-green-500/20 flex flex-col md:flex-row md:items-center justify-between gap-3"
+            >
+              <div class="text-xs text-gray-400">
+                <span class="block mb-1"
+                  >ขับเคลื่อนด้วย Library ประมวลผลเสียงระดับโลก:</span
+                >
+                <div class="flex items-center gap-2">
+                  <span
+                    class="w-2 h-2 bg-green-500 rounded-full animate-pulse"
+                  ></span>
+                  <a
+                    href="https://signalsmith-audio.co.uk/code/stretch/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-green-400 font-bold hover:text-white transition flex items-center gap-1 group/link"
+                  >
+                    Signalsmith Stretch
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="w-3 h-3 group-hover/link:translate-x-1 transition-transform"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                      />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+              <div
+                class="text-[10px] text-gray-500 bg-black/40 px-3 py-2 rounded border border-white/5 md:text-right md:max-w-[250px]"
+              >
+                "High-quality time-stretching library for Web Audio" -
+                ตัวจบของวงการเสียงบนเว็บ
+              </div>
+            </div>
+          </div>
+
+          <div class="feature-card p-5 rounded-xl">
+            <h3 class="font-display font-bold text-lg text-white mb-2">
+              🎛️ 10-Band EQ
+            </h3>
+            <p class="text-sm text-gray-400">
+              ปรับแต่งย่านเสียงได้ละเอียด พร้อม Presets หลากหลายสำหรับทุกแนวเพลง
+            </p>
+          </div>
+          <div class="feature-card p-5 rounded-xl">
+            <h3 class="font-display font-bold text-lg text-white mb-2">
+              📂 Local Privacy
+            </h3>
+            <p class="text-sm text-gray-400">
+              ไฟล์เพลงของคุณประมวลผลในเครื่อง ไม่มีการอัปโหลดขึ้นเซิร์ฟเวอร์
+              ปลอดภัย 100%
+            </p>
+          </div>
+        </section>
 
         <div
-          class="ad-placeholder w-full h-24 bg-black/50 border border-dashed border-gray-700 flex items-center justify-center mt-8 rounded text-sm text-gray-500"
+          class="ad-slot w-full h-[250px] bg-gradient-to-br from-gray-900 to-black"
         >
-          [ วางโค้ด Google AdSense ตรงนี้ ]
+          <span class="opacity-50">[ พื้นที่โฆษณา ]</span>
         </div>
-      </article>
 
-      <footer class="mt-12 text-gray-600 text-sm font-pixel">
-        &copy; 2025 Nextamp. All rights reserved.
-      </footer>
-    </div>
+        <section id="faq" class="space-y-6">
+          <h2
+            class="text-2xl font-display font-bold text-white border-b border-gray-800 pb-2"
+          >
+            คำถามที่พบบ่อย (FAQ)
+          </h2>
+
+          <div class="space-y-4">
+            <div class="bg-[#111] p-4 rounded-lg border border-gray-800">
+              <h3 class="font-bold text-green-300 mb-2">
+                ปลอดภัยหรือไม่? ไฟล์เพลงของฉันจะถูกเก็บไว้ไหม?
+              </h3>
+              <p class="text-sm text-gray-400">
+                ปลอดภัย 100% ครับ ระบบทำงานแบบ Local บนเบราว์เซอร์ของคุณโดยตรง
+                ไฟล์เพลงไม่ได้ถูกอัปโหลดไปที่เซิร์ฟเวอร์ของเรา
+                ข้อมูลของคุณจึงเป็นส่วนตัวครับ
+              </p>
+            </div>
+
+            <div class="bg-[#111] p-4 rounded-lg border border-gray-800">
+              <h3 class="font-bold text-green-300 mb-2">
+                รองรับไฟล์ประเภทไหนบ้าง?
+              </h3>
+              <p class="text-sm text-gray-400">
+                รองรับไฟล์เสียงมาตรฐานส่วนใหญ่ เช่น .MP3, .WAV, .OGG, .M4A
+                และไฟล์เสียงคุณภาพสูงอื่นๆ
+              </p>
+            </div>
+
+            <div class="bg-[#111] p-4 rounded-lg border border-gray-800">
+              <h3 class="font-bold text-green-300 mb-2">
+                บริการนี้ฟรีจริงหรือ?
+              </h3>
+              <p class="text-sm text-gray-400">
+                ฟรี 100% ครับ เราสร้างขึ้นเพื่อการศึกษาและแบ่งปันให้ชุมชน
+                รายได้เพียงเล็กน้อยมาจากโฆษณาเพื่อช่วยค่าเซิร์ฟเวอร์ครับ
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="space-y-8">
+        <div
+          class="bg-gradient-to-b from-gray-900 to-black border border-gray-800 p-6 rounded-2xl shadow-xl"
+        >
+          <h3
+            class="font-display font-bold text-lg text-white mb-4 flex items-center gap-2"
+          >
+            💡 เกร็ดความรู้
+          </h3>
+          <ul class="space-y-4 text-sm text-gray-400">
+            <li>
+              <strong class="text-white block mb-1">DAW คืออะไร?</strong>
+              Digital Audio Workstation คือโปรแกรมทำเพลงระดับมืออาชีพ Nextamp
+              นำฟีเจอร์บางส่วนของ DAW มาให้คุณใช้บนเว็บง่ายๆ
+            </li>
+            <li>
+              <strong class="text-white block mb-1"
+                >Signalsmith Stretch คือ?</strong
+              >
+              คือหัวใจสำคัญที่ทำให้ Nextamp ปรับเสียงได้เนียน
+              ไม่เหมือนเสียงเป็ดหรือหุ่นยนต์ ซึ่งเป็น Lib
+              ตัวใหม่ล่าสุดที่ดีกว่าแบบเดิมๆ
+            </li>
+          </ul>
+        </div>
+
+        <div class="ad-slot w-full h-[300px] md:h-[600px] sticky top-24">
+          <span class="opacity-50">[ พื้นที่โฆษณา - แนวตั้ง ]</span>
+        </div>
+      </aside>
+    </main>
+
+    <footer
+      id="contact"
+      class="bg-black border-t border-gray-900 mt-auto py-12"
+    >
+      <div class="container mx-auto px-4 text-center">
+        <img
+          src="https://next-amp-one.vercel.app/assets/logo/logo.png"
+          alt="Logo"
+          class="w-12 h-12 mx-auto mb-4 grayscale hover:grayscale-0 transition opacity-50 hover:opacity-100"
+        />
+        <h3 class="font-display font-bold text-white text-lg mb-2">
+          NEXTAMP PLAYER
+        </h3>
+        <p class="text-gray-500 text-sm mb-6 max-w-md mx-auto">
+          เรายินดีรับฟังทุกความคิดเห็น! ไม่ว่าจะเป็นคำถาม ข้อเสนอแนะ
+          หรือแจ้งปัญหาการใช้งาน
+        </p>
+
+        <div class="flex justify-center items-center gap-4 mb-8">
+          <a
+            href="mailto:nextkaraoke.ts@gmail.com"
+            class="text-green-500 hover:text-green-400 text-sm font-bold flex items-center gap-2 border border-green-900/50 bg-green-900/10 px-4 py-2 rounded-full transition hover:bg-green-900/30"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="w-4 h-4 fill-current"
+              viewBox="0 0 256 256"
+            >
+              <path
+                d="M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM203.43,64,128,133.15,52.57,64ZM216,192H40V74.19l82.59,75.71a8,8,0,0,0,10.82,0L216,74.19V192Z"
+              ></path>
+            </svg>
+            nextkaraoke.ts@gmail.com
+          </a>
+        </div>
+
+        <p class="text-gray-700 text-xs font-mono">
+          &copy; 2025 Nextamp Project. All rights reserved.
+          <br />
+          <span class="opacity-50">Special thanks to</span>
+          <a
+            href="https://signalsmith-audio.co.uk/code/stretch/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-gray-500 hover:text-green-400 transition underline decoration-dotted"
+            >Signalsmith Stretch</a
+          >
+        </p>
+      </div>
+    </footer>
 
     <script>
       async function enterApp() {
-        const btn = document.querySelector(".btn-start");
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<span class="animate-pulse">LOADING SYSTEM...</span>';
+        const btn = document.querySelector(".btn-glow");
+        const originalContent = btn.innerHTML;
+
+        // Loading State
+        btn.innerHTML = `
+          <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          LOADING...
+        `;
+        btn.classList.add("opacity-80", "cursor-wait");
         btn.disabled = true;
 
         try {
-          // 1. Trigger Audio Context (User Gesture)
+          // 1. Audio Context Trigger (User Gesture)
           const audio = new Audio("assets/sounds/allow-sound.mp3");
-          audio.volume = 0.4;
-          // เล่นเสียงและรอจนจบ หรือแค่เริ่มเล่นก็ได้
+          audio.volume = 0.01;
           await audio
             .play()
-            .catch((e) => console.warn("Audio policy prevented play", e));
+            .catch((e) => console.log("Audio trigger info:", e));
 
           // 2. Fetch App Content
           const response = await fetch("app.html");
           if (!response.ok) throw new Error("Failed to load application");
           const html = await response.text();
 
-          // 3. Parse and Inject
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, "text/html");
+          // 3. Fade Out Transition
+          document.body.style.transition = "opacity 0.5s";
+          document.body.style.opacity = "0";
 
-          // เปลี่ยน Title
-          document.title = doc.title;
+          setTimeout(() => {
+            // 4. Parse and Inject
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
 
-          // แทนที่ Body
-          document.body.innerHTML = doc.body.innerHTML;
-          document.body.className = doc.body.className; // เอา class ของ body มาด้วย (เช่น flex flex-col)
-          document.body.style = ""; // Reset style ของ landing page
+            document.title = doc.title;
+            document.body.innerHTML = doc.body.innerHTML;
+            document.body.className = doc.body.className;
+            document.body.style = ""; // Reset inline styles
 
-          // 4. ย้าย Styles (CSS) จาก app.html มาที่หน้านี้
-          const newStyles = doc.querySelectorAll("style");
-          newStyles.forEach((style) =>
-            document.head.appendChild(style.cloneNode(true))
-          );
-
-          // 5. รัน Scripts (สำคัญมาก)
-          const oldScripts = doc.querySelectorAll("script");
-          for (let oldScript of oldScripts) {
-            const newScript = document.createElement("script");
-            Array.from(oldScript.attributes).forEach((attr) =>
-              newScript.setAttribute(attr.name, attr.value)
+            // 5. Transfer Styles
+            const newStyles = doc.querySelectorAll("style");
+            newStyles.forEach((style) =>
+              document.head.appendChild(style.cloneNode(true))
             );
-            if (oldScript.innerHTML) newScript.innerHTML = oldScript.innerHTML;
-            document.body.appendChild(newScript);
-          }
+
+            // 6. Execute Scripts
+            const oldScripts = doc.querySelectorAll("script");
+            for (let oldScript of oldScripts) {
+              const newScript = document.createElement("script");
+              Array.from(oldScript.attributes).forEach((attr) =>
+                newScript.setAttribute(attr.name, attr.value)
+              );
+              if (oldScript.innerHTML)
+                newScript.innerHTML = oldScript.innerHTML;
+              document.body.appendChild(newScript);
+            }
+          }, 500); // รอ Fade out จบ
         } catch (error) {
           console.error(error);
           alert("Error loading Nextamp. Please refresh.");
-          btn.innerHTML = originalText;
+          btn.innerHTML = originalContent;
+          btn.classList.remove("opacity-80", "cursor-wait");
           btn.disabled = false;
         }
       }
