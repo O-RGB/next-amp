@@ -1674,33 +1674,18 @@
         if (visualMode === 0) {
           analyser.getByteFrequencyData(dataArray);
 
-          // 1. วาดพื้นหลัง Grid สีเขียวจางๆ
-          ctx.strokeStyle = "rgba(0, 255, 0, 0.05)"; // สีเขียวจางมาก
-          ctx.lineWidth = 1;
-          const gridSpacing = 10;
-
-          // ตีเส้นแนวนอน
-          for (let y = 0; y < cvs.height; y += gridSpacing) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(cvs.width, y);
-            ctx.stroke();
-          }
-          // ตีเส้นแนวตั้ง
-          for (let x = 0; x < cvs.width; x += gridSpacing) {
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, cvs.height);
-            ctx.stroke();
-          }
-
-          // 2. ตั้งค่าการวาด Bar
+          // 1. ตั้งค่าการวาด Bar
           const barCount = 25;
           const barWidth = cvs.width / barCount;
           const step = Math.floor(bufferLength / barCount);
 
-          // เตรียมตัวแปรสำหรับ Peak (ขีดด้านบน)
+          // เตรียมตัวแปรสำหรับ Peak และ Timer (ถ้ายังไม่มี)
           if (!window.peaks) window.peaks = new Array(barCount).fill(0);
+          if (!window.peakHoldFrames)
+            window.peakHoldFrames = new Array(barCount).fill(0);
+
+          // คำนวณเฟรมที่จะให้ค้าง (0.2 วินาที ที่ 60fps = ประมาณ 12 เฟรม)
+          const holdFrames = 12;
 
           for (let i = 0; i < barCount; i++) {
             let sum = 0;
@@ -1723,19 +1708,25 @@
               barHeight
             );
 
-            // 3. ส่วนของ Peak Indicator (_)
-            // ถ้าความสูงปัจจุบันมากกว่าค่า Peak เดิม ให้ตั้งค่า Peak ใหม่
-            if (barHeight > window.peaks[i]) {
+            // 2. ส่วนของ Peak Indicator (_) แบบเฉื่อย
+            if (barHeight >= window.peaks[i]) {
+              // ถ้า Bar สูงกว่าหรือเท่ากับ Peak เดิม ให้เลื่อน Peak ขึ้นไปและรีเซ็ตเวลานับถอยหลัง
               window.peaks[i] = barHeight;
+              window.peakHoldFrames[i] = holdFrames;
             } else {
-              // ถ้าไม่สูงกว่า ให้ Peak ค่อยๆ หล่นลงมาทีละน้อย
-              window.peaks[i] -= 0.8;
+              // ถ้า Bar ต่ำกว่า Peak
+              if (window.peakHoldFrames[i] > 0) {
+                // ถ้าเวลายังไม่หมด ให้ลบเวลาออก (ค้างไว้ก่อน)
+                window.peakHoldFrames[i]--;
+              } else {
+                // ถ้าเวลาค้างหมดแล้ว ให้ค่อยๆ ดิ่งลง (ปรับตัวเลข 1.5 เพื่อให้หล่นช้า/เร็วตามชอบ)
+                window.peaks[i] -= 1.5;
+              }
             }
 
             // วาดตัว Peak (_)
             if (window.peaks[i] > 0) {
-              ctx.fillStyle = currentTheme.text; // ใช้สีเดียวกับข้อความหลัก
-              // วาดเป็นขีดหนา 2 พิกเซล
+              ctx.fillStyle = currentTheme.text;
               ctx.fillRect(
                 i * barWidth,
                 cvs.height - window.peaks[i] - 2,
