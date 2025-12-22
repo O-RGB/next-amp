@@ -1202,7 +1202,7 @@
       pannerNode.connect(masterGainNode);
       masterGainNode.connect(audioContext.destination);
       masterGainNode.gain.value = 0.8;
-      analyser.fftSize = 256;
+      analyser.fftSize = 2048;
 
       const FREQUENCIES = [
         60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000,
@@ -1677,7 +1677,7 @@
             window.peakHoldFrames = new Array(barCount).fill(0);
 
           const holdFrames = 80;
-          const displayScale = 0.7; // แสดงผลแค่ 70%
+          const displayScale = 0.7;
 
           for (let i = 0; i < barCount; i++) {
             const x = i * barWidth;
@@ -1687,11 +1687,8 @@
               sum += dataArray[i * step + j];
             }
 
-            // ค่าจริงของเสียง (ไม่ limit)
             const average = sum / step;
             const rawHeight = (average / 255) * cvs.height;
-
-            // ความสูงที่ใช้แสดงผลเท่านั้น
             const displayHeight = rawHeight * displayScale;
 
             let gradient = ctx.createLinearGradient(
