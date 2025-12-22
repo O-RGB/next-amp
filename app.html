@@ -1258,51 +1258,68 @@
         return { input: first, output: prev };
       }
 
-      function createLushWarmImpulse(duration = 5.0, decay = 3.0) {
+      function createImpulseResponse(
+        duration = 4.5, // เพิ่มความยาวให้ก้องนานขึ้น
+        decay = 2.2, // ลด decay ให้เสียงค่อย ๆ จางช้าขึ้น
+        preDelay = 0.035 // เพิ่ม pre-delay เล็กน้อย
+      ) {
         const sampleRate = audioContext.sampleRate;
         const length = sampleRate * duration;
         const impulse = audioContext.createBuffer(2, length, sampleRate);
 
-        // กำหนดระยะเวลาการสะท้อน (Delay Times) ที่ไม่เป็นเลขคู่กัน เพื่อลดเสียงสะท้อนที่ซ้อนทับ
-        const delayTimes = [0.031, 0.043, 0.061, 0.073, 0.089, 0.113];
+        const preDelaySamples = Math.floor(preDelay * sampleRate);
 
         for (let ch = 0; ch < 2; ch++) {
           const data = impulse.getChannelData(ch);
 
-          // สร้าง Noise ตั้งต้นแค่สั้นๆ เป็นตัวจุดชนวน (Impulse)
-          for (let i = 0; i < 500; i++) {
-            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / 500, 2);
-          }
-
-          // --- ส่วนสำคัญ: ทำให้กังวาล (Feedback/Comb Simulation) ---
-          // เราจะจำลองการสะท้อนกลับไปมาหลายๆ รอบ
-          for (let d = 0; d < delayTimes.length; d++) {
-            const delaySamples = Math.floor(
-              delayTimes[d] * sampleRate * (1 + ch * 0.01)
-            );
-            const feedback = 0.7 - d * 0.05; // ค่อยๆ ลด Feedback ในแต่ละชั้น
-
-            for (let i = delaySamples; i < length; i++) {
-              // ดึงเสียงจากอดีตกลับมาบวกใหม่ + กรองเสียงแหลมทิ้ง (Low-pass)
-              const val = data[i - delaySamples] * feedback;
-              data[i] += val;
-
-              // กรองเสียงแหลมให้ "นุ่ม" แบบเพลง Slowed
-              data[i] = data[i] * 0.4 + (data[i - 1] || 0) * 0.6;
-            }
-          }
-
-          // ปรับระดับเสียงให้สมดุลและใส่ Fade out นุ่มๆ ตอนท้าย
           for (let i = 0; i < length; i++) {
-            const envelope = Math.exp(-decay * (i / length));
-            data[i] *= envelope * 0.15; // ลด Gain ลงเพื่อไม่ให้เสียงแตก
+            const t = i / length;
+
+            // ปรับ envelope curve ให้นุ่มนวลขึ้น
+            const envelope = Math.exp(-decay * t);
+
+            let noise = Math.random() * 2 - 1;
+
+            // เพิ่มการกรองความถี่สูงให้นุ่มนวลมากขึ้น
+            const hfDamping = Math.pow(1 - t * 0.7, 3);
+
+            // เพิ่ม low-pass filter effect
+            const warmth = 1 - t * 0.3;
+
+            data[i] = noise * envelope * hfDamping * warmth;
+          }
+
+          // เพิ่ม early reflections ที่มีลักษณะธรรมชาติมากขึ้น
+          const reflections = [
+            { delay: 0.025, gain: 0.5 },
+            { delay: 0.045, gain: 0.42 },
+            { delay: 0.068, gain: 0.35 },
+            { delay: 0.095, gain: 0.28 },
+            { delay: 0.125, gain: 0.22 },
+            { delay: 0.16, gain: 0.18 },
+            { delay: 0.2, gain: 0.15 },
+            { delay: 0.245, gain: 0.12 },
+          ];
+
+          for (const ref of reflections) {
+            const delaySamples = Math.floor(ref.delay * sampleRate);
+            if (delaySamples < length) {
+              // สร้างเสียงสะท้อนที่นุ่มนวล
+              for (let i = 0; i < 50; i++) {
+                const idx = delaySamples + i;
+                if (idx < length) {
+                  const diffusion = (Math.random() * 2 - 1) * ref.gain;
+                  const fade = 1 - i / 50;
+                  data[idx] += diffusion * fade;
+                }
+              }
+            }
           }
         }
 
         return impulse;
       }
-
-      reverbNode.buffer = createLushWarmImpulse();
+      reverbNode.buffer = createImpulseResponse();
 
       async function loadAudioEngine(arrayBuffer, trackObj) {
         if (!isEngineHot) await initAudioEngine();
