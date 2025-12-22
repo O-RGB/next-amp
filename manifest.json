@@ -1,5 +1,5 @@
 {
-  "name": "Nextamp Remastered",
+  "name": "Nextamp Player",
   "short_name": "Nextamp",
   "start_url": "./index.html",
   "display": "standalone",
@@ -7,7 +7,7 @@
   "theme_color": "#000080",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/3669/3669986.png",
+      "src": "https://next-amp-one.vercel.app/assets/logo/logo.png",
       "sizes": "512x512",
       "type": "image/png"
     }
