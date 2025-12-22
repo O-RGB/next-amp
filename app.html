@@ -1724,87 +1724,102 @@
           dataArray = new Uint8Array(bufferLength);
 
         if (visualMode === 0) {
+          // analyser.getByteFrequencyData(dataArray);
+
+          // const barCount = 18;
+          // const step = Math.floor(bufferLength / barCount);
+
+          // const padding = {
+          //   top: 4,
+          //   bottom: 4,
+          //   left: 4,
+          //   right: 4,
+          // };
+
+          // const drawWidth = cvs.width - padding.left - padding.right;
+          // const drawHeight = cvs.height - padding.top - padding.bottom;
+
+          // const barWidth = drawWidth / barCount;
+
+          // if (!window.peaks) window.peaks = new Array(barCount).fill(0);
+          // if (!window.peakHoldFrames)
+          //   window.peakHoldFrames = new Array(barCount).fill(0);
+
+          // const holdFrames = 80;
+          // const displayScale = 0.7;
+          // const minBarHeight = 3;
+
+          // for (let i = 0; i < barCount; i++) {
+          //   const x = padding.left + i * barWidth;
+
+          //   let sum = 0;
+          //   for (let j = 0; j < step; j++) {
+          //     sum += dataArray[i * step + j];
+          //   }
+
+          //   const average = sum / step;
+
+          //   const rawHeight = (average / 255) * drawHeight;
+          //   let displayHeight = rawHeight * displayScale;
+
+          //   // ===== baseline "_" ตอนเงียบ =====
+          //   if (displayHeight < minBarHeight) {
+          //     displayHeight = minBarHeight;
+          //   }
+
+          //   const y = padding.top + drawHeight - displayHeight;
+
+          //   let gradient = ctx.createLinearGradient(
+          //     0,
+          //     padding.top + drawHeight,
+          //     0,
+          //     padding.top
+          //   );
+          //   gradient.addColorStop(0, currentTheme.eq1);
+          //   gradient.addColorStop(0.6, currentTheme.eq2);
+          //   gradient.addColorStop(1, currentTheme.eq3);
+
+          //   ctx.fillStyle = gradient;
+          //   ctx.fillRect(x, y, barWidth - 1, displayHeight);
+
+          //   // ===== peak (ใช้ raw height จริง) =====
+          //   if (rawHeight >= window.peaks[i]) {
+          //     window.peaks[i] = rawHeight;
+          //     window.peakHoldFrames[i] = holdFrames;
+          //   } else {
+          //     if (window.peakHoldFrames[i] > 0) {
+          //       window.peakHoldFrames[i]--;
+          //     } else {
+          //       window.peaks[i] -= 1.2;
+          //     }
+          //   }
+
+          //   const displayPeak = window.peaks[i] * displayScale;
+
+          //   if (displayPeak > 0) {
+          //     ctx.fillStyle = "#FFFFFF";
+          //     ctx.fillRect(
+          //       x,
+          //       padding.top + drawHeight - displayPeak - 2,
+          //       barWidth - 1,
+          //       2
+          //     );
+          //   }
+          // }
+
           analyser.getByteFrequencyData(dataArray);
-
-          const barCount = 18;
-          const step = Math.floor(bufferLength / barCount);
-
-          const padding = {
-            top: 4,
-            bottom: 4,
-            left: 4,
-            right: 4,
-          };
-
-          const drawWidth = cvs.width - padding.left - padding.right;
-          const drawHeight = cvs.height - padding.top - padding.bottom;
-
-          const barWidth = drawWidth / barCount;
-
-          if (!window.peaks) window.peaks = new Array(barCount).fill(0);
-          if (!window.peakHoldFrames)
-            window.peakHoldFrames = new Array(barCount).fill(0);
-
-          const holdFrames = 80;
-          const displayScale = 0.7;
-          const minBarHeight = 3;
-
-          for (let i = 0; i < barCount; i++) {
-            const x = padding.left + i * barWidth;
-
-            let sum = 0;
-            for (let j = 0; j < step; j++) {
-              sum += dataArray[i * step + j];
-            }
-
-            const average = sum / step;
-
-            const rawHeight = (average / 255) * drawHeight;
-            let displayHeight = rawHeight * displayScale;
-
-            // ===== baseline "_" ตอนเงียบ =====
-            if (displayHeight < minBarHeight) {
-              displayHeight = minBarHeight;
-            }
-
-            const y = padding.top + drawHeight - displayHeight;
-
-            let gradient = ctx.createLinearGradient(
-              0,
-              padding.top + drawHeight,
-              0,
-              padding.top
-            );
-            gradient.addColorStop(0, currentTheme.eq1);
-            gradient.addColorStop(0.6, currentTheme.eq2);
-            gradient.addColorStop(1, currentTheme.eq3);
-
-            ctx.fillStyle = gradient;
-            ctx.fillRect(x, y, barWidth - 1, displayHeight);
-
-            // ===== peak (ใช้ raw height จริง) =====
-            if (rawHeight >= window.peaks[i]) {
-              window.peaks[i] = rawHeight;
-              window.peakHoldFrames[i] = holdFrames;
-            } else {
-              if (window.peakHoldFrames[i] > 0) {
-                window.peakHoldFrames[i]--;
-              } else {
-                window.peaks[i] -= 1.2;
-              }
-            }
-
-            const displayPeak = window.peaks[i] * displayScale;
-
-            if (displayPeak > 0) {
-              ctx.fillStyle = "#FFFFFF";
-              ctx.fillRect(
-                x,
-                padding.top + drawHeight - displayPeak - 2,
-                barWidth - 1,
-                2
-              );
-            }
+          let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
+          gradient.addColorStop(0, currentTheme.eq1);
+          gradient.addColorStop(0.6, currentTheme.eq2);
+          gradient.addColorStop(1, currentTheme.eq3);
+          ctx.fillStyle = gradient;
+          const barWidth = (cvs.width / bufferLength) * 2.5;
+          let x = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            let barHeight = (dataArray[i] / 255) * cvs.height;
+            if (barHeight > 0)
+              ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
+            x += barWidth;
           }
         } else if (visualMode === 1) {
           analyser.getByteFrequencyData(dataArray);
