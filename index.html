@@ -14,7 +14,7 @@
     <meta name="theme-color" content="#111111" />
     <link rel="manifest" href="manifest.json" />
 
-    <title>Nextamp Ultimate</title>
+    <title>Nextamp Classic</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
@@ -44,6 +44,19 @@
       };
     </script>
     <style>
+      :root {
+        /* CLASSIC WINAMP THEME COLORS */
+        --theme-window: #000080; /* Classic Blue Bars */
+        --theme-text: #00ff00; /* Bright Green Text */
+        --theme-text-sec: #ffcc00; /* Gold/Orange kbps Text */
+        --theme-highlight: #000080; /* Blue Selection Background */
+
+        /* EQ GRADIENT (Green -> Yellow -> Red) */
+        --eq-col-1: #00ff00;
+        --eq-col-2: #ffff00;
+        --eq-col-3: #ff0000;
+      }
+
       /* APP-LIKE BEHAVIOR */
       html,
       body {
@@ -55,15 +68,13 @@
         user-select: none;
         -webkit-user-select: none;
         background-color: #111;
-
-        /* SAFE AREA PADDING */
         padding-top: max(4px, env(safe-area-inset-top));
         padding-bottom: max(4px, env(safe-area-inset-bottom));
         padding-left: max(4px, env(safe-area-inset-left));
         padding-right: max(4px, env(safe-area-inset-right));
       }
 
-      /* Nextamp Custom Styles */
+      /* BUTTON STYLES */
       .win-btn {
         background-color: #c0c0c0;
         color: black;
@@ -90,6 +101,75 @@
         background-color: #a0a0a0;
       }
 
+      /* RETRO TEXT BUTTON (SHUFFLE/REPEAT) */
+      .retro-txt-btn {
+        background-color: #111; /* Dark background to match player face */
+        border: 1px solid #444; /* Subtle border */
+        color: #888; /* Dimmed state */
+        font-family: "Chakra Petch", sans-serif;
+        font-size: 9px;
+        text-align: center;
+        cursor: pointer;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding-top: 2px;
+        border-radius: 2px;
+        box-shadow: inset 1px 1px 0 #000;
+      }
+      .retro-txt-btn.active {
+        color: var(--theme-text) !important;
+        border-color: var(--theme-text);
+        box-shadow: 0 0 3px var(--theme-text);
+        text-shadow: 0 0 2px var(--theme-text);
+      }
+      .retro-txt-btn.active-gold {
+        color: var(--theme-text-sec) !important;
+        border-color: var(--theme-text-sec);
+        box-shadow: 0 0 3px var(--theme-text-sec);
+        text-shadow: 0 0 2px var(--theme-text-sec);
+      }
+
+      /* THEME CLASSES */
+      .theme-bar {
+        background-color: var(--theme-window);
+        color: white;
+      }
+      .theme-text-main {
+        color: var(--theme-text);
+      }
+      .theme-text-sec {
+        color: var(--theme-text-sec);
+      }
+      .theme-highlight-bg {
+        background-color: var(--theme-highlight);
+        color: white;
+      }
+
+      /* EQ & VISUALIZER */
+      .eq-bar-bg {
+        background: linear-gradient(to top, #333 0%, #333 100%);
+        width: 4px;
+        height: 100%;
+        margin: 0 auto;
+        border-left: 1px solid #111;
+        border-right: 1px solid #555;
+      }
+      .eq-bar-active {
+        background: linear-gradient(
+          to top,
+          var(--eq-col-1) 0%,
+          var(--eq-col-2) 70%,
+          var(--eq-col-3) 100%
+        );
+        box-shadow: 0 0 2px var(--eq-col-1);
+      }
+      .text-shadow {
+        text-shadow: 0px 0px 2px rgba(0, 255, 0, 0.4);
+      }
+
+      /* SLIDERS */
       input[type="range"] {
         -webkit-appearance: none;
         background: transparent;
@@ -118,7 +198,7 @@
       input[type="range"].vertical {
         writing-mode: bt-lr;
         -webkit-appearance: slider-vertical;
-        width: 15px;
+        width: 25px;
         margin: 0;
         padding: 0;
         opacity: 0;
@@ -128,37 +208,6 @@
         height: 100%;
         z-index: 20;
         cursor: pointer;
-      }
-
-      .custom-scroll::-webkit-scrollbar {
-        width: 10px;
-        background: #292929;
-      }
-      .custom-scroll::-webkit-scrollbar-thumb {
-        background: #c0c0c0;
-        border: 1px solid #fff;
-        border-right: 1px solid #000;
-        border-bottom: 1px solid #000;
-      }
-      .text-shadow {
-        text-shadow: 0px 0px 2px rgba(0, 255, 0, 0.4);
-      }
-      .eq-bar-bg {
-        background: linear-gradient(to top, #444 0%, #444 100%);
-        width: 4px;
-        height: 100%;
-        margin: 0 auto;
-        border-left: 1px solid #222;
-        border-right: 1px solid #666;
-      }
-      .eq-bar-active {
-        background: linear-gradient(
-          to top,
-          #00ff00 0%,
-          #ffff00 70%,
-          #ff0000 100%
-        );
-        box-shadow: 0 0 2px #0f0;
       }
       .eq-thumb {
         width: 12px;
@@ -172,20 +221,47 @@
         transform: translateX(-50%);
         pointer-events: none;
         z-index: 10;
+        margin-top: -3px;
       }
-      .active-indicator {
-        color: #00ff00 !important;
-      }
+
       .dragging {
         opacity: 0.5;
         background: #444;
       }
       .drag-over {
-        border-top: 2px solid #00ff00;
+        border-top: 2px solid var(--theme-text);
+      }
+      .custom-scroll::-webkit-scrollbar {
+        width: 10px;
+        background: #292929;
+      }
+      .custom-scroll::-webkit-scrollbar-thumb {
+        background: #c0c0c0;
+        border: 1px solid #fff;
+        border-right: 1px solid #000;
+        border-bottom: 1px solid #000;
+      }
+
+      #slider-tooltip {
+        position: absolute;
+        background: #ffff00;
+        color: #000;
+        border: 1px solid #000;
+        padding: 2px 4px;
+        font-family: "Chakra Petch", sans-serif;
+        font-size: 10px;
+        font-weight: bold;
+        pointer-events: none;
+        z-index: 10000;
+        display: none;
+        white-space: nowrap;
+        box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.5);
       }
     </style>
   </head>
   <body class="flex items-center justify-center w-full h-full">
+    <div id="slider-tooltip">0</div>
+
     <div
       id="boot-screen"
       class="fixed inset-0 z-[100] bg-[#111] flex flex-col items-center justify-center font-ui select-none"
@@ -194,11 +270,11 @@
         class="w-72 bg-[#c0c0c0] border-t-2 border-l-2 border-white border-r-2 border-b-2 border-black p-1 shadow-lg flex flex-col"
       >
         <div
-          class="bg-[#000080] w-full text-white text-[12px] font-bold px-2 py-1 mb-4 flex justify-between items-center"
+          class="theme-bar w-full text-[12px] font-bold px-2 py-1 mb-4 flex justify-between items-center"
         >
           <div class="flex items-center gap-2">
-            <i class="ph-bold ph-music-note"></i>
-            <span>System Initialization</span>
+            <i class="ph-bold ph-music-note"></i
+            ><span>System Initialization</span>
           </div>
           <button
             class="bg-[#c0c0c0] text-black w-4 h-4 flex items-center justify-center border border-white text-[10px] shadow-sm leading-none"
@@ -206,7 +282,6 @@
             X
           </button>
         </div>
-
         <div class="px-4 pb-4 flex flex-col items-center text-center">
           <div class="mb-4 flex items-center gap-4">
             <i class="ph-fill ph-speaker-high text-4xl text-gray-600"></i>
@@ -217,16 +292,14 @@
               </p>
             </div>
           </div>
-
           <div
             class="w-full h-4 border-t border-l border-gray-600 border-r border-b border-white mb-4 p-[2px] bg-white"
           >
-            <div class="h-full bg-[#000080] w-full animate-pulse"></div>
+            <div class="h-full theme-bar w-full animate-pulse"></div>
           </div>
-
           <button
             id="btn-boot-start"
-            class="win-btn px-6 py-1 text-xs font-bold active:border-t-black active:border-l-black active:border-r-white active:border-b-white focus:outline-dotted"
+            class="win-btn px-6 py-1 text-xs font-bold focus:outline-dotted"
           >
             Start Application
           </button>
@@ -239,16 +312,15 @@
 
     <audio
       id="audio-startup"
-      src="/assets/sounds/startup.mp3"
+      src="next-amp/assets/sounds/startup.mp3"
       preload="auto"
     ></audio>
     <audio
       id="audio-loop"
-      src="/assets/sounds/allow-sound.mp3"
+      src="next-amp/assets/sounds/allow-sound.mp3"
       loop
       preload="auto"
     ></audio>
-
     <button
       id="btn-install-pwa"
       class="hidden fixed top-2 right-2 z-50 bg-win-green text-black px-3 py-1 text-xs font-bold border-2 border-white shadow-lg animate-bounce"
@@ -264,11 +336,10 @@
           class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-20 shadow-lg"
         >
           <div
-            class="h-5 bg-[#000080] flex justify-between items-center px-1 text-white text-[10px] font-bold cursor-grab"
+            class="theme-bar h-5 flex justify-between items-center px-1 text-[10px] font-bold cursor-grab"
           >
             <div class="flex items-center gap-1">
-              <i class="ph-bold ph-music-note"></i>
-              <span>NEXTAMP</span>
+              <i class="ph-bold ph-music-note"></i><span>NEXTAMP</span>
             </div>
             <div class="flex gap-1 items-center">
               <div
@@ -277,9 +348,11 @@
                 title="Engine Status"
               ></div>
               <button
+                onclick="openSettingsModal()"
                 class="w-3 h-3 bg-btn-face text-black flex items-center justify-center border border-white text-[8px] leading-none"
+                title="Settings"
               >
-                _
+                O
               </button>
               <button
                 class="w-3 h-3 bg-btn-face text-black flex items-center justify-center border border-white text-[8px] leading-none"
@@ -290,17 +363,19 @@
           </div>
           <div class="p-2">
             <div
-              class="bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 border-r-gray p-2 mb-2 flex gap-3 h-[80px] shadow-inner relative overflow-hidden"
+              class="bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 border-r-gray p-2 mb-2 flex gap-3 h-[94px] shadow-inner relative overflow-hidden"
             >
               <div class="w-[65%] flex flex-col min-w-0 relative">
                 <div
                   id="marquee"
-                  class="font-pixel text-win-green text-sm whitespace-nowrap overflow-hidden leading-none mb-1 text-shadow pt-1"
+                  class="font-pixel theme-text-main text-sm whitespace-nowrap overflow-hidden leading-none mb-1 text-shadow pt-1"
                 >
                   Ready.
                 </div>
                 <div
-                  class="flex-1 border border-gray-700 relative w-full bg-[#111] overflow-hidden"
+                  class="flex-1 border border-gray-700 relative w-full bg-[#111] overflow-hidden cursor-pointer"
+                  id="visualizer-container"
+                  title="Click to change visualizer style"
                 >
                   <canvas
                     id="visualizer"
@@ -313,29 +388,33 @@
               >
                 <div
                   id="time-display"
-                  class="font-pixel text-3xl text-win-green leading-none tracking-widest text-shadow mt-[-2px]"
+                  class="font-pixel text-3xl theme-text-main leading-none tracking-widest text-shadow mt-[-2px]"
                 >
                   00:00
                 </div>
-                <div class="text-right w-full">
+                <div class="text-right w-full flex flex-col gap-[2px]">
                   <div
-                    class="font-pixel text-win-gold text-[10px] leading-none"
+                    id="info-bitrate"
+                    class="font-pixel theme-text-sec text-[10px] leading-none"
                   >
-                    192 k
+                    -- k
                   </div>
                   <div
-                    class="font-pixel text-win-gold text-[10px] leading-none"
+                    id="info-samplerate"
+                    class="font-pixel theme-text-sec text-[10px] leading-none"
                   >
-                    44 khz
+                    -- khz
                   </div>
-                  <div
-                    class="font-pixel text-win-green text-[10px] mt-1 leading-none text-center border border-gray-800"
+                  <button
+                    id="btn-mono-stereo"
+                    class="font-pixel theme-text-main text-[10px] mt-1 leading-none text-center border border-gray-800 w-full hover:bg-gray-800 cursor-pointer py-[1px]"
                   >
                     STEREO
-                  </div>
+                  </button>
                 </div>
               </div>
             </div>
+
             <div class="flex flex-col gap-1 mb-2">
               <div class="relative h-4">
                 <input
@@ -346,12 +425,13 @@
                   step="0.001"
                   value="0"
                   class="w-full h-3 cursor-pointer"
+                  data-tooltip-type="time"
                 />
               </div>
               <div class="flex justify-between items-center gap-2 px-1">
                 <div class="flex flex-col flex-1">
                   <div
-                    class="flex justify-between text-[8px] text-win-green font-pixel"
+                    class="flex justify-between text-[8px] theme-text-main font-pixel"
                   >
                     <span>VOL</span><span id="txt-vol">80%</span>
                   </div>
@@ -363,11 +443,12 @@
                     step="0.01"
                     value="0.8"
                     class="w-full h-2 bg-black border border-gray-600"
+                    data-tooltip-type="percent"
                   />
                 </div>
                 <div class="flex flex-col w-[80px]">
                   <div
-                    class="flex justify-between text-[8px] text-win-gold font-pixel"
+                    class="flex justify-between text-[8px] theme-text-sec font-pixel"
                   >
                     <span>L</span><span>BAL</span><span>R</span>
                   </div>
@@ -379,10 +460,12 @@
                     step="0.1"
                     value="0"
                     class="w-full h-2 bg-black border border-gray-600"
+                    data-tooltip-type="balance"
                   />
                 </div>
               </div>
             </div>
+
             <div class="flex justify-between items-end">
               <div class="flex gap-[2px]">
                 <button id="btn-prev" class="win-btn w-8 h-8" title="Prev">
@@ -401,23 +484,19 @@
                   <i class="ph-fill ph-skip-forward"></i>
                 </button>
               </div>
-              <button
-                id="btn-add-file"
-                class="win-btn w-8 h-7 mb-[1px]"
-                title="Open File"
-              >
-                <i class="ph-bold ph-eject"></i>
-              </button>
-              <div class="flex flex-col gap-1 justify-end">
+
+              <div class="flex flex-col gap-[2px]">
                 <button
                   id="tog-shuffle"
-                  class="text-[9px] px-1 border border-gray-600 bg-black text-gray-500 w-12 text-center rounded-sm h-3 leading-none pt-[1px]"
+                  class="retro-txt-btn w-12 h-4 text-[9px]"
+                  title="Shuffle"
                 >
                   SHUFFLE
                 </button>
                 <button
                   id="tog-repeat"
-                  class="text-[9px] px-1 border border-gray-600 bg-black text-gray-500 w-12 text-center rounded-sm h-3 leading-none pt-[1px]"
+                  class="retro-txt-btn w-12 h-4 text-[9px]"
+                  title="Repeat Mode"
                 >
                   REPEAT
                 </button>
@@ -430,7 +509,7 @@
           class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-10 shadow-lg"
         >
           <div
-            class="h-4 bg-gradient-to-r from-gray-700 to-gray-800 flex justify-between items-center px-1 border-b border-black text-[10px] text-gray-300 font-bold cursor-pointer"
+            class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold cursor-pointer"
             onclick="toggleSection('eq-body')"
           >
             <span>EQUALIZER</span><i class="ph-bold ph-caret-down"></i>
@@ -441,7 +520,7 @@
             >
               <select
                 id="eq-preset-select"
-                class="w-full text-[9px] bg-black text-win-green border border-gray-500 outline-none mb-2 h-4"
+                class="w-full text-[9px] bg-black theme-text-main border border-gray-500 outline-none mb-2 h-4"
               >
                 <option value="flat">Flat</option>
                 <option value="rock">Rock</option>
@@ -452,8 +531,8 @@
               </select>
               <div class="space-y-[2px]">
                 <div class="flex justify-between text-[8px] text-gray-400">
-                  <span>PITCH</span>
-                  <span id="val-pitch" class="text-win-gold">0</span>
+                  <span>PITCH</span
+                  ><span id="val-pitch" class="theme-text-sec">0</span>
                 </div>
                 <input
                   type="range"
@@ -463,12 +542,13 @@
                   step="1"
                   value="0"
                   class="w-full h-1 bg-gray-600"
+                  data-tooltip-type="val"
                 />
               </div>
               <div class="space-y-[2px]">
                 <div class="flex justify-between text-[8px] text-gray-400">
-                  <span>SPEED</span>
-                  <span id="val-rate" class="text-win-gold">1.0</span>
+                  <span>SPEED</span
+                  ><span id="val-rate" class="theme-text-sec">1.0</span>
                 </div>
                 <input
                   type="range"
@@ -478,6 +558,7 @@
                   step="0.05"
                   value="1"
                   class="w-full h-1 bg-gray-600"
+                  data-tooltip-type="x"
                 />
               </div>
             </div>
@@ -489,8 +570,8 @@
                   id="btn-eq-toggle"
                   class="win-btn h-full w-12 text-[9px] flex flex-col gap-0 leading-none"
                 >
-                  <span>EQ</span>
-                  <span id="txt-eq-status" class="text-[7px]">ON</span>
+                  <span>EQ</span
+                  ><span id="txt-eq-status" class="text-[7px]">ON</span>
                 </button>
                 <canvas
                   id="eq-graph"
@@ -511,7 +592,7 @@
           class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-0 shadow-lg h-full"
         >
           <div
-            class="h-4 bg-gradient-to-r from-gray-700 to-gray-800 flex justify-between items-center px-1 border-b border-black text-[10px] text-gray-300 font-bold"
+            class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold"
           >
             <span>LIBRARY & PLAYLIST</span>
           </div>
@@ -519,13 +600,13 @@
             <div class="flex justify-between mb-1">
               <select
                 id="playlist-select"
-                class="bg-black text-win-green border border-gray-600 text-[10px] px-1 h-5 w-32 font-pixel focus:outline-none"
+                class="bg-black theme-text-main border border-gray-600 text-[10px] px-1 h-5 w-32 font-pixel focus:outline-none"
               >
                 <option value="main">Main Library</option>
               </select>
               <div class="flex gap-1">
                 <button
-                  onclick="createNewPlaylist()"
+                  onclick="openNewPlaylistModal()"
                   class="win-btn px-2 h-5 text-[9px] font-bold shadow-sm"
                 >
                   NEW
@@ -540,7 +621,6 @@
                 </button>
               </div>
             </div>
-
             <div
               class="flex-1 bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 overflow-y-auto custom-scroll p-1 font-pixel text-xs mb-2 shadow-inner select-none"
               id="pl-box"
@@ -549,7 +629,6 @@
                 Drop files or Click ADD...
               </div>
             </div>
-
             <div class="flex justify-between items-center h-6">
               <div class="flex gap-1">
                 <button
@@ -589,7 +668,7 @@
                   <i class="ph-bold ph-caret-down"></i>
                 </button>
               </div>
-              <div class="font-pixel text-win-green text-[10px]" id="pl-count">
+              <div class="font-pixel theme-text-main text-[10px]" id="pl-count">
                 0 TRACKS
               </div>
             </div>
@@ -597,12 +676,30 @@
         </div>
 
         <div
+          id="modal-generic"
+          class="absolute inset-0 bg-black/80 z-[200] flex items-center justify-center hidden"
+        >
+          <div class="bg-[#292929] border-2 border-white w-64 p-3 shadow-2xl">
+            <div class="theme-bar px-2 py-1 text-[10px] font-bold mb-3">
+              SYSTEM MESSAGE
+            </div>
+            <div
+              id="modal-generic-msg"
+              class="text-white text-xs mb-4 text-center font-ui px-2"
+            ></div>
+            <div
+              class="flex gap-2 justify-center"
+              id="modal-generic-btns"
+            ></div>
+          </div>
+        </div>
+        <div
           id="modal-add-to"
           class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
         >
           <div class="bg-[#292929] border-2 border-white w-48 p-2 shadow-2xl">
             <div
-              class="text-win-green font-pixel text-center mb-2 border-b border-gray-600 pb-1"
+              class="theme-text-main font-pixel text-center mb-2 border-b border-gray-600 pb-1"
             >
               SELECT PLAYLIST
             </div>
@@ -618,6 +715,149 @@
             </button>
           </div>
         </div>
+        <div
+          id="modal-new-playlist"
+          class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
+        >
+          <div class="bg-[#292929] border-2 border-white w-56 p-3 shadow-2xl">
+            <div
+              class="theme-text-main font-pixel text-center mb-3 border-b border-gray-600 pb-1 text-xs"
+            >
+              CREATE NEW PLAYLIST
+            </div>
+            <input
+              type="text"
+              id="new-playlist-name"
+              class="w-full bg-black text-white border border-gray-500 text-xs p-1 mb-3 font-pixel focus:outline-none focus:border-win-green"
+              placeholder="Playlist Name..."
+            />
+            <div class="flex gap-2">
+              <button
+                onclick="confirmNewPlaylist()"
+                class="win-btn flex-1 h-6 text-[10px]"
+              >
+                CREATE
+              </button>
+              <button
+                onclick="closeNewPlaylistModal()"
+                class="win-btn flex-1 h-6 text-[10px]"
+              >
+                CANCEL
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="modal-settings"
+          class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
+        >
+          <div
+            class="bg-[#292929] border-2 border-white w-64 p-3 shadow-2xl overflow-y-auto max-h-[90%]"
+          >
+            <div
+              class="theme-bar px-2 py-1 text-[10px] font-bold mb-3 flex justify-between"
+            >
+              <span>APPEARANCE SETTINGS</span>
+              <button onclick="closeSettingsModal()">X</button>
+            </div>
+            <div class="space-y-3 mb-4">
+              <div class="flex items-center justify-between">
+                <span class="text-white text-[10px] font-ui">Window Color</span>
+                <input
+                  type="color"
+                  id="set-theme-window"
+                  class="h-5 w-8 p-0 border-0"
+                  onchange="previewTheme()"
+                />
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-white text-[10px] font-ui"
+                  >Text/Icon Color</span
+                >
+                <input
+                  type="color"
+                  id="set-theme-text"
+                  class="h-5 w-8 p-0 border-0"
+                  onchange="previewTheme()"
+                />
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-white text-[10px] font-ui"
+                  >Highlight Color</span
+                >
+                <input
+                  type="color"
+                  id="set-theme-high"
+                  class="h-5 w-8 p-0 border-0"
+                  onchange="previewTheme()"
+                />
+              </div>
+              <div class="border-t border-gray-600 my-2"></div>
+              <div class="text-[9px] text-gray-400 mb-1">EQ BAR GRADIENT</div>
+              <div class="flex justify-between gap-1">
+                <div class="flex flex-col items-center">
+                  <span class="text-[8px] text-gray-500">LOW</span
+                  ><input
+                    type="color"
+                    id="set-eq-1"
+                    class="h-4 w-6 p-0 border-0"
+                    onchange="previewTheme()"
+                  />
+                </div>
+                <div class="flex flex-col items-center">
+                  <span class="text-[8px] text-gray-500">MID</span
+                  ><input
+                    type="color"
+                    id="set-eq-2"
+                    class="h-4 w-6 p-0 border-0"
+                    onchange="previewTheme()"
+                  />
+                </div>
+                <div class="flex flex-col items-center">
+                  <span class="text-[8px] text-gray-500">HIGH</span
+                  ><input
+                    type="color"
+                    id="set-eq-3"
+                    class="h-4 w-6 p-0 border-0"
+                    onchange="previewTheme()"
+                  />
+                </div>
+              </div>
+              <div
+                class="border border-gray-600 h-8 w-full mt-2 relative"
+                id="theme-preview-box"
+              >
+                <div
+                  class="absolute inset-0 flex items-center justify-center text-[10px] font-bold"
+                  id="theme-preview-text"
+                >
+                  PREVIEW
+                </div>
+              </div>
+              <button
+                onclick="resetTheme()"
+                class="win-btn w-full h-6 text-[10px] text-red-900 mt-2"
+              >
+                RESET DEFAULT
+              </button>
+            </div>
+            <div class="flex gap-2">
+              <button
+                onclick="applyThemeSettings()"
+                class="win-btn flex-1 h-6 text-[10px]"
+              >
+                APPLY
+              </button>
+              <button
+                onclick="closeSettingsModal()"
+                class="win-btn flex-1 h-6 text-[10px]"
+              >
+                CANCEL
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -631,12 +871,182 @@
 
     <script type="module">
       import SignalsmithStretch from "https://cdn.jsdelivr.net/npm/signalsmith-stretch@latest/SignalsmithStretch.mjs";
-
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => document.querySelectorAll(s);
-      const STORAGE_KEY = "nextamp_settings_v1";
+      const STORAGE_KEY = "nextamp_settings_v6_classic";
 
-      // --- 0. SETTINGS PERSISTENCE ---
+      // THEME DEFAULTS FROM IMAGE
+      const defaultTheme = {
+        window: "#000080",
+        text: "#00ff00",
+        textSec: "#ffcc00",
+        highlight: "#000080",
+        eq1: "#00ff00",
+        eq2: "#ffff00",
+        eq3: "#ff0000",
+      };
+      let currentTheme = { ...defaultTheme };
+
+      function applyThemeToDOM(t) {
+        const r = document.documentElement;
+        r.style.setProperty("--theme-window", t.window);
+        r.style.setProperty("--theme-text", t.text);
+        r.style.setProperty("--theme-text-sec", t.textSec);
+        r.style.setProperty("--theme-highlight", t.highlight);
+        r.style.setProperty("--eq-col-1", t.eq1);
+        r.style.setProperty("--eq-col-2", t.eq2);
+        r.style.setProperty("--eq-col-3", t.eq3);
+      }
+
+      // MODALS
+      window.customAlert = (msg) => {
+        $("#modal-generic-msg").textContent = msg;
+        $(
+          "#modal-generic-btns"
+        ).innerHTML = `<button onclick="$('#modal-generic').classList.add('hidden')" class="win-btn w-20 h-6 text-[10px]">OK</button>`;
+        $("#modal-generic").classList.remove("hidden");
+      };
+      window.customConfirm = (msg, callback) => {
+        $("#modal-generic-msg").textContent = msg;
+        const btns = $("#modal-generic-btns");
+        btns.innerHTML = "";
+        const yes = document.createElement("button");
+        yes.className = "win-btn w-20 h-6 text-[10px]";
+        yes.textContent = "YES";
+        yes.onclick = () => {
+          $("#modal-generic").classList.add("hidden");
+          callback();
+        };
+        const no = document.createElement("button");
+        no.className = "win-btn w-20 h-6 text-[10px]";
+        no.textContent = "NO";
+        no.onclick = () => {
+          $("#modal-generic").classList.add("hidden");
+        };
+        btns.append(yes, no);
+        $("#modal-generic").classList.remove("hidden");
+      };
+
+      // SETTINGS UI
+      window.openSettingsModal = () => {
+        $("#modal-settings").classList.remove("hidden");
+        $("#set-theme-window").value = currentTheme.window;
+        $("#set-theme-text").value = currentTheme.text;
+        $("#set-theme-high").value = currentTheme.highlight;
+        $("#set-eq-1").value = currentTheme.eq1;
+        $("#set-eq-2").value = currentTheme.eq2;
+        $("#set-eq-3").value = currentTheme.eq3;
+        previewTheme();
+      };
+      window.closeSettingsModal = () =>
+        $("#modal-settings").classList.add("hidden");
+      window.previewTheme = () => {
+        const w = $("#set-theme-window").value;
+        const t = $("#set-theme-text").value;
+        const bg = $("#theme-preview-box");
+        const txt = $("#theme-preview-text");
+        bg.style.backgroundColor = w;
+        txt.style.color = t;
+      };
+      window.applyThemeSettings = () => {
+        currentTheme.window = $("#set-theme-window").value;
+        currentTheme.text = $("#set-theme-text").value;
+        currentTheme.highlight = $("#set-theme-high").value;
+        currentTheme.eq1 = $("#set-eq-1").value;
+        currentTheme.eq2 = $("#set-eq-2").value;
+        currentTheme.eq3 = $("#set-eq-3").value;
+        applyThemeToDOM(currentTheme);
+        saveSettings();
+        closeSettingsModal();
+      };
+      window.resetTheme = () => {
+        currentTheme = { ...defaultTheme };
+        applyThemeToDOM(currentTheme);
+        saveSettings();
+        closeSettingsModal();
+      };
+
+      // TOOLTIPS
+      const tooltip = $("#slider-tooltip");
+      const hideTooltip = () => {
+        tooltip.style.display = "none";
+      };
+      function attachTooltips() {
+        $$('input[type="range"]').forEach((el) => {
+          el.oninput = (e) => {
+            const val = parseFloat(e.target.value);
+            let text = val;
+            const type = el.dataset.tooltipType || "raw";
+            if (type === "time") text = formatTime(val);
+            else if (type === "percent") text = Math.round(val * 100) + "%";
+            else if (type === "balance")
+              text =
+                val === 0
+                  ? "CENTER"
+                  : val < 0
+                  ? "L " + Math.abs(val)
+                  : "R " + val;
+            else if (type === "x") text = val + "x";
+            else if (type === "val") text = val;
+            else if (type === "db") text = val + " dB";
+
+            if (el.dataset.idx) {
+              handleEqInput(el.dataset.idx, val, el);
+              text = val + " dB";
+            } else {
+              if (el.id === "main-vol") {
+                masterGainNode.gain.value = val;
+                $("#txt-vol").textContent = Math.round(val * 100) + "%";
+                saveSettings();
+              } else if (el.id === "main-bal") {
+                pannerNode.pan.value = val;
+                saveSettings();
+              } else if (el.dataset.key === "rate") {
+                controlValues.rate = val;
+                $("#val-rate").textContent = val.toFixed(2);
+                controlsChanged();
+                saveSettings();
+              } else if (el.dataset.key === "semitones") {
+                controlValues.semitones = val;
+                $("#val-pitch").textContent = val;
+                controlsChanged();
+                saveSettings();
+              } else if (el.id === "playback" && stretch) {
+                stretch.schedule({ input: val, rate: 0 });
+              }
+            }
+            const rect = el.getBoundingClientRect();
+            tooltip.textContent = text;
+            tooltip.style.display = "block";
+            if (el.classList.contains("vertical")) {
+              tooltip.style.left = rect.right + 5 + "px";
+              const min = parseFloat(el.min),
+                max = parseFloat(el.max),
+                percent = (val - min) / (max - min);
+              const topPos = rect.bottom - rect.height * percent;
+              tooltip.style.top = topPos - 10 + "px";
+            } else {
+              tooltip.style.top = rect.top - 25 + "px";
+              const min = parseFloat(el.min),
+                max = parseFloat(el.max),
+                percent = (val - min) / (max - min);
+              const leftPos = rect.left + rect.width * percent;
+              tooltip.style.left = leftPos - tooltip.offsetWidth / 2 + "px";
+            }
+          };
+        });
+      }
+      window.addEventListener("mouseup", hideTooltip);
+      window.addEventListener("touchend", hideTooltip);
+      window.formatTime = (t) => {
+        t = parseFloat(t);
+        if (isNaN(t)) return "00:00";
+        return `${Math.floor(t / 60)}:${Math.floor(t % 60)
+          .toString()
+          .padStart(2, "0")}`;
+      };
+
+      // STORAGE
       function saveSettings() {
         const settings = {
           vol: $("#main-vol").value,
@@ -644,19 +1054,22 @@
           rate: controlValues.rate,
           pitch: controlValues.semitones,
           isShuffle: isShuffle,
-          isRepeat: isRepeat,
+          repeatMode: repeatMode,
           isEqOn: isEqOn,
           playlistId: currentPlaylistId,
           eqGains: eqNodes.map((n) => n.gain.value),
+          isMono: isMono,
+          theme: currentTheme,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
       }
-
       function loadSettings() {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return;
+        if (!raw) {
+          applyThemeToDOM(defaultTheme);
+          return;
+        }
         const s = JSON.parse(raw);
-
         if (s.vol) {
           $("#main-vol").value = s.vol;
           masterGainNode.gain.value = parseFloat(s.vol);
@@ -676,112 +1089,83 @@
           $('input[data-key="semitones"]').value = s.pitch;
           $("#val-pitch").textContent = s.pitch;
         }
-
         if (s.isShuffle) {
           isShuffle = true;
-          $("#tog-shuffle").classList.add("active-indicator");
+          $("#tog-shuffle").classList.add("active");
         }
-        if (s.isRepeat) {
-          isRepeat = true;
-          $("#tog-repeat").classList.add("active-indicator");
-        }
-
+        if (s.repeatMode !== undefined) repeatMode = s.repeatMode;
+        updateRepeatBtn();
+        if (s.isMono !== undefined) isMono = s.isMono;
+        updateMonoStereoState();
         isEqOn = s.isEqOn !== undefined ? s.isEqOn : true;
         $("#txt-eq-status").textContent = isEqOn ? "ON" : "OFF";
         $("#btn-eq-toggle").classList.toggle("pressed", isEqOn);
-
         if (s.playlistId) currentPlaylistId = s.playlistId;
-
+        if (s.theme) {
+          currentTheme = s.theme;
+          applyThemeToDOM(currentTheme);
+        } else {
+          applyThemeToDOM(defaultTheme);
+        }
         window.savedEqGains = s.eqGains || [];
       }
 
-      // --- 1. BOOT & HYBRID AUDIO SYSTEM ---
+      // AUDIO ENGINE
       const audioContext = new AudioContext();
       let isEngineHot = false;
-
-      const bootBtn = $("#btn-boot-start");
-      const audioStartup = $("#audio-startup");
-      const audioLoop = $("#audio-loop"); // The Guardian
-
-      // Step 1: Connect Loop to Destination (Essential for iOS Background)
+      const bootBtn = $("#btn-boot-start"),
+        audioStartup = $("#audio-startup"),
+        audioLoop = $("#audio-loop");
       const loopSource = audioContext.createMediaElementSource(audioLoop);
       loopSource.connect(audioContext.destination);
-
-      // Step 2: Auto-Resume Logic (Inspired by Howler.js PR #1660)
       const checkAndResumeAudioContext = () => {
         if (
           audioContext.state === "suspended" ||
           audioContext.state === "interrupted"
-        ) {
-          audioContext.resume().then(() => {
-            console.log("System Auto-Resumed");
-          });
-        }
-        // Force loop to play if paused (The Guardian Logic)
-        if (isEngineHot && audioLoop.paused) {
-          audioLoop.play().catch((e) => {});
-        }
+        )
+          audioContext.resume();
+        if (isEngineHot && audioLoop.paused) audioLoop.play().catch((e) => {});
       };
-
-      // Watchers
-      setInterval(checkAndResumeAudioContext, 1000); // Check every 1s
+      setInterval(checkAndResumeAudioContext, 1000);
       ["visibilitychange", "touchstart", "click"].forEach((evt) =>
         document.addEventListener(evt, checkAndResumeAudioContext)
       );
-
-      // Boot Sequence
       bootBtn.onclick = async () => {
         try {
-          // Wake up context
-          if (audioContext.state === "suspended") {
-            await audioContext.resume();
-          }
-
-          // Settings
+          if (audioContext.state === "suspended") await audioContext.resume();
           audioStartup.volume = 0.5;
-          audioLoop.volume = 0.05; // Low volume for guardian loop
-
-          // Play Startup
+          audioLoop.volume = 0.05;
           await audioStartup.play();
-
-          // Start Guardian Loop
-          audioLoop
-            .play()
-            .catch((e) => console.warn("Loop playback warning:", e));
-
-          // Enter App
+          audioLoop.play().catch((e) => {});
           audioStartup.onended = () => enterApp();
-          audioStartup.onerror = () => enterApp(); // Fallback
+          audioStartup.onerror = () => enterApp();
         } catch (e) {
-          console.error("Audio unlock failed:", e);
           enterApp();
         }
       };
-
       function enterApp() {
         if (isEngineHot) return;
         isEngineHot = true;
         $("#engine-status").style.backgroundColor = "#00ff00";
         $("#engine-status").style.boxShadow = "0 0 4px #0f0";
-
         $("#boot-screen").style.opacity = "0";
-        $("#boot-screen").style.transition = "opacity 0.5s";
         setTimeout(() => $("#boot-screen").classList.add("hidden"), 500);
       }
 
-      // --- 2. CORE ENGINE ---
-      let stretch = null;
-      let eqNodes = [];
-      let analyser = audioContext.createAnalyser();
-      let masterGainNode = audioContext.createGain();
-      let pannerNode = audioContext.createStereoPanner();
-      let audioDuration = 1;
-      let isChangingTrack = false;
-
-      analyser.connect(pannerNode);
+      let stretch = null,
+        eqNodes = [],
+        analyser = audioContext.createAnalyser();
+      let masterGainNode = audioContext.createGain(),
+        pannerNode = audioContext.createStereoPanner(),
+        monoGainNode = audioContext.createGain();
+      let isMono = false,
+        audioDuration = 1,
+        isChangingTrack = false,
+        playDebounceTimer = null;
+      analyser.connect(monoGainNode);
+      monoGainNode.connect(pannerNode);
       pannerNode.connect(masterGainNode);
       masterGainNode.connect(audioContext.destination);
-
       masterGainNode.gain.value = 0.8;
       analyser.fftSize = 256;
 
@@ -795,9 +1179,8 @@
         jazz: [3, 2, 0, -2, -2, 0, 2, 3, 4, 4],
         fullbass: [6, 6, 5, 2, 0, -2, -4, -5, -6, -6],
       };
-
-      let controlValues = { active: false, rate: 1, semitones: 0 };
-      let isEqOn = true;
+      let controlValues = { active: false, rate: 1, semitones: 0 },
+        isEqOn = true;
 
       function initEQ() {
         eqNodes.forEach((n) => {
@@ -806,14 +1189,13 @@
           } catch (e) {}
         });
         eqNodes = [];
-        let prev = null;
-        let first = null;
+        let prev = null,
+          first = null;
         FREQUENCIES.forEach((freq, i) => {
           const f = audioContext.createBiquadFilter();
           f.type = "peaking";
           f.frequency.value = freq;
           f.Q.value = 1.4;
-
           let savedVal =
             window.savedEqGains && window.savedEqGains[i] !== undefined
               ? window.savedEqGains[i]
@@ -823,7 +1205,6 @@
             slider.value = savedVal;
             updateThumb(slider, `thumb-${i}`);
           }
-
           f.gain.value = isEqOn ? savedVal : 0;
           eqNodes.push(f);
           if (prev) prev.connect(f);
@@ -832,16 +1213,13 @@
         });
         return { input: first, output: prev };
       }
-
-      async function loadAudioEngine(arrayBuffer, trackName) {
-        checkAndResumeAudioContext(); // Ensure awake
-
+      async function loadAudioEngine(arrayBuffer, trackObj) {
+        checkAndResumeAudioContext();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         audioDuration = audioBuffer.duration;
         const channelBuffers = [];
         for (let c = 0; c < audioBuffer.numberOfChannels; ++c)
           channelBuffers.push(audioBuffer.getChannelData(c));
-
         if (stretch) {
           stretch.stop();
           stretch.disconnect();
@@ -854,11 +1232,19 @@
         controlValues.active = true;
         controlsChanged();
         isChangingTrack = false;
-
-        // Update Metadata & Position
-        updateMediaSession(trackName);
+        updateMediaSession(trackObj.name);
+        $("#info-samplerate").textContent =
+          audioBuffer.sampleRate / 1000 + " khz";
+        if (trackObj.blob && trackObj.blob.size) {
+          const kbps = Math.round(
+            (trackObj.blob.size * 8) / audioDuration / 1000
+          );
+          $("#info-bitrate").textContent = kbps + " k";
+        } else {
+          $("#info-bitrate").textContent = "N/A";
+        }
+        attachTooltips();
       }
-
       function controlsChanged(scheduleAhead) {
         $("#btn-play").classList.toggle("pressed", controlValues.active);
         if (stretch) {
@@ -868,17 +1254,13 @@
           );
           stretch.schedule(obj);
         }
-        // Force update position state whenever playback state changes
         updatePositionState();
       }
-
-      // --- 3. MEDIA SESSION & LOCK SCREEN SYNC ---
       function updateMediaSession(trackName) {
         if ("mediaSession" in navigator) {
           navigator.mediaSession.metadata = new MediaMetadata({
             title: trackName,
             artist: "Nextamp Player",
-            album: "My Playlist",
             artwork: [
               {
                 src: "https://cdn-icons-png.flaticon.com/512/3669/3669986.png",
@@ -887,8 +1269,6 @@
               },
             ],
           });
-
-          // Action Handlers
           navigator.mediaSession.setActionHandler("play", () =>
             $("#btn-play").click()
           );
@@ -901,20 +1281,15 @@
           navigator.mediaSession.setActionHandler("nexttrack", () =>
             $("#btn-next").click()
           );
-
-          // [NEW] Seek Handler for Lock Screen
           navigator.mediaSession.setActionHandler("seekto", (details) => {
             if (details.seekTime !== undefined && stretch) {
               stretch.schedule({ input: details.seekTime });
               updatePositionState();
             }
           });
-
           updatePositionState();
         }
       }
-
-      // [IMPORTANT] Tells OS the REAL time, not loop time
       function updatePositionState() {
         if ("mediaSession" in navigator && stretch) {
           try {
@@ -923,23 +1298,18 @@
               playbackRate: controlValues.active ? controlValues.rate : 0,
               position: stretch.inputTime || 0,
             });
-          } catch (e) {
-            // Ignore errors if state isn't ready
-          }
+          } catch (e) {}
         }
       }
 
-      // --- 4. DATA LAYER ---
-      let LIBRARY = [];
-      let playlists = { main: { name: "Main Library", trackIds: [] } };
-      let currentPlaylistId = "main";
-      let currentTrackIndex = -1;
-      let selectedIndices = new Set();
-      let lastSelectedIndex = -1;
-
-      const DB_NAME = "NextampUltimateDB";
-      const dbReq = indexedDB.open(DB_NAME, 8);
-
+      let LIBRARY = [],
+        playlists = { main: { name: "Main Library", trackIds: [] } },
+        currentPlaylistId = "main",
+        currentTrackIndex = -1,
+        selectedIndices = new Set(),
+        lastSelectedIndex = -1;
+      const DB_NAME = "NextampUltimateDB",
+        dbReq = indexedDB.open(DB_NAME, 8);
       dbReq.onupgradeneeded = (e) => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains("library"))
@@ -947,7 +1317,6 @@
         if (!db.objectStoreNames.contains("playlists"))
           db.createObjectStore("playlists", { keyPath: "id" });
       };
-
       dbReq.onsuccess = async (e) => {
         await loadLibraryFromDB();
         await loadPlaylistsFromDB();
@@ -956,8 +1325,8 @@
         renderPlaylistUI();
         initEQ();
         drawEQCurve();
+        attachTooltips();
       };
-
       async function saveTrackToLib(track) {
         const db = dbReq.result;
         const tx = db.transaction("library", "readwrite");
@@ -990,13 +1359,11 @@
           const tx = db.transaction("playlists", "readonly");
           const req = tx.objectStore("playlists").getAll();
           req.onsuccess = () => {
-            if (req.result && req.result.length)
-              req.result.forEach((p) => (playlists[p.id] = p));
+            if (req.result) req.result.forEach((p) => (playlists[p.id] = p));
             resolve();
           };
         });
       }
-
       const getTrackById = (id) => LIBRARY.find((t) => t.id === id);
       function getCurrentDisplayList() {
         if (currentPlaylistId === "main") return LIBRARY;
@@ -1005,67 +1372,52 @@
           .filter((t) => t);
       }
 
-      // --- 5. CONTROLS ---
       async function playTrack(idx) {
-        if (isChangingTrack) return;
-        isChangingTrack = true;
-        checkAndResumeAudioContext();
-
+        if (playDebounceTimer) clearTimeout(playDebounceTimer);
         let list = getCurrentDisplayList();
-        if (idx < 0 || idx >= list.length) {
-          isChangingTrack = false;
-          return;
-        }
-
+        if (idx < 0 || idx >= list.length) return;
         currentTrackIndex = idx;
         renderPlaylistUI();
         const t = list[idx];
-        $("#marquee").textContent = `${idx + 1}. ${t.name} - Buffering...`;
-
-        try {
-          const buf = await t.blob.arrayBuffer();
-          await loadAudioEngine(buf, t.name); // Pass track name
-          $("#marquee").textContent = `${idx + 1}. ${t.name} (${
-            t.sampleRate || 44100
-          }hz)`;
-        } catch (e) {
-          console.error(e);
-          $("#marquee").textContent = "Error loading file.";
-          isChangingTrack = false;
-        }
+        $("#marquee").textContent = `${idx + 1}. ${t.name} (Loading...)`;
+        playDebounceTimer = setTimeout(async () => {
+          isChangingTrack = true;
+          checkAndResumeAudioContext();
+          try {
+            const buf = await t.blob.arrayBuffer();
+            await loadAudioEngine(buf, t);
+            $("#marquee").textContent = `${idx + 1}. ${t.name}`;
+          } catch (e) {
+            $("#marquee").textContent = "Error loading file.";
+            isChangingTrack = false;
+          }
+        }, 200);
       }
-
       function handleNextTrack(auto = false) {
         let list = getCurrentDisplayList();
         if (list.length === 0) return;
         let next;
-        if (isShuffle) {
+        if (auto && repeatMode === 2) next = currentTrackIndex;
+        else if (isShuffle) {
           if (list.length > 1) {
             do {
               next = Math.floor(Math.random() * list.length);
             } while (next === currentTrackIndex);
-          } else {
-            next = 0;
-          }
-        } else {
-          next = currentTrackIndex + 1;
-        }
-
+          } else next = 0;
+        } else next = currentTrackIndex + 1;
         if (next < list.length) playTrack(next);
-        else if (isRepeat) playTrack(0);
+        else if (repeatMode === 1) playTrack(0);
         else if (!auto) playTrack(0);
       }
-
       function handlePrevTrack() {
         let list = getCurrentDisplayList();
         if (list.length === 0) return;
         let prev = isShuffle
           ? Math.floor(Math.random() * list.length)
           : currentTrackIndex - 1;
-        if (prev < 0) prev = isRepeat ? list.length - 1 : 0;
+        if (prev < 0) prev = repeatMode === 1 ? list.length - 1 : 0;
         playTrack(prev);
       }
-
       $("#btn-play").onclick = async () => {
         checkAndResumeAudioContext();
         const list = getCurrentDisplayList();
@@ -1092,10 +1444,9 @@
       $("#btn-next").onclick = () => handleNextTrack(false);
       $("#btn-prev").onclick = () => handlePrevTrack();
 
-      // --- 6. UI & EQ ---
-      const eqContainer = $("#eq-container");
-      const eqCanvas = $("#eq-graph");
-      const eqCtx = eqCanvas.getContext("2d");
+      const eqContainer = $("#eq-container"),
+        eqCanvas = $("#eq-graph"),
+        eqCtx = eqCanvas.getContext("2d");
       $("#btn-eq-toggle").onclick = () => {
         isEqOn = !isEqOn;
         $("#txt-eq-status").textContent = isEqOn ? "ON" : "OFF";
@@ -1106,25 +1457,30 @@
       FREQUENCIES.forEach((f, i) => {
         const div = document.createElement("div");
         div.className =
-          "flex flex-col items-center h-full flex-1 group relative";
-        div.innerHTML = `<div class="relative h-full w-full flex justify-center pt-2 pb-3"><div class="eq-bar-bg ${
+          "flex flex-col items-center h-full flex-1 group relative py-2";
+        div.innerHTML = `<div class="relative h-full w-full flex justify-center"><div class="eq-bar-bg ${
           isEqOn ? "eq-bar-active" : ""
-        }" id="eq-bg-${i}"></div><div class="eq-thumb" style="top: 50%" id="thumb-${i}"></div><input type="range" class="vertical" min="-12" max="12" step="0.5" value="0" data-idx="${i}" title="${f}Hz" oninput="updateEqBand(${i}, this.value); updateThumb(this, 'thumb-${i}')"></div><div class="absolute -bottom-1 text-[7px] text-win-green font-pixel tracking-tighter">${
+        }" id="eq-bg-${i}"></div><div class="eq-thumb" style="top: 50%" id="thumb-${i}"></div><input type="range" class="vertical" min="-12" max="12" step="0.5" value="0" data-idx="${i}" data-tooltip-type="db"></div><div class="absolute -bottom-1 text-[7px] theme-text-main font-pixel tracking-tighter">${
           f >= 1000 ? f / 1000 + "k" : f
         }</div>`;
         div.querySelector("input").ondblclick = (e) => {
           e.target.value = 0;
-          updateEqBand(i, 0);
-          updateThumb(e.target, `thumb-${i}`);
+          handleEqInput(i, 0, e.target);
         };
         eqContainer.appendChild(div);
       });
+      window.handleEqInput = (idx, val, el) => {
+        if (isEqOn && $("#eq-preset-select").value !== "custom")
+          $("#eq-preset-select").value = "custom";
+        updateEqBand(idx, val);
+        updateThumb(el, `thumb-${idx}`);
+      };
       window.updateThumb = (input, thumbId) => {
         const min = parseFloat(input.min),
           max = parseFloat(input.max),
-          val = parseFloat(input.value);
-        const topPos = 100 - ((val - min) / (max - min)) * 100;
-        $(`#${thumbId}`).style.top = `${topPos}%`;
+          val = parseFloat(input.value),
+          percent = ((val - min) / (max - min)) * 100;
+        $(`#${thumbId}`).style.top = `${100 - percent}%`;
       };
       window.updateEqBand = (idx, val) => {
         if (eqNodes[idx])
@@ -1144,11 +1500,11 @@
         eqCtx.lineTo(180, 15);
         eqCtx.stroke();
         if (!isEqOn) return;
-        eqCtx.strokeStyle = "#00ff00";
+        eqCtx.strokeStyle = currentTheme.text;
         eqCtx.lineWidth = 2;
         eqCtx.beginPath();
-        const stepX = eqCanvas.width / (FREQUENCIES.length - 1);
-        const points = [];
+        const stepX = eqCanvas.width / (FREQUENCIES.length - 1),
+          points = [];
         FREQUENCIES.forEach((_, i) => {
           let gain = 0;
           if (eqNodes[i]) gain = eqNodes[i].gain.value;
@@ -1174,18 +1530,21 @@
       }
       $("#eq-preset-select").onchange = (e) => {
         const val = e.target.value;
-        if (PRESETS[val]) {
+        if (PRESETS[val])
           PRESETS[val].forEach((v, i) => {
             const inp = $(`input[data-idx="${i}"]`);
             inp.value = v;
             updateThumb(inp, `thumb-${i}`);
             updateEqBand(i, v);
           });
-        }
       };
 
       const cvs = $("#visualizer"),
         ctx = cvs.getContext("2d");
+      let visualMode = 0;
+      $("#visualizer-container").onclick = () => {
+        visualMode = (visualMode + 1) % 3;
+      };
       function resizeCvs() {
         const r = cvs.parentElement.getBoundingClientRect();
         cvs.width = r.width;
@@ -1194,58 +1553,79 @@
       window.addEventListener("resize", resizeCvs);
       setTimeout(resizeCvs, 500);
 
-      // --- VISUALIZER LOOP ---
       let lastUpdateTime = 0;
       function draw(time) {
         requestAnimationFrame(draw);
-
-        // [IMPORTANT] Sync Lock Screen time periodically (every 1 sec)
         if (time - lastUpdateTime > 1000) {
           updatePositionState();
           lastUpdateTime = time;
         }
-
         if (stretch && !holding) {
           const pb = $("#playback");
           pb.max = audioDuration;
           const t = stretch.inputTime || 0;
           pb.value = t;
-          $("#time-display").textContent = `${Math.floor(t / 60)}:${Math.floor(
-            t % 60
-          )
-            .toString()
-            .padStart(2, "0")}`;
-
+          $("#time-display").textContent = formatTime(t);
           if (
             controlValues.active &&
             t >= audioDuration - 0.2 &&
             !isChangingTrack
-          ) {
+          )
             handleNextTrack(true);
-          }
         }
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        analyser.getByteFrequencyData(dataArray);
+        const bufferLength = analyser.frequencyBinCount,
+          dataArray = new Uint8Array(bufferLength);
         ctx.fillStyle = "#111";
         ctx.fillRect(0, 0, cvs.width, cvs.height);
-        let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
-        gradient.addColorStop(0, "#00ff00");
-        gradient.addColorStop(0.6, "#ffff00");
-        gradient.addColorStop(1, "#ff0000");
-        ctx.fillStyle = gradient;
-        const barWidth = (cvs.width / bufferLength) * 2.5;
-        let x = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          let barHeight = (dataArray[i] / 255) * cvs.height;
-          if (barHeight > 0)
-            ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
-          x += barWidth;
+        if (visualMode === 0) {
+          analyser.getByteFrequencyData(dataArray);
+          let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
+          gradient.addColorStop(0, currentTheme.eq1);
+          gradient.addColorStop(0.6, currentTheme.eq2);
+          gradient.addColorStop(1, currentTheme.eq3);
+          ctx.fillStyle = gradient;
+          const barWidth = (cvs.width / bufferLength) * 2.5;
+          let x = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            let barHeight = (dataArray[i] / 255) * cvs.height;
+            if (barHeight > 0)
+              ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
+            x += barWidth;
+          }
+        } else if (visualMode === 1) {
+          analyser.getByteFrequencyData(dataArray);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = currentTheme.text;
+          ctx.beginPath();
+          const sliceWidth = (cvs.width * 1.0) / bufferLength;
+          let x = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 255.0;
+            const y = cvs.height - v * cvs.height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+            x += sliceWidth;
+          }
+          ctx.stroke();
+        } else if (visualMode === 2) {
+          analyser.getByteTimeDomainData(dataArray);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#00ffff";
+          ctx.beginPath();
+          const sliceWidth = (cvs.width * 1.0) / bufferLength;
+          let x = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 128.0;
+            const y = (v * cvs.height) / 2;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+            x += sliceWidth;
+          }
+          ctx.stroke();
         }
       }
       requestAnimationFrame(draw);
 
-      // --- 7. PLAYLIST UI ---
       $("#pl-box").onclick = (e) => {
         if (
           e.target.id === "pl-box" ||
@@ -1255,30 +1635,28 @@
           renderPlaylistUI();
         }
       };
-
       window.renderPlaylistUI = () => {
         const box = $("#pl-box");
         box.innerHTML = "";
         let displayList = getCurrentDisplayList();
-        if (displayList.length === 0) {
+        if (displayList.length === 0)
           box.innerHTML = `<div class="text-gray-500 text-center mt-10 text-[10px] pointer-events-none">${
             currentPlaylistId === "main"
               ? "Drop files or Click ADD..."
               : "Playlist empty."
           }</div>`;
-        } else {
+        else {
           displayList.forEach((t, i) => {
             const d = document.createElement("div");
-            let bgClass = selectedIndices.has(i)
-              ? "bg-[#000080] text-white"
-              : "text-win-green hover:bg-[#222]";
+            // Highlight color
+            if (selectedIndices.has(i)) d.classList.add("theme-highlight-bg");
+            else d.className += " theme-text-main hover:bg-[#222]";
             let textClass = i === currentTrackIndex ? "font-bold" : "";
-            d.className = `cursor-pointer px-1 flex justify-between select-none ${bgClass} ${textClass}`;
+            d.className += ` cursor-pointer px-1 flex justify-between select-none ${textClass}`;
             d.draggable = true;
             d.innerHTML = `<div class="flex truncate w-full pointer-events-none"><span class="w-6 text-right mr-2 flex-shrink-0">${
               i + 1
             }.</span><span class="truncate">${t.name}</span></div>`;
-
             d.ondragstart = (e) => {
               e.dataTransfer.setData("text/plain", i);
               d.classList.add("dragging");
@@ -1294,7 +1672,16 @@
               d.classList.remove("drag-over");
               handleDragDrop(parseInt(e.dataTransfer.getData("text/plain")), i);
             };
-
+            let lastTap = 0;
+            d.ontouchend = (e) => {
+              const currentTime = new Date().getTime();
+              const tapLength = currentTime - lastTap;
+              if (tapLength < 500 && tapLength > 0) {
+                playTrack(i);
+                e.preventDefault();
+              }
+              lastTap = currentTime;
+            };
             d.onclick = (e) => {
               e.stopPropagation();
               if (e.shiftKey && lastSelectedIndex !== -1) {
@@ -1319,9 +1706,7 @@
           });
         }
         $("#pl-count").textContent = `${displayList.length} TRACKS`;
-
         const hasSel = selectedIndices.size > 0;
-
         const toggleDisableStyle = (btnId, isDisabled) => {
           const btn = $(btnId);
           btn.disabled = isDisabled;
@@ -1339,11 +1724,9 @@
             else btn.classList.add("text-black");
           }
         };
-
         toggleDisableStyle("#btn-del-track", !hasSel);
         toggleDisableStyle("#btn-move-up", !hasSel);
         toggleDisableStyle("#btn-move-down", !hasSel);
-
         $("#btn-del-pl").style.display =
           currentPlaylistId === "main" ? "none" : "block";
       };
@@ -1351,23 +1734,19 @@
       window.moveTrack = (dir) => {
         if (selectedIndices.size !== 1) return;
         const idx = Array.from(selectedIndices)[0];
-        const newIdx = idx + dir;
-        handleDragDrop(idx, newIdx);
+        handleDragDrop(idx, idx + dir);
       };
-
       window.handleDragDrop = async (srcIdx, targetIdx) => {
         let list = getCurrentDisplayList();
         if (targetIdx < 0 || targetIdx >= list.length || srcIdx === targetIdx)
           return;
         const item = list.splice(srcIdx, 1)[0];
         list.splice(targetIdx, 0, item);
-
         if (currentTrackIndex === srcIdx) currentTrackIndex = targetIdx;
         else if (currentTrackIndex === targetIdx && srcIdx > targetIdx)
           currentTrackIndex++;
         else if (currentTrackIndex === targetIdx && srcIdx < targetIdx)
           currentTrackIndex--;
-
         if (currentPlaylistId !== "main") {
           playlists[currentPlaylistId].trackIds = list.map((t) => t.id);
           await savePlaylistsToDB(playlists[currentPlaylistId]);
@@ -1376,43 +1755,44 @@
         selectedIndices.add(targetIdx);
         renderPlaylistUI();
       };
-
       window.handleDeleteTracks = async () => {
         if (selectedIndices.size === 0) return;
-        if (confirm(`Remove ${selectedIndices.size} selected track(s)?`)) {
-          const indices = Array.from(selectedIndices).sort((a, b) => b - a);
-          if (currentPlaylistId === "main") {
-            const list = getCurrentDisplayList();
-            for (let i of indices) {
-              await deleteTrackFromLib(list[i].id);
-              LIBRARY.splice(i, 1);
+        customConfirm(
+          `Remove ${selectedIndices.size} selected track(s)?`,
+          async () => {
+            const indices = Array.from(selectedIndices).sort((a, b) => b - a);
+            if (currentPlaylistId === "main") {
+              const list = getCurrentDisplayList();
+              for (let i of indices) {
+                await deleteTrackFromLib(list[i].id);
+                LIBRARY.splice(i, 1);
+              }
+            } else {
+              const pl = playlists[currentPlaylistId];
+              for (let i of indices) pl.trackIds.splice(i, 1);
+              await savePlaylistsToDB(pl);
             }
-          } else {
-            const pl = playlists[currentPlaylistId];
-            for (let i of indices) pl.trackIds.splice(i, 1);
-            await savePlaylistsToDB(pl);
+            selectedIndices.clear();
+            renderPlaylistUI();
           }
-          selectedIndices.clear();
-          renderPlaylistUI();
-        }
+        );
       };
-
       window.handleDeletePlaylist = () => {
         if (currentPlaylistId === "main") return;
-        if (
-          confirm(`Delete playlist "${playlists[currentPlaylistId].name}"?`)
-        ) {
-          delete playlists[currentPlaylistId];
-          const db = dbReq.result;
-          const tx = db.transaction("playlists", "readwrite");
-          tx.objectStore("playlists").delete(currentPlaylistId);
-          switchPlaylist("main");
-          renderPlaylistSelect();
-        }
+        customConfirm(
+          `Delete playlist "${playlists[currentPlaylistId].name}"?`,
+          () => {
+            delete playlists[currentPlaylistId];
+            const db = dbReq.result;
+            const tx = db.transaction("playlists", "readwrite");
+            tx.objectStore("playlists").delete(currentPlaylistId);
+            switchPlaylist("main");
+            renderPlaylistSelect();
+          }
+        );
       };
 
       const fileInput = $("#upload-file");
-      $("#btn-add-file").onclick = () => fileInput.click();
       $("#btn-pl-add").onclick = () => fileInput.click();
       fileInput.onchange = (e) => handleFiles(e.target.files);
       document.body.ondragover = (e) => e.preventDefault();
@@ -1420,7 +1800,6 @@
         e.preventDefault();
         handleFiles(e.dataTransfer.files);
       };
-
       async function handleFiles(files) {
         checkAndResumeAudioContext();
         if (!isEngineHot) await audioContext.resume();
@@ -1436,16 +1815,26 @@
         }
         renderPlaylistUI();
       }
-
-      window.createNewPlaylist = () => {
-        const n = prompt("Playlist Name:");
+      window.openNewPlaylistModal = () => {
+        $("#new-playlist-name").value = "";
+        $("#modal-new-playlist").classList.remove("hidden");
+        $("#new-playlist-name").focus();
+      };
+      window.closeNewPlaylistModal = () =>
+        $("#modal-new-playlist").classList.add("hidden");
+      window.confirmNewPlaylist = () => {
+        const n = $("#new-playlist-name").value;
         if (n && n.trim().length > 0) {
-          const id = "pl_" + Date.now();
-          playlists[id] = { id, name: n.trim(), trackIds: [] };
-          savePlaylistsToDB(playlists[id]);
-          renderPlaylistSelect();
-          switchPlaylist(id);
+          createNewPlaylist(n.trim());
+          closeNewPlaylistModal();
         }
+      };
+      window.createNewPlaylist = (name) => {
+        const id = "pl_" + Date.now();
+        playlists[id] = { id, name: name, trackIds: [] };
+        savePlaylistsToDB(playlists[id]);
+        renderPlaylistSelect();
+        switchPlaylist(id);
       };
       window.switchPlaylist = (id) => {
         currentPlaylistId = id;
@@ -1469,7 +1858,7 @@
       };
       $("#playlist-select").onchange = (e) => switchPlaylist(e.target.value);
       window.openAddToModal = () => {
-        if (!selectedIndices.size) return alert("Select tracks first");
+        if (!selectedIndices.size) return customAlert("Select tracks first");
         const d = $("#modal-list");
         d.innerHTML = "";
         Object.keys(playlists)
@@ -1494,6 +1883,70 @@
       };
       window.closeAddToModal = () => $("#modal-add-to").classList.add("hidden");
 
+      let isShuffle = false,
+        repeatMode = 0;
+      $("#tog-shuffle").onclick = function () {
+        isShuffle = !isShuffle;
+        this.classList.toggle("active", isShuffle);
+        saveSettings();
+      };
+      const updateRepeatBtn = () => {
+        const btn = $("#tog-repeat");
+        btn.classList.remove("active", "active-gold");
+        if (repeatMode === 0) btn.textContent = "REPEAT";
+        else if (repeatMode === 1) {
+          btn.classList.add("active");
+          btn.textContent = "REP ALL";
+        } else if (repeatMode === 2) {
+          btn.classList.add("active-gold");
+          btn.textContent = "REP 1";
+        }
+      };
+      $("#tog-repeat").onclick = function () {
+        repeatMode = (repeatMode + 1) % 3;
+        updateRepeatBtn();
+        saveSettings();
+      };
+      const updateMonoStereoState = () => {
+        if (isMono) {
+          monoGainNode.channelCount = 1;
+          monoGainNode.channelCountMode = "explicit";
+          $("#btn-mono-stereo").textContent = "MONO";
+          $("#btn-mono-stereo").classList.remove("theme-text-main");
+          $("#btn-mono-stereo").classList.add("theme-text-sec");
+        } else {
+          monoGainNode.channelCount = 2;
+          monoGainNode.channelCountMode = "max";
+          $("#btn-mono-stereo").textContent = "STEREO";
+          $("#btn-mono-stereo").classList.add("theme-text-main");
+          $("#btn-mono-stereo").classList.remove("theme-text-sec");
+        }
+      };
+      $("#btn-mono-stereo").onclick = () => {
+        isMono = !isMono;
+        updateMonoStereoState();
+        saveSettings();
+      };
+      window.toggleSection = (id) => $(`#${id}`).classList.toggle("hidden");
+      let deferredPrompt;
+      window.addEventListener("beforeinstallprompt", (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        $("#btn-install-pwa").classList.remove("hidden");
+      });
+      $("#btn-install-pwa").onclick = async () => {
+        $("#btn-install-pwa").classList.add("hidden");
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          deferredPrompt = null;
+        }
+      };
+      setInterval(() => {
+        if (stretch && controlValues.active && !holding && !isChangingTrack) {
+          const t = stretch.inputTime || 0;
+          if (t >= audioDuration - 0.2) handleNextTrack(true);
+        }
+      }, 1000);
       const pb = $("#playback");
       let holding = false;
       pb.onmousedown = pb.ontouchstart = () => (holding = true);
@@ -1505,7 +1958,6 @@
             rate: controlValues.rate,
             semitones: controlValues.semitones,
           });
-          // Sync Lock Screen Time Immediately
           updatePositionState();
         }
       };
@@ -1534,46 +1986,6 @@
         controlsChanged();
         saveSettings();
       };
-
-      let isShuffle = false,
-        isRepeat = false;
-      $("#tog-shuffle").onclick = function () {
-        isShuffle = !isShuffle;
-        this.classList.toggle("active-indicator", isShuffle);
-        saveSettings();
-      };
-      $("#tog-repeat").onclick = function () {
-        isRepeat = !isRepeat;
-        this.classList.toggle("active-indicator", isRepeat);
-        saveSettings();
-      };
-      window.toggleSection = (id) => $(`#${id}`).classList.toggle("hidden");
-
-      // --- PWA INSTALL HANDLER ---
-      let deferredPrompt;
-      window.addEventListener("beforeinstallprompt", (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        $("#btn-install-pwa").classList.remove("hidden");
-      });
-      $("#btn-install-pwa").onclick = async () => {
-        $("#btn-install-pwa").classList.add("hidden");
-        if (deferredPrompt) {
-          deferredPrompt.prompt();
-          const { outcome } = await deferredPrompt.userChoice;
-          console.log(`User response to install prompt: ${outcome}`);
-          deferredPrompt = null;
-        }
-      };
-
-      setInterval(() => {
-        if (stretch && controlValues.active && !holding && !isChangingTrack) {
-          const t = stretch.inputTime || 0;
-          if (t >= audioDuration - 0.2) {
-            handleNextTrack(true);
-          }
-        }
-      }, 1000);
     </script>
   </body>
 </html>
