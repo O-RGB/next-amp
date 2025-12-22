@@ -542,24 +542,6 @@
                   data-tooltip-type="x"
                 />
               </div>
-              <div class="">
-                <div
-                  class="flex justify-between text-[8px] text-gray-400 -mb-2"
-                >
-                  <span>REVERB</span
-                  ><span id="val-reverb" class="theme-text-sec">0.0</span>
-                </div>
-                <input
-                  type="range"
-                  data-key="reverb"
-                  min="0"
-                  max="5"
-                  step="0.05"
-                  value="0"
-                  class="w-full h-1 bg-gray-600"
-                  data-tooltip-type="x"
-                />
-              </div>
             </div>
             <div class="flex-1 flex flex-col relative">
               <div
@@ -1008,12 +990,6 @@
                 $("#val-rate").textContent = val.toFixed(2);
                 controlsChanged();
                 saveSettings();
-              } else if (el.dataset.key === "reverb") {
-                const val = parseFloat(el.value);
-                reverbGain.gain.value = val;
-                $("#val-reverb").textContent = val.toFixed(1);
-                controlsChanged();
-                saveSettings();
               } else if (el.dataset.key === "semitones") {
                 controlValues.semitones = val;
                 $("#val-pitch").textContent = val;
@@ -1061,7 +1037,6 @@
           bal: $("#main-bal").value,
           rate: controlValues.rate,
           pitch: controlValues.semitones,
-          reverb: controlValues.reverb,
           isShuffle: isShuffle,
           repeatMode: repeatMode,
           isEqOn: isEqOn,
@@ -1099,11 +1074,6 @@
           controlValues.semitones = parseFloat(s.pitch);
           $('input[data-key="semitones"]').value = s.pitch;
           $("#val-pitch").textContent = s.pitch;
-        }
-        if (s.reverb) {
-          controlValues.reverb = parseFloat(s.reverb);
-          $('input[data-key="reverb"]').value = s.reverb;
-          $("#val-reverb").textContent = s.reverb;
         }
         if (s.isShuffle) {
           isShuffle = true;
@@ -1257,83 +1227,6 @@
         });
         return { input: first, output: prev };
       }
-
-      function createImpulseResponse(
-        duration = 4.5, // เพิ่มความยาวให้ก้องนานขึ้น
-        decay = 2.2, // ลด decay ให้เสียงค่อย ๆ จางช้าขึ้น
-        preDelay = 0.035 // เพิ่ม pre-delay เล็กน้อย
-      ) {
-        const sampleRate = audioContext.sampleRate;
-        const length = sampleRate * duration;
-        const impulse = audioContext.createBuffer(2, length, sampleRate);
-
-        const preDelaySamples = Math.floor(preDelay * sampleRate);
-
-        for (let ch = 0; ch < 2; ch++) {
-          const data = impulse.getChannelData(ch);
-
-          for (let i = 0; i < length; i++) {
-            const t = i / length;
-
-            // ปรับ envelope curve ให้นุ่มนวลขึ้น
-            const envelope = Math.exp(-decay * t);
-
-            let noise = Math.random() * 2 - 1;
-
-            // เพิ่มการกรองความถี่สูงให้นุ่มนวลมากขึ้น
-            const hfDamping = Math.pow(1 - t * 0.7, 3);
-
-            // เพิ่ม low-pass filter effect
-            const warmth = 1 - t * 0.3;
-
-            data[i] = noise * envelope * hfDamping * warmth;
-          }
-
-          // เพิ่ม early reflections ที่มีลักษณะธรรมชาติมากขึ้น
-          const reflections = [
-            { delay: 0.025, gain: 0.5 },
-            { delay: 0.045, gain: 0.42 },
-            { delay: 0.068, gain: 0.35 },
-            { delay: 0.095, gain: 0.28 },
-            { delay: 0.125, gain: 0.22 },
-            { delay: 0.16, gain: 0.18 },
-            { delay: 0.2, gain: 0.15 },
-            { delay: 0.245, gain: 0.12 },
-          ];
-
-          for (const ref of reflections) {
-            const delaySamples = Math.floor(ref.delay * sampleRate);
-            if (delaySamples < length) {
-              // สร้างเสียงสะท้อนที่นุ่มนวล
-              for (let i = 0; i < 50; i++) {
-                const idx = delaySamples + i;
-                if (idx < length) {
-                  const diffusion = (Math.random() * 2 - 1) * ref.gain;
-                  const fade = 1 - i / 50;
-                  data[idx] += diffusion * fade;
-                }
-              }
-            }
-          }
-        }
-
-        return impulse;
-      }
-
-      // async function loadReverbImpulse(url) {
-      //   try {
-      //     const response = await fetch(url);
-      //     const arrayBuffer = await response.arrayBuffer();
-      //     const impulseBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      //     reverbNode.buffer = impulseBuffer;
-      //     console.log("Reverb impulse loaded successfully!");
-      //   } catch (e) {
-      //     console.error("Failed to load reverb impulse:", e);
-      //   }
-      // }
-
-      reverbNode.buffer = createImpulseResponse(4, 3);
-      // loadReverbImpulse("assets/sounds/hall.wav");
 
       async function loadAudioEngine(arrayBuffer, trackObj) {
         if (!isEngineHot) await initAudioEngine(); // Ensure engine is hot
