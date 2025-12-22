@@ -197,47 +197,58 @@
       .animate-blink {
         animation: blink 1s infinite;
       }
-
-      /* Safe area for boot screen */
-      #boot-screen {
-        padding-top: max(4px, env(safe-area-inset-top));
-        padding-bottom: max(4px, env(safe-area-inset-bottom));
-        padding-left: max(4px, env(safe-area-inset-left));
-        padding-right: max(4px, env(safe-area-inset-right));
-      }
     </style>
   </head>
   <body class="flex items-center justify-center w-full h-full">
     <div
       id="boot-screen"
-      class="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center font-pixel text-win-green text-center"
+      class="fixed inset-0 z-[100] bg-[#111] flex flex-col items-center justify-center font-ui select-none"
     >
       <div
-        class="mb-8 border-2 border-win-green p-1 inline-block shadow-[0_0_10px_#00ff00]"
+        class="w-72 bg-[#c0c0c0] border-t-2 border-l-2 border-white border-r-2 border-b-2 border-black p-1 shadow-lg flex flex-col"
       >
-        <div class="border border-win-green px-4 py-2 bg-win-green/10">
-          <h1 class="text-3xl font-bold tracking-widest mb-1">NEXTAMP OS</h1>
-          <div class="text-[10px] text-win-green/70">
-            VER 2.0.4 CUSTOM-SOUND
+        <div
+          class="bg-[#000080] w-full text-white text-[12px] font-bold px-2 py-1 mb-4 flex justify-between items-center"
+        >
+          <div class="flex items-center gap-2">
+            <i class="ph-bold ph-music-note"></i>
+            <span>System Initialization</span>
           </div>
+          <button
+            class="bg-[#c0c0c0] text-black w-4 h-4 flex items-center justify-center border border-white text-[10px] shadow-sm leading-none"
+          >
+            X
+          </button>
+        </div>
+
+        <div class="px-4 pb-4 flex flex-col items-center text-center">
+          <div class="mb-4 flex items-center gap-4">
+            <i class="ph-fill ph-speaker-high text-4xl text-gray-600"></i>
+            <div class="text-left">
+              <h1 class="text-sm font-bold text-black">Audio Engine Setup</h1>
+              <p class="text-[11px] text-gray-600">
+                Click start to initialize audio context.
+              </p>
+            </div>
+          </div>
+
+          <div
+            class="w-full h-4 border-t border-l border-gray-600 border-r border-b border-white mb-4 p-[2px] bg-white"
+          >
+            <div class="h-full bg-[#000080] w-full animate-pulse"></div>
+          </div>
+
+          <button
+            id="btn-boot-start"
+            class="win-btn px-6 py-1 text-xs font-bold active:border-t-black active:border-l-black active:border-r-white active:border-b-white focus:outline-dotted"
+          >
+            Start Application
+          </button>
         </div>
       </div>
 
-      <div id="boot-msg" class="text-sm mb-6 space-y-1">
-        <p>> CHECKING SYSTEM...</p>
-        <p>> AUDIO ENGINE: <span class="text-yellow-500">STANDBY</span></p>
-        <p>> WAITING FOR USER INPUT...</p>
-      </div>
-
-      <button
-        id="btn-boot-start"
-        class="border-2 border-win-green bg-black text-win-green hover:bg-win-green hover:text-black px-6 py-3 font-bold text-lg animate-blink shadow-[0_0_15px_#00ff00]"
-      >
-        [ TAP TO INITIALIZE ]
-      </button>
-
-      <div class="mt-8 text-[10px] text-gray-500">
-        Click to unlock audio system
+      <div class="mt-4 text-[10px] text-gray-500 font-pixel">
+        POWERED BY NEXTAMP
       </div>
     </div>
 
@@ -248,7 +259,7 @@
     ></audio>
     <audio
       id="audio-loop"
-      src="/assets/sounds/allow-sound.mp3"
+      src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//oeAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAAAAAAAAAAAAA//oeZnLmZ2ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm//oeZnLmZ2ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm//oeZnLmZ2ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm"
       loop
       preload="auto"
     ></audio>
@@ -703,42 +714,35 @@
       const audioContext = new AudioContext();
       let isEngineHot = false;
 
-      // [UPDATED] Boot Handler using custom file logic
+      // [UPDATED] Boot Handler using SILENT LOOP
       const bootBtn = $("#btn-boot-start");
       const audioStartup = $("#audio-startup");
       const audioLoop = $("#audio-loop");
 
       bootBtn.onclick = async () => {
         try {
-          // Set volumes
           audioStartup.volume = 0.5;
-          audioLoop.volume = 0.2;
-
-          // Play both immediately
-          await audioStartup.play();
-          audioLoop
-            .play()
-            .catch((e) => console.warn("Loop playback warning:", e));
+          // Silent loop volume (doesn't matter since it's silent, but keeping it active)
+          audioLoop.volume = 1.0;
 
           // Resume AudioContext
           if (audioContext.state === "suspended") {
             await audioContext.resume();
           }
 
-          // Logic: When startup finishes, enter app (Loop continues)
+          // Play both
+          await audioStartup.play();
+          audioLoop
+            .play()
+            .catch((e) => console.warn("Loop playback warning:", e));
+
+          // Logic: When startup finishes, enter app
           audioStartup.onended = () => {
             enterApp();
           };
 
-          // Fallback: If startup file is missing/error, enter app anyway
+          // Fallback
           audioStartup.onerror = () => enterApp();
-
-          // Safety fallback timeout
-          // ถ้าไฟล์ Startup ยาวเกินไป หรือไม่มีไฟล์ ให้เข้าแอพใน 3 วินาที
-          // ถ้ามีไฟล์มันจะเข้าเมื่อจบเพลง (onended)
-          /* setTimeout(() => {
-                 if(!isEngineHot) enterApp();
-            }, 3000); */
         } catch (e) {
           console.error("Audio unlock failed:", e);
           enterApp();
@@ -763,6 +767,11 @@
           isEngineHot = true;
           $("#engine-status").style.backgroundColor = "#00ff00";
           $("#engine-status").style.boxShadow = "0 0 4px #0f0";
+
+          // Ensure loop is playing for background support
+          if (audioLoop.paused) {
+            audioLoop.play().catch((e) => {});
+          }
         } catch (e) {
           console.error(e);
         }
@@ -1161,6 +1170,21 @@
 
       function draw() {
         requestAnimationFrame(draw);
+
+        // --- UPDATE LOCK SCREEN PROGRESS ---
+        if ("mediaSession" in navigator && stretch && controlValues.active) {
+          try {
+            navigator.mediaSession.setPositionState({
+              duration: audioDuration || 0,
+              playbackRate: controlValues.rate || 1,
+              position: stretch.inputTime || 0,
+            });
+          } catch (error) {
+            // Ignore errors (browser support)
+          }
+        }
+        // -----------------------------------
+
         if (stretch && !holding) {
           const pb = $("#playback");
           pb.max = audioDuration;
