@@ -215,7 +215,7 @@
       }
       .eq-thumb {
         height: 10px;
-        width: 20px;
+        width: 17px;
         background: #c0c0c0;
         border: 1px solid #000;
         border-top: 1px solid #fff;
@@ -487,13 +487,13 @@
           >
             <span>EQUALIZER</span><i class="ph-bold ph-caret-down"></i>
           </div>
-          <div id="eq-body" class="p-2 flex gap-2 h-[160px]">
+          <div id="eq-body" class="p-2 flex gap-1 h-[160px]">
             <div
-              class="w-[85px] flex flex-col justify-between py-1 pr-1 border-r border-gray-600"
+              class="w-[85px] flex flex-col justify-between pr-2 border-r border-gray-600"
             >
               <select
                 id="eq-preset-select"
-                class="w-full text-[9px] bg-black theme-text-main border border-gray-500 outline-none mb-2 h-4"
+                class="w-full text-[9px] bg-black theme-text-main border border-gray-500 outline-none h-4"
               >
                 <option value="flat">Flat</option>
                 <option value="rock">Rock</option>
@@ -502,18 +502,20 @@
                 <option value="fullbass">Bass</option>
                 <option value="custom">Manual</option>
               </select>
-              <div class="space-y-[2px]">
-                <div class="flex justify-between items-center mb-1 w-full">
+              <div class="">
+                <div class="flex justify-between items-center w-full">
                   <a
                     href="https://github.com/signalsmith-audio/signalsmith-stretch"
                     target="_blank"
-                    class="bg-btn-face text-black px-1 py-0.5 no-underline flex items-center justify-center gap-1 w-full"
+                    class="bg-btn-face text-black px-[1px] py-[1px] no-underline flex items-center justify-center gap-1 w-full"
                   >
-                    <i class="ph-bold ph-github-logo text-[11px]"></i>
-                    <span class="text-[7px]"> Signalsmith Lib </span>
+                    <i class="ph-bold ph-github-logo text-[10px]"></i>
+                    <span class="text-[6px]"> Signalsmith Lib </span>
                   </a>
                 </div>
-                <div class="flex justify-between text-[8px] text-gray-400">
+                <div
+                  class="flex justify-between text-[8px] text-gray-400 -mb-2"
+                >
                   <span>PITCH</span
                   ><span id="val-pitch" class="theme-text-sec">0</span>
                 </div>
@@ -528,8 +530,10 @@
                   data-tooltip-type="val"
                 />
               </div>
-              <div class="space-y-[2px]">
-                <div class="flex justify-between text-[8px] text-gray-400">
+              <div class="">
+                <div
+                  class="flex justify-between text-[8px] text-gray-400 -mb-2"
+                >
                   <span>SPEED</span
                   ><span id="val-rate" class="theme-text-sec">1.0</span>
                 </div>
@@ -544,11 +548,35 @@
                   data-tooltip-type="x"
                 />
               </div>
+              <div class="">
+                <div
+                  class="flex justify-between text-[8px] text-gray-400 -mb-2"
+                >
+                  <span>REVERB</span
+                  ><span id="val-reverb" class="theme-text-sec">1.0</span>
+                </div>
+                <input
+                  type="range"
+                  data-key="reverb"
+                  min="0.5"
+                  max="2"
+                  step="0.05"
+                  value="0"
+                  class="w-full h-1 bg-gray-600"
+                  data-tooltip-type="x"
+                />
+              </div>
             </div>
             <div class="flex-1 flex flex-col relative">
               <div
-                class="flex items-center gap-2 mb-2 h-[35px] border border-gray-600 bg-black p-[2px]"
+                class="flex items-center mb-2 h-[35px] border border-gray-600 bg-black p-[2px]"
               >
+                <canvas
+                  id="eq-graph"
+                  class="flex-1 h-full bg-[#111] border border-gray-800"
+                  width="180"
+                  height="30"
+                ></canvas>
                 <button
                   id="btn-eq-toggle"
                   class="win-btn h-full w-12 text-[9px] flex flex-col gap-0 leading-none"
@@ -556,12 +584,6 @@
                   <span>EQ</span
                   ><span id="txt-eq-status" class="text-[7px]">ON</span>
                 </button>
-                <canvas
-                  id="eq-graph"
-                  class="flex-1 h-full bg-[#111] border border-gray-800"
-                  width="180"
-                  height="30"
-                ></canvas>
               </div>
               <div
                 class="flex-1 flex gap-1 pb-1 px-1 bg-black border border-gray-600 shadow-inner relative"
@@ -1681,7 +1703,8 @@
             const d = document.createElement("div");
             if (selectedIndices.has(i)) d.classList.add("theme-highlight-bg");
             else d.className += " theme-text-main hover:bg-[#222]";
-            let textClass = i === currentTrackIndex ? "font-bold text-white" : "";
+            let textClass =
+              i === currentTrackIndex ? "font-bold text-white" : "";
             d.className += ` cursor-pointer px-1 flex justify-between select-none ${textClass}`;
             d.draggable = true;
             d.innerHTML = `<div class="flex truncate w-full pointer-events-none"><span class="w-6 text-right mr-2 flex-shrink-0">${
