@@ -2,8 +2,10 @@
 <html lang="th">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>Nextamp Player – เครื่องมือปรับแต่งเสียงเพลงออนไลน์</title>
     <meta
       name="description"
@@ -54,6 +56,19 @@
       property="twitter:image"
       content="https://next-amp-player.vercel.app/assets/post/image.png"
     />
+
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Nextamp" />
+    <link
+      rel="apple-touch-icon"
+      href="https://next-amp-player.vercel.app/assets/logo/logo.png"
+    />
+
+    <meta name="theme-color" content="#000080" />
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link
@@ -162,6 +177,7 @@
       }
     </style>
   </head>
+
   <body class="flex flex-col min-h-screen">
     <nav
       class="w-full py-4 px-6 flex justify-between items-center border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-50"
@@ -574,6 +590,19 @@
           btn.classList.remove("opacity-80", "cursor-wait");
           btn.disabled = false;
         }
+      }
+    </script>
+
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("./sw.js")
+            .then((reg) => console.log("Service Worker registered", reg))
+            .catch((err) =>
+              console.log("Service Worker registration failed", err)
+            );
+        });
       }
     </script>
   </body>

@@ -1,15 +1,18 @@
 {
   "name": "Nextamp Player",
   "short_name": "Nextamp",
-  "start_url": "./index.html",
+  "description": "Nextamp – โปรแกรมเล่นเพลงผ่านเว็บไซต์ ปรับ Pitch, Speed และ EQ ได้ทันที",
+  "start_url": "index.html",
   "display": "standalone",
-  "background_color": "#111111",
+  "background_color": "#050505",
   "theme_color": "#000080",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "https://next-amp-player.vercel.app/assets/logo/logo.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
