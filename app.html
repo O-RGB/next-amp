@@ -1008,15 +1008,7 @@
                 $("#val-rate").textContent = val.toFixed(2);
                 controlsChanged();
                 saveSettings();
-              } 
-              // else if (el.dataset.key === "reverb") {
-              //   const val = parseFloat(el.value);
-              //   reverbGain.gain.value = val;
-              //   $("#val-reverb").textContent = val.toFixed(1);
-              //   controlsChanged();
-              //   saveSettings();
-              // } 
-              else if (el.dataset.key === "semitones") {
+              } else if (el.dataset.key === "semitones") {
                 controlValues.semitones = val;
                 $("#val-pitch").textContent = val;
                 controlsChanged();
@@ -1063,7 +1055,6 @@
           bal: $("#main-bal").value,
           rate: controlValues.rate,
           pitch: controlValues.semitones,
-          // reverb: controlValues.reverb,
           isShuffle: isShuffle,
           repeatMode: repeatMode,
           isEqOn: isEqOn,
@@ -1102,11 +1093,6 @@
           $('input[data-key="semitones"]').value = s.pitch;
           $("#val-pitch").textContent = s.pitch;
         }
-        // if (s.reverb) {
-        //   controlValues.reverb = parseFloat(s.reverb);
-        //   $('input[data-key="reverb"]').value = s.reverb;
-        //   $("#val-reverb").textContent = s.reverb;
-        // }
         if (s.isShuffle) {
           isShuffle = true;
           $("#tog-shuffle").classList.add("active");
