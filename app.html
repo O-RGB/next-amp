@@ -550,20 +550,29 @@
               </div>
               <div class="">
                 <div
-                  class="flex justify-between text-[8px] text-gray-400 -mb-2"
+                  class="flex justify-between items-center text-[8px] text-gray-400 -mb-2"
                 >
-                  <span>REVERB</span
-                  ><span id="val-reverb" class="theme-text-sec">1.0</span>
+                  <div class="flex items-center gap-1">
+                    <span>REVERB</span>
+                    <button
+                      id="btn-reverb-toggle"
+                      class="font-pixel text-[7px] leading-none border border-gray-600 px-1 py-[0.5px] bg-black hover:bg-gray-800 cursor-pointer text-gray-500 z-20"
+                    >
+                      OFF
+                    </button>
+                  </div>
+                  <span id="val-reverb" class="theme-text-sec">0.00</span>
                 </div>
                 <input
                   type="range"
+                  id="main-reverb"
                   data-key="reverb"
-                  min="0.5"
-                  max="2"
-                  step="0.05"
+                  min="0"
+                  max="1"
+                  step="0.01"
                   value="0"
                   class="w-full h-1 bg-gray-600"
-                  data-tooltip-type="x"
+                  data-tooltip-type="percent"
                 />
               </div>
             </div>
@@ -889,6 +898,11 @@
       };
       let currentTheme = { ...defaultTheme };
 
+      const audioContext = new AudioContext();
+      let reverbNode = audioContext.createConvolver();
+      let reverbGain = audioContext.createGain();
+      let isReverbOn = false;
+
       function applyThemeToDOM(t) {
         const r = document.documentElement;
         r.style.setProperty("--theme-window", t.window);
@@ -976,6 +990,7 @@
       const hideTooltip = () => {
         tooltip.style.display = "none";
       };
+
       function attachTooltips() {
         $$('input[type="range"]').forEach((el) => {
           el.oninput = (e) => {
@@ -1016,6 +1031,10 @@
                 $("#val-pitch").textContent = val;
                 controlsChanged();
                 saveSettings();
+              } else if (el.id === "main-reverb") {
+                reverbGain.gain.value = val;
+                $("#val-reverb").textContent = val.toFixed(2);
+                saveSettings();
               } else if (el.id === "playback" && stretch) {
                 stretch.schedule({ input: val, rate: 0 });
               }
@@ -1041,6 +1060,7 @@
           };
         });
       }
+
       window.addEventListener("mouseup", hideTooltip);
       window.addEventListener("touchend", hideTooltip);
       window.formatTime = (t) => {
@@ -1051,8 +1071,104 @@
           .padStart(2, "0")}`;
       };
 
+      function createImpulseResponse(
+        duration = 3.0,
+        decay = 2.0,
+        preDelay = 0.02
+      ) {
+        const sampleRate = audioContext.sampleRate;
+        const length = sampleRate * duration;
+        const impulse = audioContext.createBuffer(2, length, sampleRate);
+        const preDelaySamples = Math.floor(preDelay * sampleRate);
+
+        for (let ch = 0; ch < 2; ch++) {
+          const data = impulse.getChannelData(ch);
+
+          let lastOut = 0;
+          const alpha = 0.12;
+
+          for (let i = 0; i < length; i++) {
+            const white = Math.random() * 2 - 1;
+
+            lastOut = lastOut + alpha * (white - lastOut);
+            const noise = lastOut;
+
+            if (i < preDelaySamples) {
+              data[i] = 0;
+            } else {
+              const t = (i - preDelaySamples) / (length - preDelaySamples);
+
+              const envelope = Math.exp(-decay * t);
+
+              const wobble = 1 + 0.1 * Math.sin(t * 20);
+
+              data[i] = noise * envelope * wobble;
+            }
+          }
+
+          const reflections = [
+            { delay: 0.01, gain: 0.6 },
+            { delay: 0.03, gain: 0.4 },
+            { delay: 0.07, gain: 0.2 },
+            { delay: 0.12, gain: 0.1 },
+          ];
+
+          for (const ref of reflections) {
+            const delSamples = Math.floor(ref.delay * sampleRate);
+            const spread = 40;
+
+            if (delSamples < length) {
+              for (let k = 0; k < spread; k++) {
+                if (delSamples + k < length) {
+                  data[delSamples + k] +=
+                    (Math.random() * 2 - 1) * ref.gain * 0.1 * (1 - k / spread);
+                }
+              }
+            }
+          }
+        }
+
+        for (let ch = 0; ch < 2; ch++) {
+          const data = impulse.getChannelData(ch);
+          let maxPeak = 0;
+          for (let i = 0; i < length; i++)
+            maxPeak = Math.max(maxPeak, Math.abs(data[i]));
+          if (maxPeak > 0) {
+            for (let i = 0; i < length; i++) data[i] /= maxPeak;
+            for (let i = 0; i < length; i++) data[i] *= 0.8;
+          }
+        }
+
+        return impulse;
+      }
+      reverbNode.buffer = createImpulseResponse();
+
+      function updateReverbConnection() {
+        const btn = $("#btn-reverb-toggle");
+        try {
+          reverbNode.disconnect();
+        } catch (e) {}
+        try {
+          reverbGain.disconnect();
+        } catch (e) {}
+
+        if (isReverbOn && eqNodes.length > 0) {
+          const lastEqNode = eqNodes[eqNodes.length - 1];
+          lastEqNode.connect(reverbNode);
+          reverbNode.connect(reverbGain);
+          reverbGain.connect(analyser);
+
+          btn.textContent = "ON";
+          btn.classList.add("theme-text-main");
+          btn.classList.remove("text-gray-500");
+        } else {
+          btn.textContent = "OFF";
+          btn.classList.remove("theme-text-main");
+          btn.classList.add("text-gray-500");
+        }
+      }
+
       function saveSettings() {
-        // ดึงค่า Gains ปัจจุบันและอัปเดต Source of Truth
         const currentGains = Array.from(
           document.querySelectorAll("input[data-idx]")
         ).map((inp) => parseFloat(inp.value));
@@ -1071,6 +1187,8 @@
           eqPreset: $("#eq-preset-select").value,
           isMono: isMono,
           theme: currentTheme,
+          isReverbOn: isReverbOn,
+          reverbGain: $("#main-reverb").value,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
       }
@@ -1079,6 +1197,7 @@
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) {
           applyThemeToDOM(defaultTheme);
+          updateReverbConnection();
           return;
         }
         const s = JSON.parse(raw);
@@ -1120,14 +1239,20 @@
           applyThemeToDOM(defaultTheme);
         }
 
-        // โหลด EQ Gains และชื่อ Preset
+        if (s.isReverbOn !== undefined) isReverbOn = s.isReverbOn;
+        if (s.reverbGain !== undefined) {
+          $("#main-reverb").value = s.reverbGain;
+          reverbGain.gain.value = parseFloat(s.reverbGain);
+          $("#val-reverb").textContent = parseFloat(s.reverbGain).toFixed(2);
+        }
+
         window.savedEqGains = s.eqGains || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         if (s.eqPreset) {
           $("#eq-preset-select").value = s.eqPreset;
         }
+        updateReverbConnection();
       }
 
-      const audioContext = new AudioContext();
       let isEngineHot = false;
       const audioStartup = $("#audio-startup"),
         audioLoop = $("#audio-loop");
@@ -1225,7 +1350,6 @@
           f.frequency.value = freq;
           f.Q.value = 1.4;
 
-          // ดึงค่าจาก Source of Truth ใน Memory เสมอ
           let targetVal =
             window.savedEqGains && window.savedEqGains[i] !== undefined
               ? window.savedEqGains[i]
@@ -1262,6 +1386,9 @@
         const eqChain = initEQ();
         stretch.connect(eqChain.input);
         eqChain.output.connect(analyser);
+
+        updateReverbConnection();
+
         await stretch.addBuffers(channelBuffers);
         controlValues.active = true;
         controlsChanged();
@@ -1413,21 +1540,16 @@
       async function playTrack(idx) {
         if (!isEngineHot) await initAudioEngine();
         if (playDebounceTimer) clearTimeout(playDebounceTimer);
-
-        // ล็อคสถานะทันทีเพื่อป้องกันการข้ามรัวๆ
         isChangingTrack = true;
-
         let list = getCurrentDisplayList();
         if (idx < 0 || idx >= list.length) {
           isChangingTrack = false;
           return;
         }
-
         currentTrackIndex = idx;
         renderPlaylistUI();
         const t = list[idx];
         $("#marquee").textContent = `${idx + 1}. ${t.name} (Loading...)`;
-
         playDebounceTimer = setTimeout(async () => {
           checkAndResumeAudioContext();
           try {
@@ -1444,7 +1566,6 @@
       function handleNextTrack(auto = false) {
         let list = getCurrentDisplayList();
         if (list.length === 0) return;
-
         let next;
         if (auto && repeatMode === 2) {
           next = currentTrackIndex;
@@ -1457,15 +1578,12 @@
         } else {
           next = currentTrackIndex + 1;
         }
-
         if (next < list.length) {
           playTrack(next);
         } else {
           if (repeatMode === 1) {
-            // REP ALL
             playTrack(0);
           } else {
-            // จบ Playlist และไม่ได้ตั้ง Repeat ให้หยุดเล่น
             $("#btn-stop").click();
           }
         }
@@ -1538,7 +1656,6 @@
       });
 
       window.handleEqInput = (idx, val, el) => {
-        // เปลี่ยนเป็น Manual ทันทีที่ผู้ใช้ขยับ Slider
         if ($("#eq-preset-select").value !== "custom") {
           $("#eq-preset-select").value = "custom";
         }
@@ -1617,7 +1734,7 @@
             }
           });
           drawEQCurve();
-          saveSettings(); // บันทึกสถานะ Preset และ Gains ใหม่ทันที
+          saveSettings();
         }
       };
 
@@ -1659,8 +1776,6 @@
           const t = stretch.inputTime || 0;
           pb.value = t;
           $("#time-display").textContent = formatTime(t);
-
-          // ตรวจสอบจบเพลงใน draw เพื่อความแม่นยำ
           if (
             controlValues.active &&
             t >= audioDuration - 0.2 &&
@@ -1669,15 +1784,11 @@
             handleNextTrack(true);
           }
         }
-
         ctx.fillStyle = "#111";
         ctx.fillRect(0, 0, cvs.width, cvs.height);
-
         if (visualMode === 3) return;
-
         const bufferLength = analyser.frequencyBinCount,
           dataArray = new Uint8Array(bufferLength);
-
         if (visualMode === 0) {
           analyser.getByteFrequencyData(dataArray);
           const visualHeight = cvs.height * 0.7;
@@ -1784,7 +1895,6 @@
               d.classList.remove("drag-over");
               handleDragDrop(parseInt(e.dataTransfer.getData("text/plain")), i);
             };
-
             let lastTapTime = 0;
             d.ontouchend = (e) => {
               const currentTime = new Date().getTime();
@@ -1795,7 +1905,6 @@
               }
               lastTapTime = currentTime;
             };
-
             d.onclick = (e) => {
               e.stopPropagation();
               if (e.shiftKey && lastSelectedIndex !== -1) {
@@ -2049,6 +2158,12 @@
         if (audioContext.state === "suspended") await audioContext.resume();
         isMono = !isMono;
         updateMonoStereoState();
+        saveSettings();
+      };
+
+      $("#btn-reverb-toggle").onclick = () => {
+        isReverbOn = !isReverbOn;
+        updateReverbConnection();
         saveSettings();
       };
 
