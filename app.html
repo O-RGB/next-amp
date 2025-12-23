@@ -546,16 +546,8 @@
                 <div
                   class="flex justify-between text-[8px] text-gray-400 -mb-2"
                 >
-                  <span>REVERB</span>
-                  <div class="flex gap-2">
-                    <button
-                      id="btn-reverb-toggle"
-                      class="theme-text-main font-bold text-[7px] border border-gray-600 px-1 bg-black z-20"
-                    >
-                      ON
-                    </button>
-                    <span id="val-reverb" class="theme-text-sec">0.0</span>
-                  </div>
+                  <span>REVERB</span
+                  ><span id="val-reverb" class="theme-text-sec">0.0</span>
                 </div>
                 <input
                   type="range"
@@ -1061,39 +1053,6 @@
           .toString()
           .padStart(2, "0")}`;
       };
-
-      // ฟังก์ชันสลับการทำงาน Reverb เพื่อประหยัด CPU
-      const toggleReverb = () => {
-        isReverbOn = !isReverbOn;
-        const btn = $("#btn-reverb-toggle");
-        const reverbSlider = $('input[data-key="reverb"]');
-        const currentVal = parseFloat(reverbSlider.value);
-
-        if (isReverbOn) {
-          btn.textContent = "ON";
-          btn.classList.add("theme-text-main");
-          btn.classList.remove("text-gray-500");
-
-          // ทำการเชื่อมต่อสายสัญญาณใหม่ (Resume CPU usage)
-          eqNodes[eqNodes.length - 1].connect(reverbNode);
-          reverbGain.gain.value = currentVal;
-        } else {
-          btn.textContent = "OFF";
-          btn.classList.remove("theme-text-main");
-          btn.classList.add("text-gray-500");
-
-          // ตัดการเชื่อมต่อสายสัญญาณโดยสิ้นเชิง (Stop CPU usage 100%)
-          try {
-            eqNodes[eqNodes.length - 1].disconnect(reverbNode);
-          } catch (e) {
-            console.log("Reverb already disconnected");
-          }
-          reverbGain.gain.value = 0;
-        }
-        saveSettings();
-      };
-
-      $("#btn-reverb-toggle").onclick = toggleReverb;
 
       // STORAGE (EQ FIX: Read from sliders)
       function saveSettings() {
@@ -2053,7 +2012,6 @@
 
       let isShuffle = false,
         repeatMode = 0;
-      let isReverbOn = true;
       $("#tog-shuffle").onclick = function () {
         isShuffle = !isShuffle;
         this.classList.toggle("active", isShuffle);
@@ -2148,14 +2106,6 @@
       };
       $("#main-bal").oninput = (e) => {
         pannerNode.pan.value = parseFloat(e.target.value);
-        saveSettings();
-      };
-      $('[data-key="reverb"]').oninput = (e) => {
-        const val = parseFloat(e.target.value);
-        if (isReverbOn) {
-          reverbGain.gain.value = val;
-        }
-        $("#val-reverb").textContent = val.toFixed(1);
         saveSettings();
       };
       $('[data-key="rate"]').oninput = (e) => {
