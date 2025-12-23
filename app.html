@@ -1073,17 +1073,26 @@
           btn.textContent = "ON";
           btn.classList.add("theme-text-main");
           btn.classList.remove("text-gray-500");
-          reverbGain.gain.value = currentVal; // คืนค่าความก้องตามที่ตั้งไว้ใน Slider
+
+          // ทำการเชื่อมต่อสายสัญญาณใหม่ (Resume CPU usage)
+          eqNodes[eqNodes.length - 1].connect(reverbNode);
+          reverbGain.gain.value = currentVal;
         } else {
           btn.textContent = "OFF";
           btn.classList.remove("theme-text-main");
           btn.classList.add("text-gray-500");
-          reverbGain.gain.value = 0; // ปรับ Gain เป็น 0 ทันทีเพื่อหยุดการประมวลผลเสียงก้อง
+
+          // ตัดการเชื่อมต่อสายสัญญาณโดยสิ้นเชิง (Stop CPU usage 100%)
+          try {
+            eqNodes[eqNodes.length - 1].disconnect(reverbNode);
+          } catch (e) {
+            console.log("Reverb already disconnected");
+          }
+          reverbGain.gain.value = 0;
         }
         saveSettings();
       };
 
-      // เชื่อมปุ่มกับฟังก์ชัน
       $("#btn-reverb-toggle").onclick = toggleReverb;
 
       // STORAGE (EQ FIX: Read from sliders)
