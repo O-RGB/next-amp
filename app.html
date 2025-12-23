@@ -1076,7 +1076,7 @@
         // Load Audio
         $("#set-audio-sr").value = savedSettings.audioSampleRate || 'default';
         $("#set-audio-latency").value = savedSettings.audioLatency || 'interactive';
-        $("#set-rev-gain-sl").value = savedSettings.reverbGain || 0;
+        // $("#set-rev-gain-sl").value = savedSettings.reverbGain || 0;
         $("#disp-rev-gain").textContent = savedSettings.reverbGain || "0.0";
         
         previewTheme();
@@ -1121,7 +1121,7 @@
       window.saveAudioSettings = () => {
          savedSettings.audioSampleRate = $("#set-audio-sr").value;
          savedSettings.audioLatency = $("#set-audio-latency").value;
-         savedSettings.reverbGain = $("#set-rev-gain-sl").value;
+        //  savedSettings.reverbGain = $("#set-rev-gain-sl").value;
          
          // Only save these specific keys to localStorage immediately
          localStorage.setItem(STORAGE_KEY, JSON.stringify(savedSettings));
