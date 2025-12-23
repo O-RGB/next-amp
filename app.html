@@ -1338,14 +1338,7 @@
         stretch = await SignalsmithStretch(audioContext);
         const eqChain = initEQ();
         stretch.connect(eqChain.input);
-        // แบ่งสัญญาณ:
-        // 1. ส่งไป EQ ปกติ (Dry)
         eqChain.output.connect(analyser);
-
-        // 2. ส่งไป Reverb (Wet)
-        eqChain.output.connect(reverbNode);
-        reverbNode.connect(reverbGain);
-        reverbGain.connect(analyser); // รวมกลับไปที่ Analyser
         await stretch.addBuffers(channelBuffers);
         controlValues.active = true;
         controlsChanged();
