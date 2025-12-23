@@ -4,8 +4,8 @@
   "description": "Nextamp – โปรแกรมเล่นเพลงผ่านเว็บไซต์ ปรับ Pitch, Speed และ EQ ได้ทันที",
   "start_url": "index.html",
   "display": "standalone",
-  "background_color": "#050505",
-  "theme_color": "#000080",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "orientation": "portrait",
   "icons": [
     {
