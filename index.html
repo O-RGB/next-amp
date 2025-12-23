@@ -529,60 +529,51 @@
 
         // Loading State
         btn.innerHTML = `
-          <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          LOADING...
-        `;
+      <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+        </path>
+      </svg>
+      LOADING...
+    `;
         btn.classList.add("opacity-80", "cursor-wait");
         btn.disabled = true;
 
         try {
-          // 1. Audio Context Trigger (User Gesture)
-          const audio = new Audio("assets/sounds/allow-sound.mp3");
-          audio.volume = 0.01;
-          await audio
-            .play()
-            .catch((e) => console.log("Audio trigger info:", e));
-
-          // 2. Fetch App Content
+          // โหลด app.html
           const response = await fetch("app.html");
           if (!response.ok) throw new Error("Failed to load application");
           const html = await response.text();
 
-          // 3. Fade Out Transition
+          // Fade out
           document.body.style.transition = "opacity 0.5s";
           document.body.style.opacity = "0";
 
           setTimeout(() => {
-            // 4. Parse and Inject
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, "text/html");
 
             document.title = doc.title;
             document.body.innerHTML = doc.body.innerHTML;
             document.body.className = doc.body.className;
-            document.body.style = ""; // Reset inline styles
+            document.body.style = "";
 
-            // 5. Transfer Styles
-            const newStyles = doc.querySelectorAll("style");
-            newStyles.forEach((style) =>
-              document.head.appendChild(style.cloneNode(true))
-            );
+            // copy <style>
+            doc.querySelectorAll("style").forEach((style) => {
+              document.head.appendChild(style.cloneNode(true));
+            });
 
-            // 6. Execute Scripts
-            const oldScripts = doc.querySelectorAll("script");
-            for (let oldScript of oldScripts) {
+            // execute <script>
+            doc.querySelectorAll("script").forEach((oldScript) => {
               const newScript = document.createElement("script");
               Array.from(oldScript.attributes).forEach((attr) =>
                 newScript.setAttribute(attr.name, attr.value)
               );
-              if (oldScript.innerHTML)
-                newScript.innerHTML = oldScript.innerHTML;
+              newScript.textContent = oldScript.textContent;
               document.body.appendChild(newScript);
-            }
-          }, 500); // รอ Fade out จบ
+            });
+          }, 500);
         } catch (error) {
           console.error(error);
           alert("Error loading Nextamp. Please refresh.");
@@ -593,7 +584,7 @@
       }
     </script>
 
-    <script>
+    <!-- <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
           navigator.serviceWorker
@@ -604,6 +595,6 @@
             );
         });
       }
-    </script>
+    </script> -->
   </body>
 </html>

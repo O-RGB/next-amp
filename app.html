@@ -334,6 +334,12 @@
                   00:00
                 </div>
 
+                <!-- <div
+                  class="absolute bottom-0.5 left-0.5 font-pixel theme-text-sec text-[8px] leading-none z-30 opacity-80"
+                >
+                  ● READY
+                </div> -->
+
                 <div
                   class="absolute top-0.5 left-0.5 font-pixel theme-text-main text-[5px] z-30 opacity-70 pointer-events-none"
                 >
@@ -342,7 +348,7 @@
 
                 <canvas
                   id="visualizer"
-                  class="w-full h-full absolute bottom-0 left-0 block"
+                  class="w-full h-full absolute top-0 left-0 block"
                 ></canvas>
               </div>
 
@@ -542,24 +548,24 @@
                   data-tooltip-type="x"
                 />
               </div>
-              <!-- <div class="">
+              <div class="">
                 <div
                   class="flex justify-between text-[8px] text-gray-400 -mb-2"
                 >
                   <span>REVERB</span
-                  ><span id="val-reverb" class="theme-text-sec">0.0</span>
+                  ><span id="val-reverb" class="theme-text-sec">1.0</span>
                 </div>
                 <input
                   type="range"
                   data-key="reverb"
-                  min="0"
-                  max="5"
+                  min="0.5"
+                  max="2"
                   step="0.05"
                   value="0"
                   class="w-full h-1 bg-gray-600"
                   data-tooltip-type="x"
                 />
-              </div> -->
+              </div>
             </div>
             <div class="flex-1 flex flex-col relative">
               <div
@@ -894,7 +900,6 @@
         r.style.setProperty("--eq-col-3", t.eq3);
       }
 
-      // MODALS
       window.customAlert = (msg) => {
         $("#modal-generic-msg").textContent = msg;
         const btns = $("#modal-generic-btns");
@@ -929,7 +934,6 @@
         $("#modal-generic").classList.remove("hidden");
       };
 
-      // SETTINGS UI
       window.openSettingsModal = () => {
         $("#modal-settings").classList.remove("hidden");
         $("#set-theme-window").value = currentTheme.window;
@@ -968,7 +972,6 @@
         closeSettingsModal();
       };
 
-      // TOOLTIPS
       const tooltip = $("#slider-tooltip");
       const hideTooltip = () => {
         tooltip.style.display = "none";
@@ -1048,8 +1051,13 @@
           .padStart(2, "0")}`;
       };
 
-      // STORAGE (EQ FIX: Read from sliders)
       function saveSettings() {
+        // ดึงค่า Gains ปัจจุบันและอัปเดต Source of Truth
+        const currentGains = Array.from(
+          document.querySelectorAll("input[data-idx]")
+        ).map((inp) => parseFloat(inp.value));
+        window.savedEqGains = currentGains;
+
         const settings = {
           vol: $("#main-vol").value,
           bal: $("#main-bal").value,
@@ -1059,14 +1067,14 @@
           repeatMode: repeatMode,
           isEqOn: isEqOn,
           playlistId: currentPlaylistId,
-          eqGains: Array.from(document.querySelectorAll("input[data-idx]")).map(
-            (inp) => parseFloat(inp.value)
-          ),
+          eqGains: currentGains,
+          eqPreset: $("#eq-preset-select").value,
           isMono: isMono,
           theme: currentTheme,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
       }
+
       function loadSettings() {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) {
@@ -1111,10 +1119,14 @@
         } else {
           applyThemeToDOM(defaultTheme);
         }
-        window.savedEqGains = s.eqGains || [];
+
+        // โหลด EQ Gains และชื่อ Preset
+        window.savedEqGains = s.eqGains || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        if (s.eqPreset) {
+          $("#eq-preset-select").value = s.eqPreset;
+        }
       }
 
-      // AUDIO ENGINE
       const audioContext = new AudioContext();
       let isEngineHot = false;
       const audioStartup = $("#audio-startup"),
@@ -1122,7 +1134,6 @@
       const loopSource = audioContext.createMediaElementSource(audioLoop);
       loopSource.connect(audioContext.destination);
 
-      // AUTO INIT ON FIRST CLICK
       const initAudioEngine = async () => {
         if (isEngineHot) return;
         try {
@@ -1133,7 +1144,6 @@
           await audioStartup.play();
           audioLoop.play().catch((e) => {});
 
-          // Visual Cue: Change Engine Status to Green
           $("#engine-status").style.backgroundColor = "#00ff00";
           $("#engine-status").style.boxShadow = "0 0 4px #0f0";
           $("#marquee").textContent = "Ready.";
@@ -1142,7 +1152,6 @@
         }
       };
 
-      // Listen for the first click anywhere to start the engine
       document.addEventListener("click", initAudioEngine, { once: true });
       document.addEventListener("touchstart", initAudioEngine, { once: true });
 
@@ -1166,7 +1175,6 @@
       let masterGainNode = audioContext.createGain(),
         pannerNode = audioContext.createStereoPanner();
 
-      // DUAL PATH MONO/STEREO
       let stereoPath = audioContext.createGain();
       let monoPath = audioContext.createGain();
 
@@ -1187,7 +1195,7 @@
       pannerNode.connect(masterGainNode);
       masterGainNode.connect(audioContext.destination);
       masterGainNode.gain.value = 0.8;
-      analyser.fftSize = 256;
+      analyser.fftSize = 64;
 
       const FREQUENCIES = [
         60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000,
@@ -1202,7 +1210,6 @@
       let controlValues = { active: false, rate: 1, semitones: 0 },
         isEqOn = true;
 
-      // FIXED EQ INIT
       function initEQ() {
         eqNodes.forEach((n) => {
           try {
@@ -1218,17 +1225,13 @@
           f.frequency.value = freq;
           f.Q.value = 1.4;
 
-          const slider = document.querySelector(`input[data-idx="${i}"]`);
-          let targetVal = 0;
-          if (slider) {
-            targetVal = parseFloat(slider.value);
-          } else {
-            targetVal =
-              window.savedEqGains && window.savedEqGains[i] !== undefined
-                ? window.savedEqGains[i]
-                : 0;
-          }
+          // ดึงค่าจาก Source of Truth ใน Memory เสมอ
+          let targetVal =
+            window.savedEqGains && window.savedEqGains[i] !== undefined
+              ? window.savedEqGains[i]
+              : 0;
 
+          const slider = document.querySelector(`input[data-idx="${i}"]`);
           if (slider) {
             slider.value = targetVal;
             updateThumb(slider, `thumb-${i}`);
@@ -1243,85 +1246,8 @@
         return { input: first, output: prev };
       }
 
-      // function createImpulseResponse(
-      //   duration = 4.5, // เพิ่มความยาวให้ก้องนานขึ้น
-      //   decay = 2.2, // ลด decay ให้เสียงค่อย ๆ จางช้าขึ้น
-      //   preDelay = 0.035 // เพิ่ม pre-delay เล็กน้อย
-      // ) {
-      //   const sampleRate = audioContext.sampleRate;
-      //   const length = sampleRate * duration;
-      //   const impulse = audioContext.createBuffer(2, length, sampleRate);
-
-      //   const preDelaySamples = Math.floor(preDelay * sampleRate);
-
-      //   for (let ch = 0; ch < 2; ch++) {
-      //     const data = impulse.getChannelData(ch);
-
-      //     for (let i = 0; i < length; i++) {
-      //       const t = i / length;
-
-      //       // ปรับ envelope curve ให้นุ่มนวลขึ้น
-      //       const envelope = Math.exp(-decay * t);
-
-      //       let noise = Math.random() * 2 - 1;
-
-      //       // เพิ่มการกรองความถี่สูงให้นุ่มนวลมากขึ้น
-      //       const hfDamping = Math.pow(1 - t * 0.7, 3);
-
-      //       // เพิ่ม low-pass filter effect
-      //       const warmth = 1 - t * 0.3;
-
-      //       data[i] = noise * envelope * hfDamping * warmth;
-      //     }
-
-      //     // เพิ่ม early reflections ที่มีลักษณะธรรมชาติมากขึ้น
-      //     const reflections = [
-      //       { delay: 0.025, gain: 0.5 },
-      //       { delay: 0.045, gain: 0.42 },
-      //       { delay: 0.068, gain: 0.35 },
-      //       { delay: 0.095, gain: 0.28 },
-      //       { delay: 0.125, gain: 0.22 },
-      //       { delay: 0.16, gain: 0.18 },
-      //       { delay: 0.2, gain: 0.15 },
-      //       { delay: 0.245, gain: 0.12 },
-      //     ];
-
-      //     for (const ref of reflections) {
-      //       const delaySamples = Math.floor(ref.delay * sampleRate);
-      //       if (delaySamples < length) {
-      //         // สร้างเสียงสะท้อนที่นุ่มนวล
-      //         for (let i = 0; i < 50; i++) {
-      //           const idx = delaySamples + i;
-      //           if (idx < length) {
-      //             const diffusion = (Math.random() * 2 - 1) * ref.gain;
-      //             const fade = 1 - i / 50;
-      //             data[idx] += diffusion * fade;
-      //           }
-      //         }
-      //       }
-      //     }
-      //   }
-
-      //   return impulse; 
-      // }
-
-      // async function loadReverbImpulse(url) {
-      //   try {
-      //     const response = await fetch(url);
-      //     const arrayBuffer = await response.arrayBuffer();
-      //     const impulseBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      //     reverbNode.buffer = impulseBuffer;
-      //     console.log("Reverb impulse loaded successfully!");
-      //   } catch (e) {
-      //     console.error("Failed to load reverb impulse:", e);
-      //   }
-      // }
-
-      // reverbNode.buffer = createImpulseResponse(4, 3);
-      // loadReverbImpulse("assets/sounds/hall.wav");
-
       async function loadAudioEngine(arrayBuffer, trackObj) {
-        if (!isEngineHot) await initAudioEngine(); // Ensure engine is hot
+        if (!isEngineHot) await initAudioEngine();
         checkAndResumeAudioContext();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         audioDuration = audioBuffer.duration;
@@ -1352,7 +1278,9 @@
           $("#info-bitrate").textContent = "N/A";
         }
         attachTooltips();
+        drawEQCurve();
       }
+
       function controlsChanged(scheduleAhead) {
         $("#btn-play").classList.toggle("pressed", controlValues.active);
         if (stretch) {
@@ -1364,6 +1292,7 @@
         }
         updatePositionState();
       }
+
       function updateMediaSession(trackName) {
         if ("mediaSession" in navigator) {
           navigator.mediaSession.metadata = new MediaMetadata({
@@ -1398,6 +1327,7 @@
           updatePositionState();
         }
       }
+
       function updatePositionState() {
         if ("mediaSession" in navigator && stretch) {
           try {
@@ -1481,16 +1411,24 @@
       }
 
       async function playTrack(idx) {
-        if (!isEngineHot) await initAudioEngine(); // Force init if first track play
+        if (!isEngineHot) await initAudioEngine();
         if (playDebounceTimer) clearTimeout(playDebounceTimer);
+
+        // ล็อคสถานะทันทีเพื่อป้องกันการข้ามรัวๆ
+        isChangingTrack = true;
+
         let list = getCurrentDisplayList();
-        if (idx < 0 || idx >= list.length) return;
+        if (idx < 0 || idx >= list.length) {
+          isChangingTrack = false;
+          return;
+        }
+
         currentTrackIndex = idx;
         renderPlaylistUI();
         const t = list[idx];
         $("#marquee").textContent = `${idx + 1}. ${t.name} (Loading...)`;
+
         playDebounceTimer = setTimeout(async () => {
-          isChangingTrack = true;
           checkAndResumeAudioContext();
           try {
             const buf = await t.blob.arrayBuffer();
@@ -1502,22 +1440,37 @@
           }
         }, 200);
       }
+
       function handleNextTrack(auto = false) {
         let list = getCurrentDisplayList();
         if (list.length === 0) return;
+
         let next;
-        if (auto && repeatMode === 2) next = currentTrackIndex;
-        else if (isShuffle) {
+        if (auto && repeatMode === 2) {
+          next = currentTrackIndex;
+        } else if (isShuffle) {
           if (list.length > 1) {
             do {
               next = Math.floor(Math.random() * list.length);
             } while (next === currentTrackIndex);
           } else next = 0;
-        } else next = currentTrackIndex + 1;
-        if (next < list.length) playTrack(next);
-        else if (repeatMode === 1) playTrack(0);
-        else if (!auto) playTrack(0);
+        } else {
+          next = currentTrackIndex + 1;
+        }
+
+        if (next < list.length) {
+          playTrack(next);
+        } else {
+          if (repeatMode === 1) {
+            // REP ALL
+            playTrack(0);
+          } else {
+            // จบ Playlist และไม่ได้ตั้ง Repeat ให้หยุดเล่น
+            $("#btn-stop").click();
+          }
+        }
       }
+
       function handlePrevTrack() {
         let list = getCurrentDisplayList();
         if (list.length === 0) return;
@@ -1527,6 +1480,7 @@
         if (prev < 0) prev = repeatMode === 1 ? list.length - 1 : 0;
         playTrack(prev);
       }
+
       $("#btn-play").onclick = async () => {
         if (!isEngineHot) await initAudioEngine();
         checkAndResumeAudioContext();
@@ -1549,6 +1503,7 @@
         $("#time-display").textContent = "00:00";
         $("#btn-play").classList.remove("pressed");
         $("#marquee").textContent = "Stopped.";
+        isChangingTrack = false;
         updatePositionState();
       };
       $("#btn-next").onclick = () => handleNextTrack(false);
@@ -1557,6 +1512,7 @@
       const eqContainer = $("#eq-container"),
         eqCanvas = $("#eq-graph"),
         eqCtx = eqCanvas.getContext("2d");
+
       $("#btn-eq-toggle").onclick = () => {
         isEqOn = !isEqOn;
         $("#txt-eq-status").textContent = isEqOn ? "ON" : "OFF";
@@ -1564,6 +1520,7 @@
         $$("input[data-idx]").forEach((inp, i) => updateEqBand(i, inp.value));
         saveSettings();
       };
+
       FREQUENCIES.forEach((f, i) => {
         const div = document.createElement("div");
         div.className =
@@ -1579,28 +1536,37 @@
         };
         eqContainer.appendChild(div);
       });
+
       window.handleEqInput = (idx, val, el) => {
-        if (isEqOn && $("#eq-preset-select").value !== "custom")
+        // เปลี่ยนเป็น Manual ทันทีที่ผู้ใช้ขยับ Slider
+        if ($("#eq-preset-select").value !== "custom") {
           $("#eq-preset-select").value = "custom";
+        }
         updateEqBand(idx, val);
         updateThumb(el, `thumb-${idx}`);
       };
+
       window.updateThumb = (input, thumbId) => {
         const min = parseFloat(input.min),
           max = parseFloat(input.max),
           val = parseFloat(input.value),
           percent = ((val - min) / (max - min)) * 100;
-        $(`#${thumbId}`).style.top = `${100 - percent}%`;
+        const thumb = $(`#${thumbId}`);
+        if (thumb) thumb.style.top = `${100 - percent}%`;
       };
+
       window.updateEqBand = (idx, val) => {
         if (eqNodes[idx])
           eqNodes[idx].gain.value = isEqOn ? parseFloat(val) : 0;
         const bg = $(`#eq-bg-${idx}`);
-        if (isEqOn) bg.classList.add("eq-bar-active");
-        else bg.classList.remove("eq-bar-active");
+        if (bg) {
+          if (isEqOn) bg.classList.add("eq-bar-active");
+          else bg.classList.remove("eq-bar-active");
+        }
         drawEQCurve();
         saveSettings();
       };
+
       function drawEQCurve() {
         eqCtx.clearRect(0, 0, eqCanvas.width, eqCanvas.height);
         eqCtx.strokeStyle = "#333";
@@ -1638,15 +1604,21 @@
         );
         eqCtx.stroke();
       }
+
       $("#eq-preset-select").onchange = (e) => {
         const val = e.target.value;
-        if (PRESETS[val])
+        if (PRESETS[val]) {
           PRESETS[val].forEach((v, i) => {
             const inp = $(`input[data-idx="${i}"]`);
-            inp.value = v;
-            updateThumb(inp, `thumb-${i}`);
-            updateEqBand(i, v);
+            if (inp) {
+              inp.value = v;
+              updateThumb(inp, `thumb-${i}`);
+              if (eqNodes[i]) eqNodes[i].gain.value = isEqOn ? v : 0;
+            }
           });
+          drawEQCurve();
+          saveSettings(); // บันทึกสถานะ Preset และ Gains ใหม่ทันที
+        }
       };
 
       const cvs = $("#visualizer"),
@@ -1656,12 +1628,11 @@
 
       $("#visualizer-container").onclick = () => {
         visualMode = (visualMode + 1) % 4;
-
         const indicator = $("#v-status-indicator");
         indicator.textContent = `${visualModeNames[visualMode]}`;
-
         indicator.style.opacity = visualMode === 3 ? "0.5" : "1";
       };
+
       function resizeCvs() {
         const r = cvs.parentElement.getBoundingClientRect();
         cvs.width = r.width;
@@ -1671,10 +1642,13 @@
       setTimeout(resizeCvs, 500);
 
       let lastUpdateTime = 0;
+      let lastFrameTime = 0;
+      const targetFPS = 60;
 
       function draw(time) {
         requestAnimationFrame(draw);
-
+        if (time - lastFrameTime < 1000 / targetFPS) return;
+        lastFrameTime = time;
         if (time - lastUpdateTime > 1000) {
           updatePositionState();
           lastUpdateTime = time;
@@ -1685,12 +1659,15 @@
           const t = stretch.inputTime || 0;
           pb.value = t;
           $("#time-display").textContent = formatTime(t);
+
+          // ตรวจสอบจบเพลงใน draw เพื่อความแม่นยำ
           if (
             controlValues.active &&
             t >= audioDuration - 0.2 &&
             !isChangingTrack
-          )
+          ) {
             handleNextTrack(true);
+          }
         }
 
         ctx.fillStyle = "#111";
@@ -1702,113 +1679,40 @@
           dataArray = new Uint8Array(bufferLength);
 
         if (visualMode === 0) {
-          // analyser.getByteFrequencyData(dataArray);
-
-          // const barCount = 18;
-          // const step = Math.floor(bufferLength / barCount);
-
-          // const padding = {
-          //   top: 4,
-          //   bottom: 4,
-          //   left: 4,
-          //   right: 4,
-          // };
-
-          // const drawWidth = cvs.width - padding.left - padding.right;
-          // const drawHeight = cvs.height - padding.top - padding.bottom;
-
-          // const barWidth = drawWidth / barCount;
-
-          // if (!window.peaks) window.peaks = new Array(barCount).fill(0);
-          // if (!window.peakHoldFrames)
-          //   window.peakHoldFrames = new Array(barCount).fill(0);
-
-          // const holdFrames = 80;
-          // const displayScale = 0.7;
-          // const minBarHeight = 3;
-
-          // for (let i = 0; i < barCount; i++) {
-          //   const x = padding.left + i * barWidth;
-
-          //   let sum = 0;
-          //   for (let j = 0; j < step; j++) {
-          //     sum += dataArray[i * step + j];
-          //   }
-
-          //   const average = sum / step;
-
-          //   const rawHeight = (average / 255) * drawHeight;
-          //   let displayHeight = rawHeight * displayScale;
-
-          //   // ===== baseline "_" ตอนเงียบ =====
-          //   if (displayHeight < minBarHeight) {
-          //     displayHeight = minBarHeight;
-          //   }
-
-          //   const y = padding.top + drawHeight - displayHeight;
-
-          //   let gradient = ctx.createLinearGradient(
-          //     0,
-          //     padding.top + drawHeight,
-          //     0,
-          //     padding.top
-          //   );
-          //   gradient.addColorStop(0, currentTheme.eq1);
-          //   gradient.addColorStop(0.6, currentTheme.eq2);
-          //   gradient.addColorStop(1, currentTheme.eq3);
-
-          //   ctx.fillStyle = gradient;
-          //   ctx.fillRect(x, y, barWidth - 1, displayHeight);
-
-          //   // ===== peak (ใช้ raw height จริง) =====
-          //   if (rawHeight >= window.peaks[i]) {
-          //     window.peaks[i] = rawHeight;
-          //     window.peakHoldFrames[i] = holdFrames;
-          //   } else {
-          //     if (window.peakHoldFrames[i] > 0) {
-          //       window.peakHoldFrames[i]--;
-          //     } else {
-          //       window.peaks[i] -= 1.2;
-          //     }
-          //   }
-
-          //   const displayPeak = window.peaks[i] * displayScale;
-
-          //   if (displayPeak > 0) {
-          //     ctx.fillStyle = "#FFFFFF";
-          //     ctx.fillRect(
-          //       x,
-          //       padding.top + drawHeight - displayPeak - 2,
-          //       barWidth - 1,
-          //       2
-          //     );
-          //   }
-          // }
-
           analyser.getByteFrequencyData(dataArray);
-          let gradient = ctx.createLinearGradient(0, cvs.height, 0, 0);
+          const visualHeight = cvs.height * 0.7;
+          const baseY = cvs.height;
+          const barWidth = (cvs.width / bufferLength) * 2.5;
+          const gradient = ctx.createLinearGradient(
+            0,
+            baseY,
+            0,
+            baseY - visualHeight
+          );
           gradient.addColorStop(0, currentTheme.eq1);
           gradient.addColorStop(0.6, currentTheme.eq2);
           gradient.addColorStop(1, currentTheme.eq3);
           ctx.fillStyle = gradient;
-          const barWidth = (cvs.width / bufferLength) * 2.5;
           let x = 0;
           for (let i = 0; i < bufferLength; i++) {
-            let barHeight = (dataArray[i] / 255) * cvs.height;
+            const value = dataArray[i] / 255;
+            const barHeight = value * visualHeight;
             if (barHeight > 0)
-              ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
+              ctx.fillRect(x, baseY - barHeight, barWidth - 1, barHeight);
             x += barWidth;
           }
         } else if (visualMode === 1) {
           analyser.getByteFrequencyData(dataArray);
+          const visualHeight = cvs.height * 0.7;
+          const baseY = cvs.height;
           ctx.lineWidth = 2;
           ctx.strokeStyle = currentTheme.text;
           ctx.beginPath();
-          const sliceWidth = (cvs.width * 1.0) / bufferLength;
+          const sliceWidth = cvs.width / bufferLength;
           let x = 0;
           for (let i = 0; i < bufferLength; i++) {
-            const v = dataArray[i] / 255.0;
-            const y = cvs.height - v * cvs.height;
+            const v = dataArray[i] / 255;
+            const y = baseY - v * visualHeight;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
             x += sliceWidth;
@@ -1823,7 +1727,7 @@
           let x = 0;
           for (let i = 0; i < bufferLength; i++) {
             const v = dataArray[i] / 128.0;
-            const y = (v * cvs.height) / 2;
+            const y = cvs.height / 2 + (v - 1) * (cvs.height / 2);
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
             x += sliceWidth;
@@ -1842,6 +1746,7 @@
           renderPlaylistUI();
         }
       };
+
       window.renderPlaylistUI = () => {
         const box = $("#pl-box");
         box.innerHTML = "";
@@ -1857,7 +1762,8 @@
             const d = document.createElement("div");
             if (selectedIndices.has(i)) d.classList.add("theme-highlight-bg");
             else d.className += " theme-text-main hover:bg-[#222]";
-            let textClass = i === currentTrackIndex ? "text-white" : "";
+            let textClass =
+              i === currentTrackIndex ? "font-bold text-white" : "";
             d.className += ` cursor-pointer px-1 flex justify-between select-none ${textClass}`;
             d.draggable = true;
             d.innerHTML = `<div class="flex truncate w-full pointer-events-none"><span class="w-6 text-right mr-2 flex-shrink-0">${
@@ -1879,7 +1785,6 @@
               handleDragDrop(parseInt(e.dataTransfer.getData("text/plain")), i);
             };
 
-            // DOUBLE TAP FOR MOBILE
             let lastTapTime = 0;
             d.ontouchend = (e) => {
               const currentTime = new Date().getTime();
@@ -1945,6 +1850,7 @@
         const idx = Array.from(selectedIndices)[0];
         handleDragDrop(idx, idx + dir);
       };
+
       window.handleDragDrop = async (srcIdx, targetIdx) => {
         let list = getCurrentDisplayList();
         if (targetIdx < 0 || targetIdx >= list.length || srcIdx === targetIdx)
@@ -1964,6 +1870,7 @@
         selectedIndices.add(targetIdx);
         renderPlaylistUI();
       };
+
       window.handleDeleteTracks = async () => {
         if (selectedIndices.size === 0) return;
         customConfirm(
@@ -1986,6 +1893,7 @@
           }
         );
       };
+
       window.handleDeletePlaylist = () => {
         if (currentPlaylistId === "main") return;
         customConfirm(
@@ -2009,6 +1917,7 @@
         e.preventDefault();
         handleFiles(e.dataTransfer.files);
       };
+
       async function handleFiles(files) {
         if (!isEngineHot) await initAudioEngine();
         checkAndResumeAudioContext();
@@ -2025,6 +1934,7 @@
         }
         renderPlaylistUI();
       }
+
       window.openNewPlaylistModal = () => {
         $("#new-playlist-name").value = "";
         $("#modal-new-playlist").classList.remove("hidden");
@@ -2068,7 +1978,6 @@
       };
       $("#playlist-select").onchange = (e) => switchPlaylist(e.target.value);
 
-      // FIXED "SELECT TRACKS FIRST" MODAL CLOSING LOGIC
       window.openAddToModal = () => {
         if (!selectedIndices.size) return customAlert("Select tracks first");
         const d = $("#modal-list");
@@ -2120,19 +2029,16 @@
         saveSettings();
       };
 
-      // DUAL PATH MONO/STEREO SWITCH
       const updateMonoStereoState = () => {
         if (isMono) {
           stereoPath.gain.value = 0;
           monoPath.gain.value = 1;
-
           $("#btn-mono-stereo").textContent = "MONO";
           $("#btn-mono-stereo").classList.remove("theme-text-main");
           $("#btn-mono-stereo").classList.add("theme-text-sec");
         } else {
           stereoPath.gain.value = 1;
           monoPath.gain.value = 0;
-
           $("#btn-mono-stereo").textContent = "STEREO";
           $("#btn-mono-stereo").classList.add("theme-text-main");
           $("#btn-mono-stereo").classList.remove("theme-text-sec");
@@ -2160,12 +2066,7 @@
           deferredPrompt = null;
         }
       };
-      setInterval(() => {
-        if (stretch && controlValues.active && !holding && !isChangingTrack) {
-          const t = stretch.inputTime || 0;
-          if (t >= audioDuration - 0.2) handleNextTrack(true);
-        }
-      }, 1000);
+
       const pb = $("#playback");
       let holding = false;
       pb.onmousedown = pb.ontouchstart = () => (holding = true);
@@ -2184,6 +2085,7 @@
         if (!stretch) return;
         stretch.schedule({ input: parseFloat(pb.value), rate: 0 });
       };
+
       $("#main-vol").oninput = (e) => {
         masterGainNode.gain.value = parseFloat(e.target.value);
         $("#txt-vol").textContent = Math.round(e.target.value * 100) + "%";
