@@ -1,7 +1,7 @@
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import ssl
 
-PORT = 8444
+PORT = 8446
 
 httpd = HTTPServer(("0.0.0.0", PORT), SimpleHTTPRequestHandler)
 
