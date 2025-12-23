@@ -552,7 +552,7 @@
                       id="btn-reverb-toggle"
                       class="theme-text-main font-bold text-[7px] border border-gray-600 px-1 bg-black z-20"
                     >
-                      ON
+                      OFF
                     </button>
                     <span id="val-reverb" class="theme-text-sec">0.0</span>
                   </div>
@@ -1367,14 +1367,20 @@
         stretch = await SignalsmithStretch(audioContext);
         const eqChain = initEQ();
         stretch.connect(eqChain.input);
-        // แบ่งสัญญาณ:
-        // 1. ส่งไป EQ ปกติ (Dry)
         eqChain.output.connect(analyser);
 
-        // 2. ส่งไป Reverb (Wet)
-        eqChain.output.connect(reverbNode);
+        if (isReverbOn) {
+          eqChain.output.connect(reverbNode);
+          reverbGain.gain.value = controlValues.reverb;
+        } else {
+          try {
+            eqChain.output.disconnect(reverbNode);
+          } catch (e) {}
+          reverbGain.gain.value = 0;
+        }
+
         reverbNode.connect(reverbGain);
-        reverbGain.connect(analyser); // รวมกลับไปที่ Analyser
+        reverbGain.connect(analyser);
         await stretch.addBuffers(channelBuffers);
         controlValues.active = true;
         controlsChanged();
