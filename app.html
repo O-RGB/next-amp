@@ -546,8 +546,16 @@
                 <div
                   class="flex justify-between text-[8px] text-gray-400 -mb-2"
                 >
-                  <span>REVERB</span
-                  ><span id="val-reverb" class="theme-text-sec">0.0</span>
+                  <span>REVERB</span>
+                  <div class="flex gap-2">
+                    <button
+                      id="btn-reverb-toggle"
+                      class="theme-text-main font-bold text-[7px] border border-gray-600 px-1 bg-black z-20"
+                    >
+                      ON
+                    </button>
+                    <span id="val-reverb" class="theme-text-sec">0.0</span>
+                  </div>
                 </div>
                 <input
                   type="range"
@@ -1053,6 +1061,30 @@
           .toString()
           .padStart(2, "0")}`;
       };
+
+      // ฟังก์ชันสลับการทำงาน Reverb เพื่อประหยัด CPU
+      const toggleReverb = () => {
+        isReverbOn = !isReverbOn;
+        const btn = $("#btn-reverb-toggle");
+        const reverbSlider = $('input[data-key="reverb"]');
+        const currentVal = parseFloat(reverbSlider.value);
+
+        if (isReverbOn) {
+          btn.textContent = "ON";
+          btn.classList.add("theme-text-main");
+          btn.classList.remove("text-gray-500");
+          reverbGain.gain.value = currentVal; // คืนค่าความก้องตามที่ตั้งไว้ใน Slider
+        } else {
+          btn.textContent = "OFF";
+          btn.classList.remove("theme-text-main");
+          btn.classList.add("text-gray-500");
+          reverbGain.gain.value = 0; // ปรับ Gain เป็น 0 ทันทีเพื่อหยุดการประมวลผลเสียงก้อง
+        }
+        saveSettings();
+      };
+
+      // เชื่อมปุ่มกับฟังก์ชัน
+      $("#btn-reverb-toggle").onclick = toggleReverb;
 
       // STORAGE (EQ FIX: Read from sliders)
       function saveSettings() {
@@ -2027,6 +2059,7 @@
 
       let isShuffle = false,
         repeatMode = 0;
+      let isReverbOn = true;
       $("#tog-shuffle").onclick = function () {
         isShuffle = !isShuffle;
         this.classList.toggle("active", isShuffle);
@@ -2121,6 +2154,14 @@
       };
       $("#main-bal").oninput = (e) => {
         pannerNode.pan.value = parseFloat(e.target.value);
+        saveSettings();
+      };
+      $('[data-key="reverb"]').oninput = (e) => {
+        const val = parseFloat(e.target.value);
+        if (isReverbOn) {
+          reverbGain.gain.value = val;
+        }
+        $("#val-reverb").textContent = val.toFixed(1);
         saveSettings();
       };
       $('[data-key="rate"]').oninput = (e) => {
