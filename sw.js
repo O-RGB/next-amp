@@ -1,5 +1,6 @@
-const CACHE_NAME = "nextamp-v4";
-// รายชื่อไฟล์ที่ต้องการให้ใช้งานแบบ Offline ได้
+const CACHE_VERSION = "v2025-12-24-t641"; // 🔥 เปลี่ยนทุกครั้งที่ deploy
+const CACHE_NAME = `nextamp-${CACHE_VERSION}`;
+
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
@@ -12,20 +13,62 @@ const ASSETS_TO_CACHE = [
   "./assets/libs/js/tailwindcss.js",
 ];
 
-// ติดตั้ง Service Worker และเก็บไฟล์ลง Cache
+// ===== INSTALL =====
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
   );
+
+  self.skipWaiting(); // 🔥 บังคับใช้ SW ใหม่ทันที
 });
 
-// จัดการการดึงข้อมูล (Fetch) โดยให้ดูใน Cache ก่อน ถ้าไม่มีค่อยไปโหลดจากเน็ต
+// ===== ACTIVATE =====
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key); // 🔥 ลบ cache เก่า
+          }
+        })
+      )
+    )
+  );
+
+  self.clients.claim(); // 🔥 คุมหน้าเดี๋ยวนี้
+});
+
+// ===== FETCH =====
 self.addEventListener("fetch", (event) => {
+  // HTML → network first (เพื่อ update)
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          const copy = res.clone();
+          caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(event.request, copy));
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // ไฟล์อื่น → cache first
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
-    })
+    caches.match(event.request).then(
+      (cached) =>
+        cached ||
+        fetch(event.request).then((res) => {
+          const copy = res.clone();
+          caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(event.request, copy));
+          return res;
+        })
+    )
   );
 });
