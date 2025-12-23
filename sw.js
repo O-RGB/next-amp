@@ -1,4 +1,4 @@
-const CACHE_NAME = "nextamp-v2";
+const CACHE_NAME = "nextamp-v3";
 // รายชื่อไฟล์ที่ต้องการให้ใช้งานแบบ Offline ได้
 const ASSETS_TO_CACHE = [
   "./",

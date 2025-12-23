@@ -1162,8 +1162,6 @@
 
       let stretch = null,
         eqNodes = [],
-        // reverbNode = audioContext.createConvolver(),
-        // reverbGain = audioContext.createGain(),
         analyser = audioContext.createAnalyser();
       let masterGainNode = audioContext.createGain(),
         pannerNode = audioContext.createStereoPanner();
@@ -1172,7 +1170,6 @@
       let stereoPath = audioContext.createGain();
       let monoPath = audioContext.createGain();
 
-      reverbGain.gain.value = 0;
       monoPath.channelCount = 1;
       monoPath.channelCountMode = "explicit";
       monoPath.channelInterpretation = "speakers";
