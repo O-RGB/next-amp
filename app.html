@@ -552,7 +552,7 @@
                       id="btn-reverb-toggle"
                       class="theme-text-main font-bold text-[7px] border border-gray-600 px-1 bg-black z-20"
                     >
-                      OFF
+                      ON
                     </button>
                     <span id="val-reverb" class="theme-text-sec">0.0</span>
                   </div>
@@ -1367,20 +1367,14 @@
         stretch = await SignalsmithStretch(audioContext);
         const eqChain = initEQ();
         stretch.connect(eqChain.input);
+        // แบ่งสัญญาณ:
+        // 1. ส่งไป EQ ปกติ (Dry)
         eqChain.output.connect(analyser);
 
-        if (isReverbOn) {
-          eqChain.output.connect(reverbNode);
-          reverbGain.gain.value = controlValues.reverb;
-        } else {
-          try {
-            eqChain.output.disconnect(reverbNode);
-          } catch (e) {}
-          reverbGain.gain.value = 0;
-        }
-
+        // 2. ส่งไป Reverb (Wet)
+        eqChain.output.connect(reverbNode);
         reverbNode.connect(reverbGain);
-        reverbGain.connect(analyser);
+        reverbGain.connect(analyser); // รวมกลับไปที่ Analyser
         await stretch.addBuffers(channelBuffers);
         controlValues.active = true;
         controlsChanged();
@@ -1766,7 +1760,12 @@
             const barHeight = (dataArray[i] / 255) * drawHeight;
 
             if (barHeight > 0) {
-              ctx.fillRect(x, cvs.height - barHeight, barWidth - 1, barHeight);
+              ctx.fillRect(
+                x,
+                cvs.height - barHeight,  
+                barWidth - 1,
+                barHeight
+              );
             }
 
             x += barWidth;
@@ -2069,7 +2068,7 @@
 
       let isShuffle = false,
         repeatMode = 0;
-      let isReverbOn = false;
+      let isReverbOn = true;
       $("#tog-shuffle").onclick = function () {
         isShuffle = !isShuffle;
         this.classList.toggle("active", isShuffle);
