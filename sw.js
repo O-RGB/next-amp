@@ -1,4 +1,4 @@
-const CACHE_NAME = "nextamp-v1";
+const CACHE_NAME = "nextamp-v2";
 // รายชื่อไฟล์ที่ต้องการให้ใช้งานแบบ Offline ได้
 const ASSETS_TO_CACHE = [
   "./",
@@ -9,6 +9,7 @@ const ASSETS_TO_CACHE = [
   "./assets/logo/logo.png",
   "./assets/sounds/startup.mp3",
   "./assets/sounds/allow-sound.mp3",
+  "./assets/libs/js/tailwindcss.js",
 ];
 
 // ติดตั้ง Service Worker และเก็บไฟล์ลง Cache
