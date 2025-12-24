@@ -82,6 +82,9 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <script src="/assets/libs/js/lame.min.js"></script>
 
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
     <script>
       tailwind.config = {
         theme: {
@@ -1054,6 +1057,78 @@
       </div>
     </div>
 
+    <div
+      id="modal-add-method"
+      class="absolute inset-0 bg-black/80 z-[60] flex items-center justify-center hidden"
+    >
+      <div class="bg-[#292929] border-2 border-white w-64 p-3 shadow-2xl">
+        <div class="theme-bar px-2 py-1 text-[10px] font-bold mb-3">
+          ADD TRACKS
+        </div>
+        <div class="flex flex-col gap-2">
+          <button
+            onclick="triggerLocalFile()"
+            class="win-btn w-full h-8 text-[11px] flex gap-2"
+          >
+            <i class="ph-bold ph-folder-open"></i> LOCAL FILES
+          </button>
+          <button
+            onclick="openPeerModal()"
+            class="win-btn w-full h-8 text-[11px] flex gap-2"
+          >
+            <i class="ph-bold ph-qr-code"></i> REMOTE / PHONE
+          </button>
+          <button
+            onclick="closeAddMethodModal()"
+            class="win-btn w-full h-6 text-[9px] text-red-900 mt-2"
+          >
+            CANCEL
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="modal-peer-receive"
+      class="absolute inset-0 bg-black/90 z-[70] flex items-center justify-center hidden"
+    >
+      <div
+        class="bg-[#292929] border-2 border-white w-72 p-4 shadow-2xl flex flex-col items-center"
+      >
+        <div class="theme-text-main font-pixel text-lg mb-2">
+          SCAN TO CONNECT
+        </div>
+
+        <div
+          id="qrcode-container"
+          class="bg-white p-2 mb-4 border-4 border-black"
+        ></div>
+
+        <div class="text-xs text-gray-400 mb-2 font-mono text-center">
+          Or visit:
+          <span class="text-white select-all" id="peer-link-text">...</span>
+        </div>
+
+        <div
+          id="peer-status"
+          class="w-full bg-black border border-gray-600 h-20 p-2 text-[10px] font-mono text-green-500 overflow-y-auto mb-4 custom-scroll"
+        >
+          > Initializing Peer...
+        </div>
+
+        <div class="w-full bg-[#333] h-2 mb-4 hidden" id="host-progress-wrap">
+          <div id="host-progress-bar" class="h-full bg-[#00ff00] w-0"></div>
+        </div>
+
+        <button
+          onclick="closePeerModal()"
+          class="win-btn w-full h-8 text-[11px]"
+        >
+          CLOSE CONNECTION
+        </button>
+      </div>
+    </div>
+
     <input
       type="file"
       id="upload-file"
@@ -1061,6 +1136,6 @@
       multiple
       accept="audio/*,.mp3,.wav,.m4a,.ogg"
     />
-    <script type="module" src="/assets/libs/js/obfuscator.js"></script>
+    <script type="module" src="/assets/libs/js/app.js"></script>
   </body>
 </html>

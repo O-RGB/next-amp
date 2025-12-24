@@ -3,8 +3,8 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 (function () {
   const allowedDomains = [
     "next-amp-player.vercel.app",
-    // "localhost",
-    // "127.0.0.1",
+    "localhost",
+    "127.0.0.1",
   ];
   const currentDomain = window.location.hostname;
 
@@ -1246,7 +1246,18 @@ window.handleDeletePlaylist = () => {
 };
 
 const fileInput = $("#upload-file");
-$("#btn-pl-add").onclick = () => fileInput.click();
+
+$("#btn-pl-add").onclick = () => {
+  $("#modal-add-method").classList.remove("hidden");
+};
+
+window.triggerLocalFile = () => {
+  $("#modal-add-method").classList.add("hidden");
+  $("#upload-file").click();
+};
+
+window.closeAddMethodModal = () =>
+  $("#modal-add-method").classList.add("hidden");
 fileInput.onchange = (e) => handleFiles(e.target.files);
 document.body.ondragover = (e) => e.preventDefault();
 document.body.ondrop = (e) => {
@@ -1615,6 +1626,9 @@ function updateExportButtonState(isLoading) {
   }
 }
 
+// ในไฟล์ next-amp/assets/libs/js/app.js
+// ค้นหาฟังก์ชัน startRenderingProcess แล้วแก้เป็นแบบนี้ครับ
+
 async function startRenderingProcess(sourceBuffer, duration, filename) {
   const btn = $("#btn-export");
   if (btn.disabled) return;
@@ -1626,7 +1640,9 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
 
   try {
     const extraTail = isReverbOn ? 2 : 0;
-    const targetRate = audioContext.sampleRate;
+
+    // [FIX 1] บังคับใช้ 44100Hz เสมอ เพื่อความเสถียรบน iOS และ LameJS
+    const targetRate = 44100;
 
     const offlineCtx = new OfflineAudioContext(
       2,
@@ -1639,7 +1655,13 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
     for (let c = 0; c < sourceBuffer.numberOfChannels; c++) {
       channelBuffers.push(new Float32Array(sourceBuffer.getChannelData(c)));
     }
+
+    // ส่งข้อมูลเข้า Worklet
     await offStretch.addBuffers(channelBuffers);
+
+    // [FIX 2] เพิ่ม Delay เล็กน้อยเพื่อให้แน่ใจว่า Buffer ถูกส่งเข้า Worklet ทันบน iOS
+    // iOS Safari บางเวอร์ชันเรนเดอร์เร็วกว่าที่ Message Port จะส่งข้อมูลถึง
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     offStretch.schedule({
       active: true,
@@ -1675,6 +1697,7 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
 
     if (isReverbOn) {
       const revNode = offlineCtx.createConvolver();
+      // สร้าง Impulse Response ใหม่โดยใช้ Sample Rate ของ OfflineContext
       revNode.buffer = createOfflineImpulseResponse(offlineCtx);
       const revGain = offlineCtx.createGain();
       revGain.gain.value = parseFloat($("#main-reverb").value);
@@ -1692,19 +1715,25 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
     return new Promise((resolve, reject) => {
       mp3Worker = new Worker("/assets/libs/worker/mp3-worker.js");
 
-      const channels = 2;
-      const channelData = [
-        renderedBuffer.getChannelData(0),
+      // [FIX 3] เตรียมข้อมูลแบบ Copy เพื่อทำ Transferable Object (ลด RAM บน iOS)
+      const ch0 = new Float32Array(renderedBuffer.getChannelData(0));
+      const ch1 =
         renderedBuffer.numberOfChannels > 1
-          ? renderedBuffer.getChannelData(1)
-          : renderedBuffer.getChannelData(0),
-      ];
+          ? new Float32Array(renderedBuffer.getChannelData(1))
+          : new Float32Array(renderedBuffer.getChannelData(0)); // Mono to Stereo fallback
 
-      mp3Worker.postMessage({
-        channelData: channelData,
-        sampleRate: renderedBuffer.sampleRate,
-        channels: channels,
-      });
+      const channelData = [ch0, ch1];
+
+      // ส่งข้อมูลไป Worker พร้อม Transfer list (พารามิเตอร์ตัวที่ 2)
+      // ช่วยให้ไม่กิน RAM เพิ่มเป็น 2 เท่า ซึ่งสำคัญมากบน iPhone
+      mp3Worker.postMessage(
+        {
+          channelData: channelData,
+          sampleRate: renderedBuffer.sampleRate,
+          channels: 2,
+        },
+        [ch0.buffer, ch1.buffer]
+      ); // <--- Key Fix for Memory
 
       mp3Worker.onmessage = function (e) {
         if (e.data.type === "progress") {
@@ -1772,3 +1801,126 @@ document.addEventListener("keydown", (e) => {
     }
   }
 });
+
+let peerHost = null;
+let currentConn = null;
+let incomingFile = {
+  buffer: [],
+  receivedSize: 0,
+  meta: null,
+};
+
+window.openPeerModal = () => {
+  $("#modal-add-method").classList.add("hidden");
+  $("#modal-peer-receive").classList.remove("hidden");
+
+  if (!peerHost) initPeerHost();
+};
+
+window.closePeerModal = () => {
+  $("#modal-peer-receive").classList.add("hidden");
+  if (currentConn) {
+    currentConn.close();
+    currentConn = null;
+  }
+  $("#qrcode-container").innerHTML = "";
+};
+
+function logPeer(msg) {
+  const box = $("#peer-status");
+  if (!box) return;
+  const d = document.createElement("div");
+  d.textContent = "> " + msg;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+function initPeerHost() {
+  peerHost = new Peer();
+
+  peerHost.on("open", (id) => {
+    logPeer(`HOST ID: ${id}`);
+
+    const url = `${window.location.origin}/remote.html?host=${id}`;
+    $("#peer-link-text").textContent = url;
+
+    $("#qrcode-container").innerHTML = "";
+    new QRCode(document.getElementById("qrcode-container"), {
+      text: url,
+      width: 150,
+      height: 150,
+    });
+
+    logPeer("Ready. Scan QR with your phone.");
+  });
+
+  peerHost.on("connection", (conn) => {
+    if (currentConn) currentConn.close();
+
+    currentConn = conn;
+    logPeer("Client Connected!");
+
+    conn.on("data", async (data) => {
+      if (data.type === "meta") {
+        incomingFile.meta = data;
+        incomingFile.buffer = [];
+        incomingFile.receivedSize = 0;
+
+        $("#host-progress-wrap").classList.remove("hidden");
+        $("#host-progress-bar").style.width = "0%";
+        logPeer(`Receiving: ${data.name}...`);
+      } else if (data.type === "sync") {
+        conn.send({ type: "sync_ack" });
+      } else if (data.type === "end") {
+        if (incomingFile.receivedSize !== incomingFile.meta.size) {
+          logPeer(
+            `Error: Size mismatch! Expected ${incomingFile.meta.size}, got ${incomingFile.receivedSize}`
+          );
+          alert("File corrupted during transfer. Please try again.");
+          incomingFile.buffer = [];
+          return;
+        }
+
+        logPeer(`Verifying & Saving...`);
+        $("#host-progress-wrap").classList.add("hidden");
+
+        try {
+          const blob = new Blob(incomingFile.buffer, {
+            type: incomingFile.meta.mime,
+          });
+          const file = new File([blob], incomingFile.meta.name, {
+            type: incomingFile.meta.mime,
+          });
+
+          await handleFiles([file]);
+
+          logPeer(`Saved: ${incomingFile.meta.name} [OK]`);
+          conn.send({ type: "file_received" });
+        } catch (err) {
+          console.error(err);
+          logPeer(`Error: ${err.message}`);
+        }
+        incomingFile.buffer = [];
+      } else if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
+        incomingFile.buffer.push(data);
+        incomingFile.receivedSize += data.byteLength || data.length;
+
+        if (incomingFile.meta && incomingFile.meta.size > 0) {
+          const p = (incomingFile.receivedSize / incomingFile.meta.size) * 100;
+          $("#host-progress-bar").style.width = p + "%";
+        }
+      }
+    });
+
+    conn.on("close", () => {
+      logPeer("Client Disconnected.");
+      currentConn = null;
+    });
+
+    conn.on("error", (err) => logPeer("Conn Error: " + err));
+  });
+
+  peerHost.on("error", (err) => {
+    logPeer("Peer Error: " + err.type);
+  });
+}

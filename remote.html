@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nextamp Remote Upload</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      body {
+        background-color: #050505;
+        color: #00ff00;
+        font-family: "Chakra Petch", sans-serif;
+      }
+      .win-btn {
+        background: #c0c0c0;
+        color: black;
+        border: 2px solid #fff;
+        border-right-color: #000;
+        border-bottom-color: #000;
+        cursor: pointer;
+        font-weight: bold;
+        text-transform: uppercase;
+        transition: all 0.1s;
+      }
+      .win-btn:active {
+        border-color: #000;
+        border-right-color: #fff;
+        border-bottom-color: #fff;
+        transform: translate(1px, 1px);
+      }
+      .win-btn:disabled {
+        background: #555;
+        color: #888;
+        border-color: #444;
+        cursor: not-allowed;
+        transform: none;
+      }
+    </style>
+  </head>
+  <body
+    class="flex flex-col items-center justify-center min-h-screen p-4 space-y-6 select-none"
+  >
+    <div class="text-center space-y-2">
+      <h1 class="text-3xl font-bold text-white tracking-widest">
+        NEXTAMP <span class="text-[#00ff00]">REMOTE</span>
+      </h1>
+      <div id="connection-status" class="text-xs text-gray-400 font-mono">
+        Initializing...
+      </div>
+    </div>
+
+    <div id="main-interface" class="w-full max-w-sm flex flex-col gap-6 hidden">
+      <input
+        type="file"
+        id="file-input"
+        accept="audio/*"
+        multiple
+        class="hidden"
+      />
+      <button
+        id="btn-select"
+        onclick="document.getElementById('file-input').click()"
+        class="win-btn w-full py-6 text-xl shadow-[0_0_15px_rgba(0,255,0,0.2)] flex flex-col items-center gap-1"
+      >
+        <span>SELECT FILES</span>
+        <span class="text-[10px] font-normal text-gray-700"
+          >(Max 10 files)</span
+        >
+      </button>
+
+      <div
+        id="queue-info"
+        class="text-center text-xs text-gray-400 hidden font-mono"
+      >
+        QUEUE: <span id="queue-count" class="text-white font-bold">0/0</span>
+      </div>
+
+      <div
+        id="progress-area"
+        class="bg-[#111] border border-[#333] p-4 rounded hidden"
+      >
+        <div class="flex justify-between text-xs mb-1 font-mono">
+          <span id="filename-disp" class="truncate max-w-[200px] text-white"
+            >...</span
+          >
+          <span id="percent-disp">0%</span>
+        </div>
+        <div class="w-full bg-[#333] h-2 border border-gray-600">
+          <div
+            id="progress-bar"
+            class="h-full bg-[#00ff00] w-0 transition-all duration-75"
+          ></div>
+        </div>
+        <div
+          class="text-[10px] text-gray-500 mt-2 text-center"
+          id="status-detail"
+        >
+          Waiting...
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // CONFIG
+      const CHUNK_SIZE = 16 * 1024; // 16KB per chunk
+      const SYNC_INTERVAL = 50; // ทุกๆ 50 chunks (ประมาณ 800KB) ให้หยุดรอ Sync 1 ครั้ง
+      const LIMIT_MAX_FILES = 10;
+      const LIMIT_MAX_SIZE_MB = 100;
+
+      const params = new URLSearchParams(window.location.search);
+      const hostId = params.get("host");
+
+      const statusEl = document.getElementById("connection-status");
+      const mainInterface = document.getElementById("main-interface");
+      const btnSelect = document.getElementById("btn-select");
+      const progressArea = document.getElementById("progress-area");
+
+      let peer = null,
+        conn = null;
+      let fileQueue = [],
+        totalFiles = 0;
+      let isProcessing = false;
+
+      // ตัวแปรสำหรับรอ Signal
+      let resolveUpload = null;
+      let resolveSync = null;
+
+      if (!hostId) {
+        statusEl.innerText = "Error: Invalid Link";
+        statusEl.className = "text-xs text-red-500 font-mono";
+        throw new Error("No Host ID");
+      }
+
+      peer = new Peer();
+
+      peer.on("open", (id) => {
+        statusEl.innerText = "Connecting...";
+        conn = peer.connect(hostId, { reliable: true });
+
+        conn.on("open", () => {
+          statusEl.innerText = "CONNECTED: Ready";
+          statusEl.className = "text-xs text-[#00ff00] font-mono";
+          mainInterface.classList.remove("hidden");
+        });
+
+        conn.on("close", () => {
+          statusEl.innerText = "Disconnected.";
+          statusEl.className = "text-xs text-red-500 font-mono";
+          btnSelect.disabled = true;
+          mainInterface.classList.add("opacity-50");
+        });
+
+        // ฟังข้อความตอบกลับจาก Host
+        conn.on("data", (data) => {
+          if (data.type === "file_received") {
+            if (resolveUpload) resolveUpload(); // จบไฟล์
+          } else if (data.type === "sync_ack") {
+            if (resolveSync) resolveSync(); // จบ Chunk ชุดนี้ ส่งต่อได้
+          }
+        });
+      });
+
+      document.getElementById("file-input").addEventListener("change", (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        if (files.length > LIMIT_MAX_FILES)
+          return alert(`Max ${LIMIT_MAX_FILES} files.`);
+
+        const validFiles = files.filter(
+          (f) => f.size / 1024 / 1024 <= LIMIT_MAX_SIZE_MB
+        );
+        if (validFiles.length === 0) return;
+
+        fileQueue = validFiles;
+        totalFiles = validFiles.length;
+        processQueue();
+      });
+
+      async function processQueue() {
+        if (isProcessing) return;
+        isProcessing = true;
+        btnSelect.disabled = true;
+        progressArea.classList.remove("hidden");
+        document.getElementById("queue-info").classList.remove("hidden");
+
+        for (let i = 0; i < fileQueue.length; i++) {
+          const file = fileQueue[i];
+          document.getElementById("queue-count").innerText = `${
+            i + 1
+          }/${totalFiles}`;
+          try {
+            await sendFileRobust(file);
+          } catch (err) {
+            console.error(err);
+            alert(`Error sending ${file.name}`);
+          }
+        }
+
+        isProcessing = false;
+        btnSelect.disabled = false;
+        btnSelect.innerText = "SEND MORE";
+        document.getElementById("status-detail").innerText = "All Done!";
+        document
+          .getElementById("status-detail")
+          .classList.add("text-[#00ff00]");
+        setTimeout(() => {
+          alert("Transfer Complete!");
+          progressArea.classList.add("hidden");
+          document.getElementById("queue-info").classList.add("hidden");
+          document.getElementById("file-input").value = "";
+          document
+            .getElementById("status-detail")
+            .classList.remove("text-[#00ff00]");
+          btnSelect.innerHTML = `<span>SELECT FILES</span><span class="text-[10px] font-normal text-gray-700">(Max 10 files)</span>`;
+        }, 500);
+      }
+
+      function sendFileRobust(file) {
+        return new Promise((resolve, reject) => {
+          if (!conn || !conn.open) return reject("No connection");
+
+          document.getElementById("filename-disp").innerText = file.name;
+          document.getElementById("status-detail").innerText = "Starting...";
+          document.getElementById("progress-bar").style.width = "0%";
+          document.getElementById("percent-disp").innerText = "0%";
+
+          // 1. Send Meta
+          conn.send({
+            type: "meta",
+            name: file.name,
+            size: file.size,
+            mime: file.type,
+          });
+
+          let offset = 0;
+          let chunkCount = 0;
+          const reader = new FileReader();
+
+          reader.onload = async (event) => {
+            try {
+              const chunk = event.target.result;
+              conn.send(chunk); // ส่งเนื้อไฟล์
+              offset += chunk.byteLength;
+              chunkCount++;
+
+              // UI Update
+              const percent = Math.round((offset / file.size) * 100);
+              document.getElementById("progress-bar").style.width =
+                percent + "%";
+              document.getElementById("percent-disp").innerText = percent + "%";
+
+              // --- SYNC CHECKPOINT ---
+              // ทุกๆ X chunks ให้หยุดถาม Host ว่า "ทันไหม?"
+              if (chunkCount % SYNC_INTERVAL === 0) {
+                document.getElementById("status-detail").innerText =
+                  "Syncing...";
+                conn.send({ type: "sync" }); // ส่งคำขอ Sync
+                await waitForSync(); // รอจนกว่า Host จะตอบ sync_ack
+                document.getElementById("status-detail").innerText =
+                  "Sending...";
+              }
+
+              if (offset < file.size) {
+                readNextChunk();
+              } else {
+                document.getElementById("status-detail").innerText =
+                  "Verifying...";
+                conn.send({ type: "end" });
+                resolveUpload = resolve; // รอ file_received
+              }
+            } catch (e) {
+              reject(e);
+            }
+          };
+
+          const readNextChunk = () => {
+            const slice = file.slice(offset, offset + CHUNK_SIZE);
+            reader.readAsArrayBuffer(slice);
+          };
+
+          // ฟังก์ชันรอ Sync Ack
+          const waitForSync = () => {
+            return new Promise((r) => {
+              resolveSync = r;
+            });
+          };
+
+          readNextChunk();
+        });
+      }
+    </script>
+  </body>
+</html>
