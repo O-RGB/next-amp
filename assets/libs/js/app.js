@@ -1605,7 +1605,7 @@ function updateExportButtonState(isLoading) {
   } else {
     btn.disabled = false;
     btn.classList.remove("pressed");
-    btn.innerHTML = '<i class="ph-bold ph-floppy-disk text-sm"></i>';
+    btn.innerHTML = '<i class="ph-fill ph-floppy-disk text-sm"></i>';
 
     document.body.style.cursor = "default";
 
@@ -1626,7 +1626,8 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
 
   try {
     const extraTail = isReverbOn ? 2 : 0;
-    const targetRate = sourceBuffer.sampleRate;
+    const targetRate = audioContext.sampleRate;
+
     const offlineCtx = new OfflineAudioContext(
       2,
       (duration + extraTail) * targetRate,
@@ -1636,7 +1637,7 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
     const offStretch = await SignalsmithStretch(offlineCtx);
     const channelBuffers = [];
     for (let c = 0; c < sourceBuffer.numberOfChannels; c++) {
-      channelBuffers.push(sourceBuffer.getChannelData(c));
+      channelBuffers.push(new Float32Array(sourceBuffer.getChannelData(c)));
     }
     await offStretch.addBuffers(channelBuffers);
 
