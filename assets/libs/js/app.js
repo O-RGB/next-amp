@@ -1,5 +1,21 @@
 import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 
+(function () {
+  const allowedDomains = [
+    "next-amp-player.vercel.app",
+    // "localhost",
+    // "127.0.0.1",
+  ];
+  const currentDomain = window.location.hostname;
+
+  if (!allowedDomains.includes(currentDomain)) {
+    document.body.innerHTML = "<h1>Unauthorized Copy</h1>";
+    throw new Error("Piracy detected!");
+  }
+})();
+
+document.addEventListener("contextmenu", (event) => event.preventDefault());
+
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const STORAGE_KEY = "nextamp_settings_v9_stable";
@@ -439,6 +455,15 @@ function loadSettings() {
   if (s.eqPreset) {
     $("#eq-preset-select").value = s.eqPreset;
   }
+
+  FREQUENCIES.forEach((_, i) => {
+    const bg = $(`#eq-bg-${i}`);
+    if (bg) {
+      if (isEqOn) bg.classList.add("eq-bar-active");
+      else bg.classList.remove("eq-bar-active");
+    }
+  });
+
   updateReverbConnection();
 }
 
@@ -1413,3 +1438,282 @@ $('[data-key="semitones"]').oninput = (e) => {
   controlsChanged();
   saveSettings();
 };
+
+function audioBufferToWav(buffer, opt) {
+  opt = opt || {};
+  var numChannels = buffer.numberOfChannels;
+  var sampleRate = buffer.sampleRate;
+  var format = opt.float32 ? 3 : 1;
+  var bitDepth = format === 3 ? 32 : 16;
+
+  var result;
+  if (numChannels === 2) {
+    result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
+  } else {
+    result = buffer.getChannelData(0);
+  }
+
+  return encodeWAV(result, format, sampleRate, numChannels, bitDepth);
+}
+
+function interleave(inputL, inputR) {
+  var length = inputL.length + inputR.length;
+  var result = new Float32Array(length);
+  var index = 0;
+  var inputIndex = 0;
+  while (index < length) {
+    result[index++] = inputL[inputIndex];
+    result[index++] = inputR[inputIndex];
+    inputIndex++;
+  }
+  return result;
+}
+
+function encodeWAV(samples, format, sampleRate, numChannels, bitDepth) {
+  var bytesPerSample = bitDepth / 8;
+  var blockAlign = numChannels * bytesPerSample;
+
+  var buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+  var view = new DataView(buffer);
+
+  /* RIFF identifier */
+  writeString(view, 0, "RIFF");
+  /* RIFF chunk length */
+  view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+  /* RIFF type */
+  writeString(view, 8, "WAVE");
+  /* format chunk identifier */
+  writeString(view, 12, "fmt ");
+  /* format chunk length */
+  view.setUint32(16, 16, true);
+  /* sample format (raw) */
+  view.setUint16(20, format, true);
+  /* channel count */
+  view.setUint16(22, numChannels, true);
+  /* sample rate */
+  view.setUint32(24, sampleRate, true);
+  /* byte rate (sample rate * block align) */
+  view.setUint32(28, sampleRate * blockAlign, true);
+  /* block align (channel count * bytes per sample) */
+  view.setUint16(32, blockAlign, true);
+  /* bits per sample */
+  view.setUint16(34, bitDepth, true);
+  /* data chunk identifier */
+  writeString(view, 36, "data");
+  /* data chunk length */
+  view.setUint32(40, samples.length * bytesPerSample, true);
+
+  if (format === 1) {
+    floatTo16BitPCM(view, 44, samples);
+  } else {
+    floatTo32BitPCM(view, 44, samples);
+  }
+
+  return new Blob([view], { type: "audio/wav" });
+}
+
+function floatTo16BitPCM(output, offset, input) {
+  for (var i = 0; i < input.length; i++, offset += 2) {
+    var s = Math.max(-1, Math.min(1, input[i]));
+    output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+}
+
+function floatTo32BitPCM(output, offset, input) {
+  for (var i = 0; i < input.length; i++, offset += 4) {
+    output.setFloat32(offset, input[i], true);
+  }
+}
+
+function writeString(view, offset, string) {
+  for (var i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
+
+function createOfflineImpulseResponse(ctx, duration = 3.0, decay = 2.0) {
+  const sampleRate = ctx.sampleRate;
+  const length = sampleRate * duration;
+  const impulse = ctx.createBuffer(2, length, sampleRate);
+
+  for (let ch = 0; ch < 2; ch++) {
+    const data = impulse.getChannelData(ch);
+    let lastOut = 0;
+    for (let i = 0; i < length; i++) {
+      const white = Math.random() * 2 - 1;
+      lastOut = lastOut + 0.12 * (white - lastOut);
+      const t = i / length;
+      const envelope = Math.exp(-decay * t * (duration / 3));
+      data[i] = lastOut * envelope;
+    }
+  }
+  return impulse;
+}
+
+window.exportCurrentTrackWav = async () => {
+  const list = getCurrentDisplayList();
+  if (currentTrackIndex < 0 || !list[currentTrackIndex]) {
+    customAlert("No track loaded to export.");
+    return;
+  }
+
+  const track = list[currentTrackIndex];
+  const originalRate = controlValues.rate || 1.0;
+
+  $("#marquee").textContent = "Preparing Export...";
+  const arrayBuffer = await track.blob.arrayBuffer();
+
+  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+  const newDuration = audioBuffer.duration / originalRate;
+
+  const LIMIT_MINUTES = 10;
+  if (newDuration > LIMIT_MINUTES * 60) {
+    customConfirm(
+      `Output is very long (${(newDuration / 60).toFixed(
+        1
+      )} mins). It may freeze your device. Continue?`,
+      () => startRenderingProcess(audioBuffer, newDuration, track.name)
+    );
+  } else {
+    startRenderingProcess(audioBuffer, newDuration, track.name);
+  }
+};
+function updateExportButtonState(isLoading) {
+  const btn = $("#btn-export");
+  if (!btn) return;
+
+  if (isLoading) {
+    btn.disabled = true;
+    btn.classList.add("pressed");
+
+    btn.innerHTML =
+      '<i class="ph-bold ph-hourglass animate-hourglass text-sm"></i>';
+
+    document.body.style.cursor = "wait";
+  } else {
+    btn.disabled = false;
+    btn.classList.remove("pressed");
+    btn.innerHTML = '<i class="ph-bold ph-floppy-disk text-sm"></i>';
+
+    document.body.style.cursor = "default";
+
+    btn.classList.remove("btn-working-analog");
+    btn.classList.remove("text-win-green", "border-win-green");
+    btn.classList.add("text-win-green");
+  }
+}
+
+async function startRenderingProcess(sourceBuffer, duration, filename) {
+  updateExportButtonState(true);
+
+  $("#marquee").textContent = "Rendering... (Please Wait)";
+
+  try {
+    const extraTail = isReverbOn ? 2 : 0;
+    const offlineCtx = new OfflineAudioContext(
+      2,
+      (duration + extraTail) * 44100,
+      44100
+    );
+
+    const offStretch = await SignalsmithStretch(offlineCtx);
+
+    const channelBuffers = [];
+    for (let c = 0; c < sourceBuffer.numberOfChannels; c++) {
+      channelBuffers.push(sourceBuffer.getChannelData(c));
+    }
+    await offStretch.addBuffers(channelBuffers);
+
+    offStretch.schedule({
+      active: true,
+      input: 0,
+      rate: controlValues.rate,
+      semitones: controlValues.semitones,
+    });
+
+    let inputNode = offStretch;
+    let outputNode = offStretch;
+    const currentEqGains = Array.from(
+      document.querySelectorAll("input[data-idx]")
+    ).map((inp) => parseFloat(inp.value));
+
+    if (isEqOn) {
+      let prev = offStretch;
+      FREQUENCIES.forEach((freq, i) => {
+        const f = offlineCtx.createBiquadFilter();
+        f.type = "peaking";
+        f.frequency.value = freq;
+        f.Q.value = 1.4;
+        f.gain.value = currentEqGains[i] || 0;
+        prev.connect(f);
+        prev = f;
+      });
+      outputNode = prev;
+    }
+
+    const masterGain = offlineCtx.createGain();
+    masterGain.gain.value = parseFloat($("#main-vol").value);
+    outputNode.connect(masterGain);
+    masterGain.connect(offlineCtx.destination);
+
+    if (isReverbOn) {
+      const revNode = offlineCtx.createConvolver();
+      revNode.buffer = createOfflineImpulseResponse(offlineCtx);
+      const revGain = offlineCtx.createGain();
+      revGain.gain.value = parseFloat($("#main-reverb").value);
+      outputNode.connect(revNode);
+      revNode.connect(revGain);
+      revGain.connect(offlineCtx.destination);
+    }
+
+    const renderedBuffer = await offlineCtx.startRendering();
+
+    $("#marquee").textContent = "Encoding WAV...";
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const wavBlob = audioBufferToWav(renderedBuffer, { float32: false });
+    const url = URL.createObjectURL(wavBlob);
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = url;
+    a.download = `Remix_${filename}.wav`;
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(() => {
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      $("#marquee").textContent = "Export Complete.";
+    }, 100);
+  } catch (e) {
+    console.error(e);
+    customAlert("Export Failed: " + e.message);
+    $("#marquee").textContent = "Error.";
+  } finally {
+    updateExportButtonState(false);
+  }
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" || e.key === " ") {
+    const activeTag = document.activeElement.tagName.toLowerCase();
+    const activeType = document.activeElement.type;
+
+    if (
+      activeTag === "textarea" ||
+      (activeTag === "input" && activeType === "text")
+    ) {
+      return;
+    }
+
+    e.preventDefault();
+
+    if (controlValues.active) {
+      $("#btn-pause").click();
+    } else {
+      $("#btn-play").click();
+    }
+  }
+});

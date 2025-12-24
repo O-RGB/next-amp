@@ -1,16 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <script>
-      if (sessionStorage.getItem("access_allowed") !== "true") {
-        alert("กรุณาเข้าใช้งานผ่านหน้าแรก");
-        window.location.href = "index.html";
-      }
-
-      document.addEventListener("contextmenu", (event) =>
-        event.preventDefault()
-      );
-    </script>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
@@ -118,7 +108,6 @@
         --theme-text-sec: #ffcc00;
         --theme-highlight: #000080;
 
-        /* EQ GRADIENT */
         --eq-col-1: #00ff00;
         --eq-col-2: #ffff00;
         --eq-col-3: #ff0000;
@@ -126,7 +115,6 @@
 
       html,
       body {
-        /* iOS Safari Fixes */
         height: 100vh;
         width: 100vw;
         position: fixed;
@@ -141,18 +129,14 @@
         -moz-user-select: none;
         -ms-user-select: none;
 
-        /* --- NEW BACKGROUND: Deep Tech Green Gradient --- */
-        /* Dark center with green tint, fading to absolute black edges */
         background: radial-gradient(circle at center, #003504 0%, #020617 80%);
 
-        /* Safe Area padding */
         padding-top: max(4px, env(safe-area-inset-top));
         padding-bottom: max(4px, env(safe-area-inset-bottom));
         padding-left: max(4px, env(safe-area-inset-left));
         padding-right: max(4px, env(safe-area-inset-right));
       }
 
-      /* --- CLASSIC BUTTONS --- */
       .win-btn {
         background-color: #c0c0c0;
         color: black;
@@ -177,14 +161,12 @@
         background-color: #a0a0a0;
       }
 
-      /* Outer Glow - Matching the Green-400 */
       .sci-fi-container-glow {
         box-shadow: 0 0 25px rgba(0, 226, 83, 0.15),
           0 0 50px rgba(0, 227, 83, 0.05);
         border-radius: 2px;
       }
 
-      /* Classic Text Button */
       .retro-txt-btn {
         background-color: #111;
         border: 1px solid #444;
@@ -214,7 +196,6 @@
         text-shadow: 0 0 2px var(--theme-text-sec);
       }
 
-      /* Theme & EQ colors */
       .theme-bar {
         background-color: var(--theme-window);
         color: white;
@@ -226,7 +207,7 @@
         color: var(--theme-text-sec);
       }
       .theme-highlight-bg {
-        background-color: var(--theme-highlight); /* Transparent Green-400 */
+        background-color: var(--theme-highlight);
         color: #fff;
         outline: 1px solid var(--theme-window);
       }
@@ -252,7 +233,6 @@
         text-shadow: 0px 0px 3px rgba(0, 221, 81, 0.6);
       }
 
-      /* Sliders */
       input[type="range"] {
         -webkit-appearance: none;
         background: transparent;
@@ -325,7 +305,6 @@
         border-bottom: 1px solid #000;
       }
 
-      /* Tabs Style */
       .tab-btn {
         background: #292929;
         color: #888;
@@ -358,6 +337,26 @@
         display: none;
         white-space: nowrap;
         box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.5);
+      }
+
+      @keyframes hourglass-flip {
+        0%,
+        35% {
+          transform: rotate(0deg);
+        }
+        50%,
+        85% {
+          transform: rotate(180deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .animate-hourglass {
+        animation: hourglass-flip 4s infinite cubic-bezier(0.65, 0.05, 0.36, 1);
+        transform-origin: center;
+        display: inline-block;
       }
     </style>
   </head>
@@ -546,6 +545,14 @@
                 </button>
                 <button id="btn-next" class="win-btn w-8 h-8" title="Next">
                   <i class="ph-fill ph-skip-forward"></i>
+                </button>
+                <button
+                  id="btn-export"
+                  onclick="exportCurrentTrackWav()"
+                  class="win-btn w-8 h-8"
+                  title="Export WAV"
+                >
+                  <i class="ph-bold ph-floppy-disk"></i>
                 </button>
               </div>
 
