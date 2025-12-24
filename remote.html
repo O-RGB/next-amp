@@ -41,6 +41,20 @@
         cursor: not-allowed;
         transform: none;
       }
+      /* Custom Scrollbar for Modal */
+      .custom-scroll::-webkit-scrollbar {
+        width: 8px;
+      }
+      .custom-scroll::-webkit-scrollbar-track {
+        background: #111;
+      }
+      .custom-scroll::-webkit-scrollbar-thumb {
+        background: #333;
+        border-radius: 4px;
+      }
+      .custom-scroll::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
     </style>
   </head>
   <body
@@ -63,16 +77,34 @@
         multiple
         class="hidden"
       />
-      <button
-        id="btn-select"
-        onclick="document.getElementById('file-input').click()"
-        class="win-btn w-full py-6 text-xl shadow-[0_0_15px_rgba(0,255,0,0.2)] flex flex-col items-center gap-1"
-      >
-        <span>SELECT FILES</span>
-        <span class="text-[10px] font-normal text-gray-700"
-          >(Max 10 files)</span
+
+      <div class="flex flex-col gap-4">
+        <button
+          id="btn-select"
+          onclick="document.getElementById('file-input').click()"
+          class="win-btn w-full py-6 text-xl shadow-[0_0_15px_rgba(0,255,0,0.2)] flex flex-col items-center gap-1"
         >
-      </button>
+          <span>SELECT FILES</span>
+          <span class="text-[10px] font-normal text-gray-700"
+            >(Device Storage)</span
+          >
+        </button>
+
+        <button
+          id="btn-library"
+          onclick="openLibraryModal()"
+          class="win-btn w-full py-4 text-lg bg-[#a0a0a0] flex flex-col items-center gap-1"
+        >
+          <span>SELECT FROM LIBRARY</span>
+          <span class="text-[10px] font-normal text-gray-700"
+            >(Nextamp Database)</span
+          >
+        </button>
+      </div>
+
+      <div class="text-center text-[10px] text-gray-500">
+        Max 10 files per transfer
+      </div>
 
       <div
         id="queue-info"
@@ -106,15 +138,55 @@
       </div>
     </div>
 
+    <div
+      id="lib-modal"
+      class="fixed inset-0 bg-black/90 z-50 hidden flex flex-col items-center justify-center p-4"
+    >
+      <div
+        class="bg-[#111] border border-[#333] w-full max-w-sm rounded-lg flex flex-col max-h-[80vh] shadow-[0_0_30px_rgba(0,255,0,0.1)]"
+      >
+        <div
+          class="p-4 border-b border-[#333] flex justify-between items-center bg-[#1a1a1a] rounded-t-lg"
+        >
+          <h2 class="text-white font-bold tracking-wider">SELECT TRACKS</h2>
+          <span id="lib-count-disp" class="text-xs text-[#00ff00] font-mono"
+            >0/10</span
+          >
+        </div>
+
+        <div
+          id="lib-list"
+          class="flex-1 overflow-y-auto p-2 space-y-1 custom-scroll bg-[#050505]"
+        >
+          <div class="text-center text-gray-500 py-8 text-xs">Loading...</div>
+        </div>
+
+        <div
+          class="p-4 border-t border-[#333] flex gap-3 bg-[#1a1a1a] rounded-b-lg"
+        >
+          <button
+            onclick="closeLibraryModal()"
+            class="win-btn flex-1 py-3 text-sm"
+          >
+            CANCEL
+          </button>
+          <button
+            onclick="confirmLibrarySelection()"
+            class="win-btn flex-1 py-3 text-sm text-[#006600] font-bold"
+          >
+            SEND SELECTED
+          </button>
+        </div>
+      </div>
+    </div>
+
     <script>
       // CONFIG
       const CHUNK_SIZE = 16 * 1024; // 16KB per chunk
-
-      // [FIX 1] ลด Interval ลงเพื่อให้ Sync บ่อยขึ้น (ป้องกัน Buffer ล้น)
       const SYNC_INTERVAL = 20;
-
       const LIMIT_MAX_FILES = 10;
       const LIMIT_MAX_SIZE_MB = 100;
+      const DB_NAME = "NextampUltimateDB";
 
       const params = new URLSearchParams(window.location.search);
       const hostId = params.get("host");
@@ -122,6 +194,7 @@
       const statusEl = document.getElementById("connection-status");
       const mainInterface = document.getElementById("main-interface");
       const btnSelect = document.getElementById("btn-select");
+      const btnLibrary = document.getElementById("btn-library");
       const progressArea = document.getElementById("progress-area");
 
       let peer = null,
@@ -130,7 +203,10 @@
         totalFiles = 0;
       let isProcessing = false;
 
-      // ตัวแปรสำหรับรอ Signal
+      // Variables for Library Feature
+      let libFilesCache = [];
+
+      // Variables for Sync
       let resolveUpload = null;
       let resolveSync = null;
 
@@ -156,21 +232,27 @@
           statusEl.innerText = "Disconnected.";
           statusEl.className = "text-xs text-red-500 font-mono";
           btnSelect.disabled = true;
+          btnLibrary.disabled = true;
           mainInterface.classList.add("opacity-50");
         });
 
-        // ฟังข้อความตอบกลับจาก Host
         conn.on("data", (data) => {
           if (data.type === "file_received") {
-            if (resolveUpload) resolveUpload(); // จบไฟล์
+            if (resolveUpload) resolveUpload();
           } else if (data.type === "sync_ack") {
-            if (resolveSync) resolveSync(); // จบ Chunk ชุดนี้ ส่งต่อได้
+            if (resolveSync) resolveSync();
           }
         });
       });
 
+      // --- File Input Handling ---
       document.getElementById("file-input").addEventListener("change", (e) => {
         const files = Array.from(e.target.files);
+        handleNewFiles(files);
+        e.target.value = ""; // reset
+      });
+
+      function handleNewFiles(files) {
         if (files.length === 0) return;
         if (files.length > LIMIT_MAX_FILES)
           return alert(`Max ${LIMIT_MAX_FILES} files.`);
@@ -178,17 +260,172 @@
         const validFiles = files.filter(
           (f) => f.size / 1024 / 1024 <= LIMIT_MAX_SIZE_MB
         );
-        if (validFiles.length === 0) return;
+        if (validFiles.length === 0)
+          return alert("Files too large or invalid.");
 
         fileQueue = validFiles;
         totalFiles = validFiles.length;
         processQueue();
-      });
+      }
+
+      // --- Library Handling ---
+      async function openLibraryModal() {
+        if (isProcessing) return;
+
+        try {
+          const files = await getLibraryFiles();
+          if (!files || files.length === 0) {
+            return alert("No tracks found in Nextamp Library on this device.");
+          }
+
+          libFilesCache = files;
+          renderLibraryList();
+          document.getElementById("lib-modal").classList.remove("hidden");
+        } catch (e) {
+          console.error(e);
+          alert("Could not access library database.");
+        }
+      }
+
+      function closeLibraryModal() {
+        document.getElementById("lib-modal").classList.add("hidden");
+        libFilesCache = [];
+      }
+
+      function getLibraryFiles() {
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open(DB_NAME, 8); // Same version as app.js
+
+          req.onerror = () => reject("DB Open Error");
+
+          // If DB doesn't exist, this triggers. We don't want to create it here.
+          req.onupgradeneeded = (e) => {
+            e.target.transaction.abort();
+            resolve([]);
+          };
+
+          req.onsuccess = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains("library")) {
+              db.close();
+              return resolve([]);
+            }
+            const tx = db.transaction("library", "readonly");
+            const store = tx.objectStore("library");
+            const getAll = store.getAll();
+
+            getAll.onsuccess = () => {
+              resolve(getAll.result);
+              db.close();
+            };
+            getAll.onerror = () => {
+              reject("Read Error");
+              db.close();
+            };
+          };
+        });
+      }
+
+      function renderLibraryList() {
+        const list = document.getElementById("lib-list");
+        list.innerHTML = "";
+
+        libFilesCache.forEach((item, idx) => {
+          const div = document.createElement("div");
+          div.className =
+            "flex items-center gap-3 p-3 hover:bg-[#222] cursor-pointer border border-transparent hover:border-[#444] rounded bg-[#0a0a0a] transition-colors";
+          div.onclick = (e) => {
+            if (e.target.type !== "checkbox") {
+              const cb = div.querySelector("input");
+              if (!cb.disabled) {
+                cb.checked = !cb.checked;
+                updateLibCount();
+              }
+            }
+          };
+
+          div.innerHTML = `
+            <input type="checkbox" class="accent-[#00ff00] w-5 h-5 flex-shrink-0 cursor-pointer" value="${idx}">
+            <div class="flex flex-col overflow-hidden">
+              <span class="truncate text-sm text-gray-200 font-bold pointer-events-none">${
+                item.name
+              }</span>
+              <span class="text-[10px] text-gray-500 pointer-events-none">ID: ${item.id.substring(
+                0,
+                8
+              )}...</span>
+            </div>
+          `;
+          list.appendChild(div);
+        });
+        updateLibCount();
+      }
+
+      function updateLibCount() {
+        const checkboxes = document.querySelectorAll("#lib-list input:checked");
+        const count = checkboxes.length;
+        const countDisp = document.getElementById("lib-count-disp");
+
+        countDisp.innerText = `${count}/${LIMIT_MAX_FILES}`;
+        countDisp.classList.toggle("text-red-500", count > LIMIT_MAX_FILES);
+        countDisp.classList.toggle("text-[#00ff00]", count <= LIMIT_MAX_FILES);
+
+        // Optional: Disable unchecked inputs if limit reached
+        const allChecks = document.querySelectorAll("#lib-list input");
+        allChecks.forEach((cb) => {
+          if (!cb.checked) {
+            cb.disabled = count >= LIMIT_MAX_FILES;
+            cb.parentElement.classList.toggle(
+              "opacity-50",
+              count >= LIMIT_MAX_FILES
+            );
+          } else {
+            cb.disabled = false;
+            cb.parentElement.classList.remove("opacity-50");
+          }
+        });
+      }
+
+      function confirmLibrarySelection() {
+        const checkboxes = document.querySelectorAll("#lib-list input:checked");
+        if (checkboxes.length === 0) return;
+
+        const selectedFiles = [];
+        checkboxes.forEach((cb) => {
+          const idx = parseInt(cb.value);
+          const item = libFilesCache[idx];
+          if (item && item.blob) {
+            let file = item.blob;
+
+            // Ensure the file has the correct name (IndexedDB blobs might lose name)
+            try {
+              // Try to construct a new File object to ensure name is correct
+              file = new File([item.blob], item.name, {
+                type: item.blob.type || "audio/mpeg",
+              });
+            } catch (e) {
+              // Fallback for older environments
+              console.warn("File constructor fallback", e);
+              // We just use the blob, but we'll send the name manually in 'meta'
+              file.name = item.name;
+            }
+            selectedFiles.push(file);
+          }
+        });
+
+        if (selectedFiles.length > 0) {
+          closeLibraryModal();
+          handleNewFiles(selectedFiles);
+        }
+      }
+
+      // --- Processing Queue ---
 
       async function processQueue() {
         if (isProcessing) return;
         isProcessing = true;
         btnSelect.disabled = true;
+        btnLibrary.disabled = true;
         progressArea.classList.remove("hidden");
         document.getElementById("queue-info").classList.remove("hidden");
 
@@ -201,12 +438,13 @@
             await sendFileRobust(file);
           } catch (err) {
             console.error(err);
-            alert(`Error sending ${file.name}`);
+            alert(`Error sending ${file.name || "file"}`);
           }
         }
 
         isProcessing = false;
         btnSelect.disabled = false;
+        btnLibrary.disabled = false;
         btnSelect.innerText = "SEND MORE";
         document.getElementById("status-detail").innerText = "All Done!";
         document
@@ -216,11 +454,12 @@
           alert("Transfer Complete!");
           progressArea.classList.add("hidden");
           document.getElementById("queue-info").classList.add("hidden");
-          document.getElementById("file-input").value = "";
           document
             .getElementById("status-detail")
             .classList.remove("text-[#00ff00]");
-          btnSelect.innerHTML = `<span>SELECT FILES</span><span class="text-[10px] font-normal text-gray-700">(Max 10 files)</span>`;
+
+          // Reset Buttons
+          btnSelect.innerHTML = `<span>SELECT FILES</span><span class="text-[10px] font-normal text-gray-700">(Device Storage)</span>`;
         }, 500);
       }
 
@@ -228,7 +467,10 @@
         return new Promise((resolve, reject) => {
           if (!conn || !conn.open) return reject("No connection");
 
-          document.getElementById("filename-disp").innerText = file.name;
+          // Ensure name exists (fallback if File object lost it)
+          const fileName = file.name || "unknown_audio.mp3";
+
+          document.getElementById("filename-disp").innerText = fileName;
           document.getElementById("status-detail").innerText = "Starting...";
           document.getElementById("progress-bar").style.width = "0%";
           document.getElementById("percent-disp").innerText = "0%";
@@ -236,9 +478,9 @@
           // 1. Send Meta
           conn.send({
             type: "meta",
-            name: file.name,
+            name: fileName,
             size: file.size,
-            mime: file.type,
+            mime: file.type || "audio/mpeg",
           });
 
           let offset = 0;
@@ -248,11 +490,10 @@
           reader.onload = async (event) => {
             try {
               const chunk = event.target.result;
-              conn.send(chunk); // ส่งเนื้อไฟล์
+              conn.send(chunk);
               offset += chunk.byteLength;
               chunkCount++;
 
-              // [FIX 2] เพิ่ม Delay เล็กน้อย (10ms) เพื่อป้องกัน Buffer เต็ม
               await new Promise((r) => setTimeout(r, 10));
 
               // UI Update
@@ -261,13 +502,11 @@
                 percent + "%";
               document.getElementById("percent-disp").innerText = percent + "%";
 
-              // --- SYNC CHECKPOINT ---
-              // ทุกๆ X chunks ให้หยุดถาม Host ว่า "ทันไหม?"
               if (chunkCount % SYNC_INTERVAL === 0) {
                 document.getElementById("status-detail").innerText =
                   "Syncing...";
-                conn.send({ type: "sync" }); // ส่งคำขอ Sync
-                await waitForSync(); // รอจนกว่า Host จะตอบ sync_ack
+                conn.send({ type: "sync" });
+                await waitForSync();
                 document.getElementById("status-detail").innerText =
                   "Sending...";
               }
@@ -278,7 +517,7 @@
                 document.getElementById("status-detail").innerText =
                   "Verifying...";
                 conn.send({ type: "end" });
-                resolveUpload = resolve; // รอ file_received
+                resolveUpload = resolve;
               }
             } catch (e) {
               reject(e);
@@ -290,7 +529,6 @@
             reader.readAsArrayBuffer(slice);
           };
 
-          // ฟังก์ชันรอ Sync Ack
           const waitForSync = () => {
             return new Promise((r) => {
               resolveSync = r;

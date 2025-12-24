@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v2025-12-24-1539";
+const CACHE_VERSION = "v2025-12-24-1554";
 const CACHE_NAME = `nextamp-${CACHE_VERSION}`;
 
 const ASSETS_TO_CACHE = [
