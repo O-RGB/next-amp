@@ -1626,8 +1626,7 @@ function updateExportButtonState(isLoading) {
   }
 }
 
-// ในไฟล์ next-amp/assets/libs/js/app.js
-// ค้นหาฟังก์ชัน startRenderingProcess แล้วแก้เป็นแบบนี้ครับ
+// ค้นหาฟังก์ชัน startRenderingProcess เดิม แล้วแทนที่ด้วยโค้ดชุดนี้
 
 async function startRenderingProcess(sourceBuffer, duration, filename) {
   const btn = $("#btn-export");
@@ -1640,15 +1639,22 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
 
   try {
     const extraTail = isReverbOn ? 2 : 0;
-
-    // [FIX 1] บังคับใช้ 44100Hz เสมอ เพื่อความเสถียรบน iOS และ LameJS
+    // [FIX 1] บังคับใช้ 44100Hz เพื่อความเสถียรบน iOS
     const targetRate = 44100;
 
+    // สร้าง Offline Context
     const offlineCtx = new OfflineAudioContext(
       2,
       (duration + extraTail) * targetRate,
       targetRate
     );
+
+    // --- [เพิ่ม FIX: iOS Workaround] ---
+    // สร้าง Dummy Source ที่เงียบสนิท (0) เพื่อกระตุ้นให้ Graph ทำงาน
+    // iOS Safari มักจะไม่ Render ถ้า Graph มีแต่ Worklet โดยไม่มี Native Source
+    const dummy = offlineCtx.createConstantSource();
+    dummy.offset.value = 0;
+    // -------------------------------
 
     const offStretch = await SignalsmithStretch(offlineCtx);
     const channelBuffers = [];
@@ -1656,11 +1662,9 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
       channelBuffers.push(new Float32Array(sourceBuffer.getChannelData(c)));
     }
 
-    // ส่งข้อมูลเข้า Worklet
     await offStretch.addBuffers(channelBuffers);
 
-    // [FIX 2] เพิ่ม Delay เล็กน้อยเพื่อให้แน่ใจว่า Buffer ถูกส่งเข้า Worklet ทันบน iOS
-    // iOS Safari บางเวอร์ชันเรนเดอร์เร็วกว่าที่ Message Port จะส่งข้อมูลถึง
+    // [FIX 2] Delay เพื่อให้ Buffer ส่งไปถึง Worklet ทัน (โดยเฉพาะ iOS)
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     offStretch.schedule({
@@ -1671,6 +1675,11 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
     });
 
     let outputNode = offStretch;
+
+    // เชื่อมต่อ Dummy เข้ากับ Output Node (เพื่อให้มันอยู่ใน Graph chain เดียวกัน)
+    // มันจะไม่ส่งเสียงรบกวนเพราะ value เป็น 0
+    dummy.connect(outputNode);
+    dummy.start(0);
 
     const currentEqGains = Array.from(
       document.querySelectorAll("input[data-idx]")
@@ -1697,7 +1706,6 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
 
     if (isReverbOn) {
       const revNode = offlineCtx.createConvolver();
-      // สร้าง Impulse Response ใหม่โดยใช้ Sample Rate ของ OfflineContext
       revNode.buffer = createOfflineImpulseResponse(offlineCtx);
       const revGain = offlineCtx.createGain();
       revGain.gain.value = parseFloat($("#main-reverb").value);
@@ -1708,24 +1716,43 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
 
     $("#marquee").textContent = "Rendering Effects... (Please wait)";
 
+    // --- [เพิ่ม FIX: iOS Resume] ---
+    // iOS Safari บางเวอร์ชันต้องการให้ Context อยู่ในสถานะพร้อม ก่อน startRendering
+    if (offlineCtx.resume) {
+      try {
+        await offlineCtx.resume();
+      } catch (e) {}
+    }
+    // -----------------------------
+
     const renderedBuffer = await offlineCtx.startRendering();
+
+    // Debug: เช็คว่าไฟล์เงียบหรือไม่ (ดูใน Console)
+    const checkData = renderedBuffer.getChannelData(0);
+    let maxAmp = 0;
+    // สุ่มเช็คหัว-ท้าย-กลาง เพื่อไม่ให้ Loop นานเกินไป
+    for (let i = 0; i < checkData.length; i += 1000) {
+      if (Math.abs(checkData[i]) > maxAmp) maxAmp = Math.abs(checkData[i]);
+    }
+    console.log("Export Render Check - Max Amp:", maxAmp);
+    if (maxAmp === 0) {
+      console.warn("Warning: Rendered buffer is silent!");
+    }
 
     $("#marquee").textContent = "Encoding MP3... (0%)";
 
     return new Promise((resolve, reject) => {
       mp3Worker = new Worker("/assets/libs/worker/mp3-worker.js");
 
-      // [FIX 3] เตรียมข้อมูลแบบ Copy เพื่อทำ Transferable Object (ลด RAM บน iOS)
       const ch0 = new Float32Array(renderedBuffer.getChannelData(0));
       const ch1 =
         renderedBuffer.numberOfChannels > 1
           ? new Float32Array(renderedBuffer.getChannelData(1))
-          : new Float32Array(renderedBuffer.getChannelData(0)); // Mono to Stereo fallback
+          : new Float32Array(renderedBuffer.getChannelData(0));
 
       const channelData = [ch0, ch1];
 
-      // ส่งข้อมูลไป Worker พร้อม Transfer list (พารามิเตอร์ตัวที่ 2)
-      // ช่วยให้ไม่กิน RAM เพิ่มเป็น 2 เท่า ซึ่งสำคัญมากบน iPhone
+      // ใช้ Transferable Objects เพื่อประหยัด RAM บน iOS
       mp3Worker.postMessage(
         {
           channelData: channelData,
@@ -1733,7 +1760,7 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
           channels: 2,
         },
         [ch0.buffer, ch1.buffer]
-      ); // <--- Key Fix for Memory
+      );
 
       mp3Worker.onmessage = function (e) {
         if (e.data.type === "progress") {
@@ -1841,6 +1868,7 @@ function initPeerHost() {
   peerHost.on("open", (id) => {
     logPeer(`HOST ID: ${id}`);
 
+    // สร้าง URL สำหรับ Remote
     const url = `${window.location.origin}/remote.html?host=${id}`;
     $("#peer-link-text").textContent = url;
 
@@ -1861,6 +1889,7 @@ function initPeerHost() {
     logPeer("Client Connected!");
 
     conn.on("data", async (data) => {
+      // 1. รับ Metadata เริ่มต้นไฟล์ใหม่
       if (data.type === "meta") {
         incomingFile.meta = data;
         incomingFile.buffer = [];
@@ -1869,8 +1898,12 @@ function initPeerHost() {
         $("#host-progress-wrap").classList.remove("hidden");
         $("#host-progress-bar").style.width = "0%";
         logPeer(`Receiving: ${data.name}...`);
+
+        // 2. ตอบกลับการ Sync (เพื่อให้ฝั่งส่งรู้ว่าส่งต่อได้)
       } else if (data.type === "sync") {
         conn.send({ type: "sync_ack" });
+
+        // 3. จบไฟล์
       } else if (data.type === "end") {
         if (incomingFile.receivedSize !== incomingFile.meta.size) {
           logPeer(
@@ -1885,6 +1918,7 @@ function initPeerHost() {
         $("#host-progress-wrap").classList.add("hidden");
 
         try {
+          // รวม Buffer เป็น Blob แล้วส่งเข้า Playlist
           const blob = new Blob(incomingFile.buffer, {
             type: incomingFile.meta.mime,
           });
@@ -1892,7 +1926,7 @@ function initPeerHost() {
             type: incomingFile.meta.mime,
           });
 
-          await handleFiles([file]);
+          await handleFiles([file]); // เรียกฟังก์ชันหลักของ App
 
           logPeer(`Saved: ${incomingFile.meta.name} [OK]`);
           conn.send({ type: "file_received" });
@@ -1901,6 +1935,8 @@ function initPeerHost() {
           logPeer(`Error: ${err.message}`);
         }
         incomingFile.buffer = [];
+
+        // 4. รับ Chunk ข้อมูล (ArrayBuffer)
       } else if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
         incomingFile.buffer.push(data);
         incomingFile.receivedSize += data.byteLength || data.length;
