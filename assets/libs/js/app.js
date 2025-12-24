@@ -3,8 +3,8 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 (function () {
   const allowedDomains = [
     "next-amp-player.vercel.app",
-    "localhost",
-    "127.0.0.1",
+    // "localhost",
+    // "127.0.0.1",
   ];
   const currentDomain = window.location.hostname;
 
@@ -20,6 +20,24 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
   if (isDirectAccess || hasNoToken) {
     window.location.replace("index.html");
     throw new Error("Access Denied");
+  }
+})();
+
+(function checkBrowserAndDisableExport() {
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  if (isSafari || isIOS) {
+    const btnExport = document.querySelector("#btn-export");
+    if (btnExport) {
+      btnExport.style.display = "none";
+      console.log(
+        "Export feature disabled due to Safari/iOS WebAudio limitations."
+      );
+    }
   }
 })();
 
@@ -773,6 +791,15 @@ async function playTrack(idx) {
     return;
   }
   currentTrackIndex = idx;
+
+  const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+
+  if (isTouch && selectedIndices.size <= 1) {
+    selectedIndices.clear();
+    selectedIndices.add(idx);
+    lastSelectedIndex = idx;
+  }
+
   renderPlaylistUI();
   const t = list[idx];
   $("#marquee").textContent = `${idx + 1}. ${t.name} (Loading...)`;
@@ -812,7 +839,7 @@ function handleNextTrack(auto = false) {
   if (next < list.length) {
     playTrack(next);
   } else {
-    if (repeatMode === 1) {
+    if (repeatMode === 1 || !auto) {
       playTrack(0);
     } else {
       $("#btn-stop").click();
@@ -834,6 +861,18 @@ $("#btn-play").onclick = async () => {
   if (!isEngineHot) await initAudioEngine();
   checkAndResumeAudioContext();
   const list = getCurrentDisplayList();
+
+  const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+
+  if (isTouch && selectedIndices.size > 0) {
+    const selIdx = Array.from(selectedIndices)[0];
+
+    if (selIdx !== currentTrackIndex && list[selIdx]) {
+      playTrack(selIdx);
+      return;
+    }
+  }
+
   if (!stretch && list.length > 0) playTrack(Math.max(0, currentTrackIndex));
   else if (stretch) {
     controlValues.active = !controlValues.active;
@@ -846,7 +885,10 @@ $("#btn-pause").onclick = () => {
 };
 $("#btn-stop").onclick = () => {
   controlValues.active = false;
-  if (stretch) stretch.stop();
+  if (stretch) {
+    stretch.stop();
+    stretch.schedule({ input: 0 });
+  }
   $("#playback").value = 0;
   $("#time-display").textContent = "00:00";
   $("#btn-play").classList.remove("pressed");
@@ -1626,9 +1668,6 @@ function updateExportButtonState(isLoading) {
   }
 }
 
-// ในไฟล์ next-amp/assets/libs/js/app.js
-// ค้นหาฟังก์ชัน startRenderingProcess แล้วแก้เป็นแบบนี้ครับ
-
 async function startRenderingProcess(sourceBuffer, duration, filename) {
   const btn = $("#btn-export");
   if (btn.disabled) return;
@@ -1641,7 +1680,6 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
   try {
     const extraTail = isReverbOn ? 2 : 0;
 
-    // [FIX 1] บังคับใช้ 44100Hz เสมอ เพื่อความเสถียรบน iOS และ LameJS
     const targetRate = 44100;
 
     const offlineCtx = new OfflineAudioContext(
@@ -1656,11 +1694,8 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
       channelBuffers.push(new Float32Array(sourceBuffer.getChannelData(c)));
     }
 
-    // ส่งข้อมูลเข้า Worklet
     await offStretch.addBuffers(channelBuffers);
 
-    // [FIX 2] เพิ่ม Delay เล็กน้อยเพื่อให้แน่ใจว่า Buffer ถูกส่งเข้า Worklet ทันบน iOS
-    // iOS Safari บางเวอร์ชันเรนเดอร์เร็วกว่าที่ Message Port จะส่งข้อมูลถึง
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     offStretch.schedule({
@@ -1697,7 +1732,7 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
 
     if (isReverbOn) {
       const revNode = offlineCtx.createConvolver();
-      // สร้าง Impulse Response ใหม่โดยใช้ Sample Rate ของ OfflineContext
+
       revNode.buffer = createOfflineImpulseResponse(offlineCtx);
       const revGain = offlineCtx.createGain();
       revGain.gain.value = parseFloat($("#main-reverb").value);
@@ -1715,17 +1750,14 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
     return new Promise((resolve, reject) => {
       mp3Worker = new Worker("/assets/libs/worker/mp3-worker.js");
 
-      // [FIX 3] เตรียมข้อมูลแบบ Copy เพื่อทำ Transferable Object (ลด RAM บน iOS)
       const ch0 = new Float32Array(renderedBuffer.getChannelData(0));
       const ch1 =
         renderedBuffer.numberOfChannels > 1
           ? new Float32Array(renderedBuffer.getChannelData(1))
-          : new Float32Array(renderedBuffer.getChannelData(0)); // Mono to Stereo fallback
+          : new Float32Array(renderedBuffer.getChannelData(0));
 
       const channelData = [ch0, ch1];
 
-      // ส่งข้อมูลไป Worker พร้อม Transfer list (พารามิเตอร์ตัวที่ 2)
-      // ช่วยให้ไม่กิน RAM เพิ่มเป็น 2 เท่า ซึ่งสำคัญมากบน iPhone
       mp3Worker.postMessage(
         {
           channelData: channelData,
@@ -1733,7 +1765,7 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
           channels: 2,
         },
         [ch0.buffer, ch1.buffer]
-      ); // <--- Key Fix for Memory
+      );
 
       mp3Worker.onmessage = function (e) {
         if (e.data.type === "progress") {
@@ -1841,7 +1873,6 @@ function initPeerHost() {
   peerHost.on("open", (id) => {
     logPeer(`HOST ID: ${id}`);
 
-    // สร้าง URL สำหรับ Remote
     const url = `${window.location.origin}/remote.html?host=${id}`;
     $("#peer-link-text").textContent = url;
 
@@ -1862,7 +1893,6 @@ function initPeerHost() {
     logPeer("Client Connected!");
 
     conn.on("data", async (data) => {
-      // 1. รับ Metadata เริ่มต้นไฟล์ใหม่
       if (data.type === "meta") {
         incomingFile.meta = data;
         incomingFile.buffer = [];
@@ -1871,12 +1901,8 @@ function initPeerHost() {
         $("#host-progress-wrap").classList.remove("hidden");
         $("#host-progress-bar").style.width = "0%";
         logPeer(`Receiving: ${data.name}...`);
-
-        // 2. ตอบกลับการ Sync (เพื่อให้ฝั่งส่งรู้ว่าส่งต่อได้)
       } else if (data.type === "sync") {
         conn.send({ type: "sync_ack" });
-
-        // 3. จบไฟล์
       } else if (data.type === "end") {
         if (incomingFile.receivedSize !== incomingFile.meta.size) {
           logPeer(
@@ -1891,7 +1917,6 @@ function initPeerHost() {
         $("#host-progress-wrap").classList.add("hidden");
 
         try {
-          // รวม Buffer เป็น Blob แล้วส่งเข้า Playlist
           const blob = new Blob(incomingFile.buffer, {
             type: incomingFile.meta.mime,
           });
@@ -1899,7 +1924,7 @@ function initPeerHost() {
             type: incomingFile.meta.mime,
           });
 
-          await handleFiles([file]); // เรียกฟังก์ชันหลักของ App
+          await handleFiles([file]);
 
           logPeer(`Saved: ${incomingFile.meta.name} [OK]`);
           conn.send({ type: "file_received" });
@@ -1908,8 +1933,6 @@ function initPeerHost() {
           logPeer(`Error: ${err.message}`);
         }
         incomingFile.buffer = [];
-
-        // 4. รับ Chunk ข้อมูล (ArrayBuffer)
       } else if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
         incomingFile.buffer.push(data);
         incomingFile.receivedSize += data.byteLength || data.length;
