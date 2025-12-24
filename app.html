@@ -51,7 +51,7 @@
       html,
       body {
         /* iOS Safari Fixes */
-        height: 100dvh;
+        height: 100vh;
         width: 100vw;
         position: fixed;
         inset: 0;
@@ -67,7 +67,7 @@
         background: radial-gradient(circle at center, #003504 0%, #020617 80%);
 
         /* Safe Area padding */
-        padding-top: max(8px, env(safe-area-inset-top));
+        padding-top: max(4px, env(safe-area-inset-top));
         padding-bottom: max(4px, env(safe-area-inset-bottom));
         padding-left: max(4px, env(safe-area-inset-left));
         padding-right: max(4px, env(safe-area-inset-right));
@@ -245,7 +245,7 @@
         border-right: 1px solid #000;
         border-bottom: 1px solid #000;
       }
-      
+
       /* Tabs Style */
       .tab-btn {
         background: #292929;
@@ -254,7 +254,7 @@
         border-bottom: none;
         cursor: pointer;
         font-size: 10px;
-        font-family: 'Chakra Petch', sans-serif;
+        font-family: "Chakra Petch", sans-serif;
       }
       .tab-btn.active {
         background: #292929;
@@ -304,7 +304,7 @@
     </button>
 
     <div
-      class="w-full h-full max-w-xl xl:max-w-sm mx-auto overflow-hidden flex flex-col pb-1 sci-fi-container-glow relative z-10"
+      class="fixed top-0 left-0 w-full h-full max-w-xl xl:max-w-sm mx-auto overflow-hidden flex flex-col pb-1 sci-fi-container-glow relative z-10"
     >
       <div
         class="flex-none flex flex-col gap-2 origin-center transition-transform duration-300"
@@ -316,7 +316,7 @@
             class="theme-bar h-5 flex justify-between items-center px-1 text-[10px] font-bold cursor-grab"
           >
             <div class="flex items-center gap-1">
-              <i class="ph-bold ph-music-note"></i><span>NEXTAMP PRO</span>
+              <i class="ph-bold ph-music-note"></i><span>NEXTAMP</span>
             </div>
             <div class="flex gap-1 items-center">
               <div
@@ -501,11 +501,11 @@
           </div>
           <div id="eq-body" class="p-2 flex gap-1 h-[160px]">
             <div
-              class="w-[85px] flex flex-col justify-between pr-2 border-r border-gray-600"
+              class="w-[90px] flex flex-col gap-1 h-full items-center justify-between pr-1 border-r border-gray-600"
             >
               <select
                 id="eq-preset-select"
-                class="w-full text-[9px] bg-black theme-text-main border border-gray-500 outline-none h-4"
+                class="w-full text-[9px] bg-black theme-text-main border border-gray-500 outline-none"
               >
                 <option value="flat">Flat</option>
                 <option value="rock">Rock</option>
@@ -514,53 +514,64 @@
                 <option value="fullbass">Bass</option>
                 <option value="custom">Manual</option>
               </select>
-              <div class="">
+
+              <div class="flex flex-col border border-gray-600/50 p-1 h-full">
                 <div class="flex justify-between items-center w-full">
                   <a
                     href="https://github.com/signalsmith-audio/signalsmith-stretch"
                     target="_blank"
-                    class="bg-btn-face text-black px-[1px] py-[1px] no-underline flex items-center justify-center gap-1 w-full"
+                    class="flex justify-center items-end w-full"
                   >
-                    <i class="ph-bold ph-github-logo text-[10px]"></i>
-                    <span class="text-[6px]"> Signalsmith Lib </span>
+                    <button
+                      class="win-btn text-[9px] font-bold shadow-sm w-full !h-4"
+                    >
+                      <div class="pr-0.5">
+                        <i class="ph-bold ph-github-logo text-[10px]"></i>
+                      </div>
+                      <div class="text-[7px] pb-0.5">Signalsmith</div>
+                    </button>
                   </a>
                 </div>
-                <div
-                  class="flex justify-between text-[8px] text-gray-400 -mb-2"
-                >
-                  <span>PITCH</span
-                  ><span id="val-pitch" class="theme-text-sec">0</span>
+                <div class="flex flex-col justify-center h-full gap-3">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex flex-col gap-1">
+                      <div
+                        class="flex justify-between text-[8px] text-gray-400"
+                      >
+                        <span>PITCH</span
+                        ><span id="val-pitch" class="theme-text-sec">0</span>
+                      </div>
+                      <input
+                        type="range"
+                        data-key="semitones"
+                        min="-12"
+                        max="12"
+                        step="1"
+                        value="0"
+                        class="w-full h-1 bg-gray-600"
+                        data-tooltip-type="val"
+                      />
+                    </div>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <div class="flex justify-between text-[8px] text-gray-400">
+                      <span>SPEED</span
+                      ><span id="val-rate" class="theme-text-sec">1.0</span>
+                    </div>
+                    <input
+                      type="range"
+                      data-key="rate"
+                      min="0.5"
+                      max="2"
+                      step="0.05"
+                      value="1"
+                      class="w-full h-1 bg-gray-600"
+                      data-tooltip-type="x"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="range"
-                  data-key="semitones"
-                  min="-12"
-                  max="12"
-                  step="1"
-                  value="0"
-                  class="w-full h-1 bg-gray-600"
-                  data-tooltip-type="val"
-                />
               </div>
-              <div class="">
-                <div
-                  class="flex justify-between text-[8px] text-gray-400 -mb-2"
-                >
-                  <span>SPEED</span
-                  ><span id="val-rate" class="theme-text-sec">1.0</span>
-                </div>
-                <input
-                  type="range"
-                  data-key="rate"
-                  min="0.5"
-                  max="2"
-                  step="0.05"
-                  value="1"
-                  class="w-full h-1 bg-gray-600"
-                  data-tooltip-type="x"
-                />
-              </div>
-              <div class="">
+              <div class="flex-1">
                 <div
                   class="flex justify-between items-center text-[8px] text-gray-400 -mb-2"
                 >
@@ -616,7 +627,7 @@
       </div>
 
       <div
-        class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-0 shadow-lg flex-1 min-h-0 flex flex-col mt-2"
+        class="h-full bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-0 shadow-lg flex-1 min-h-0 flex flex-col mt-2"
       >
         <div
           class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold flex-none"
@@ -756,7 +767,7 @@
           <input
             type="text"
             id="new-playlist-name"
-            class="w-full bg-black text-white border border-gray-500 text-xs p-1 mb-3 font-pixel focus:outline-none focus:border-win-green"
+            class="w-full bg-black text-white border border-gray-500 text-xs p-1 mb-3 font-pixel focus:outline-none"
             placeholder="Playlist Name..."
           />
           <div class="flex gap-2">
@@ -813,45 +824,48 @@
           <div class="px-2 pb-2">
             <div id="tab-content-audio" class="space-y-3">
               <div class="bg-black/20 p-2 border border-gray-600 rounded">
-                <div class="text-[9px] text-gray-400 mb-2 font-bold text-center">
+                <div
+                  class="text-[9px] text-gray-400 mb-2 font-bold text-center"
+                >
                   CPU / QUALITY CONTROL
                 </div>
                 <div class="space-y-2">
                   <div class="flex flex-col gap-1">
-                    <label class="text-white text-[10px] font-ui flex justify-between">
+                    <label
+                      class="text-white text-[10px] font-ui flex justify-between"
+                    >
                       <span>Sample Rate (Quality)</span>
-                      <span class="text-gray-500 text-[9px]">Requires Reload</span>
+                      <span class="text-gray-500 text-[9px]"
+                        >Requires Reload</span
+                      >
                     </label>
-                    <select id="set-audio-sr" class="w-full bg-black text-white border border-gray-500 text-[10px] p-1 h-6 focus:outline-none">
-                       <option value="default">Default (System)</option>
-                       <option value="48000">48000 Hz (High)</option>
-                       <option value="44100">44100 Hz (CD)</option>
-                       <option value="22050">22050 Hz (Low CPU)</option>
+                    <select
+                      id="set-audio-sr"
+                      class="w-full bg-black text-white border border-gray-500 text-[10px] p-1 h-6 focus:outline-none"
+                    >
+                      <option value="default">Default (System)</option>
+                      <option value="48000">48000 Hz (High)</option>
+                      <option value="44100">44100 Hz (CD)</option>
+                      <option value="22050">22050 Hz (Low CPU)</option>
                     </select>
                   </div>
-                  
+
                   <div class="flex flex-col gap-1">
-                    <label class="text-white text-[10px] font-ui">Latency Mode</label>
-                    <select id="set-audio-latency" class="w-full bg-black text-white border border-gray-500 text-[10px] p-1 h-6 focus:outline-none">
-                       <option value="interactive">Interactive (Fast)</option>
-                       <option value="balanced">Balanced</option>
-                       <option value="playback">Playback (Less CPU)</option>
+                    <label class="text-white text-[10px] font-ui"
+                      >Latency Mode</label
+                    >
+                    <select
+                      id="set-audio-latency"
+                      class="w-full bg-black text-white border border-gray-500 text-[10px] p-1 h-6 focus:outline-none"
+                    >
+                      <option value="interactive">Interactive (Fast)</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="playback">Playback (Less CPU)</option>
                     </select>
                   </div>
                 </div>
               </div>
-              
-              <!-- <div class="bg-black/20 p-2 border border-gray-600 rounded">
-                 <div class="text-[9px] text-gray-400 mb-1 font-bold text-center">
-                  OTHER AUDIO
-                </div>
-                <div class="flex items-center justify-between">
-                   <span class="text-white text-[10px] font-ui">Reverb Master Gain</span>
-                   <span class="text-xs text-gray-400" id="disp-rev-gain">0.0</span>
-                </div>
-                <input type="range" id="set-rev-gain-sl" min="0" max="1" step="0.1" class="w-full h-2 bg-black mt-1" oninput="document.getElementById('disp-rev-gain').textContent=this.value"/>
-              </div> -->
-              
+
               <button
                 onclick="saveAudioSettings()"
                 class="win-btn w-full h-6 text-[10px] mt-2"
@@ -934,21 +948,21 @@
                   PREVIEW
                 </div>
               </div>
-              
-               <div class="flex gap-2 mt-4">
-                  <button
-                    onclick="resetTheme()"
-                    class="win-btn flex-1 h-6 text-[10px] text-red-900"
-                  >
-                    RESET
-                  </button>
-                  <button
-                    onclick="applyThemeSettings()"
-                    class="win-btn flex-1 h-6 text-[10px]"
-                  >
-                    APPLY
-                  </button>
-                </div>
+
+              <div class="flex gap-2 mt-4">
+                <button
+                  onclick="resetTheme()"
+                  class="win-btn flex-1 h-6 text-[10px] text-red-900"
+                >
+                  RESET
+                </button>
+                <button
+                  onclick="applyThemeSettings()"
+                  class="win-btn flex-1 h-6 text-[10px]"
+                >
+                  APPLY
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -971,20 +985,23 @@
       // 1. Load Audio Settings Early
       const savedSettingsRaw = localStorage.getItem(STORAGE_KEY);
       let savedSettings = savedSettingsRaw ? JSON.parse(savedSettingsRaw) : {};
-      
+
       const audioOptions = {};
-      if (savedSettings.audioSampleRate && savedSettings.audioSampleRate !== 'default') {
-          audioOptions.sampleRate = parseInt(savedSettings.audioSampleRate);
+      if (
+        savedSettings.audioSampleRate &&
+        savedSettings.audioSampleRate !== "default"
+      ) {
+        audioOptions.sampleRate = parseInt(savedSettings.audioSampleRate);
       }
       if (savedSettings.audioLatency) {
-          audioOptions.latencyHint = savedSettings.audioLatency;
+        audioOptions.latencyHint = savedSettings.audioLatency;
       }
 
       // 2. Initialize AudioContext with Options
       let audioContext;
       try {
         audioContext = new AudioContext(audioOptions);
-      } catch(e) {
+      } catch (e) {
         console.warn("Custom sample rate failed, falling back", e);
         audioContext = new AudioContext();
       }
@@ -1002,6 +1019,7 @@
 
       let reverbNode = audioContext.createConvolver();
       let reverbGain = audioContext.createGain();
+      reverbGain.gain.value = 0;
       let isReverbOn = false;
 
       function applyThemeToDOM(t) {
@@ -1051,20 +1069,20 @@
 
       // --- Tab Switching Logic ---
       window.switchSettingsTab = (tabName) => {
-        ['audio', 'appearance'].forEach(t => {
-            if (t === tabName) {
-                $(`#tab-content-${t}`).classList.remove('hidden');
-                $(`#tab-btn-${t}`).classList.add('active');
-            } else {
-                $(`#tab-content-${t}`).classList.add('hidden');
-                $(`#tab-btn-${t}`).classList.remove('active');
-            }
+        ["audio", "appearance"].forEach((t) => {
+          if (t === tabName) {
+            $(`#tab-content-${t}`).classList.remove("hidden");
+            $(`#tab-btn-${t}`).classList.add("active");
+          } else {
+            $(`#tab-content-${t}`).classList.add("hidden");
+            $(`#tab-btn-${t}`).classList.remove("active");
+          }
         });
       };
 
       window.openSettingsModal = () => {
         $("#modal-settings").classList.remove("hidden");
-        
+
         // Load Appearance
         $("#set-theme-window").value = currentTheme.window;
         $("#set-theme-text").value = currentTheme.text;
@@ -1072,20 +1090,21 @@
         $("#set-eq-1").value = currentTheme.eq1;
         $("#set-eq-2").value = currentTheme.eq2;
         $("#set-eq-3").value = currentTheme.eq3;
-        
+
         // Load Audio
-        $("#set-audio-sr").value = savedSettings.audioSampleRate || 'default';
-        $("#set-audio-latency").value = savedSettings.audioLatency || 'interactive';
+        $("#set-audio-sr").value = savedSettings.audioSampleRate || "default";
+        $("#set-audio-latency").value =
+          savedSettings.audioLatency || "interactive";
         // $("#set-rev-gain-sl").value = savedSettings.reverbGain || 0;
         $("#disp-rev-gain").textContent = savedSettings.reverbGain || "0.0";
-        
+
         previewTheme();
       };
-      
+
       window.closeSettingsModal = () => {
         $("#modal-settings").classList.add("hidden");
         // Revert theme preview if cancelled (optional, for now we assume they apply or cancel)
-        applyThemeToDOM(currentTheme); 
+        applyThemeToDOM(currentTheme);
       };
 
       window.previewTheme = () => {
@@ -1095,14 +1114,26 @@
         const txt = $("#theme-preview-text");
         bg.style.backgroundColor = w;
         txt.style.color = t;
-        
+
         // Live preview to DOM (optional)
         document.documentElement.style.setProperty("--theme-window", w);
         document.documentElement.style.setProperty("--theme-text", t);
-        document.documentElement.style.setProperty("--theme-highlight", $("#set-theme-high").value);
-        document.documentElement.style.setProperty("--eq-col-1", $("#set-eq-1").value);
-        document.documentElement.style.setProperty("--eq-col-2", $("#set-eq-2").value);
-        document.documentElement.style.setProperty("--eq-col-3", $("#set-eq-3").value);
+        document.documentElement.style.setProperty(
+          "--theme-highlight",
+          $("#set-theme-high").value
+        );
+        document.documentElement.style.setProperty(
+          "--eq-col-1",
+          $("#set-eq-1").value
+        );
+        document.documentElement.style.setProperty(
+          "--eq-col-2",
+          $("#set-eq-2").value
+        );
+        document.documentElement.style.setProperty(
+          "--eq-col-3",
+          $("#set-eq-3").value
+        );
       };
 
       window.applyThemeSettings = () => {
@@ -1119,16 +1150,16 @@
       };
 
       window.saveAudioSettings = () => {
-         savedSettings.audioSampleRate = $("#set-audio-sr").value;
-         savedSettings.audioLatency = $("#set-audio-latency").value;
+        savedSettings.audioSampleRate = $("#set-audio-sr").value;
+        savedSettings.audioLatency = $("#set-audio-latency").value;
         //  savedSettings.reverbGain = $("#set-rev-gain-sl").value;
-         
-         // Only save these specific keys to localStorage immediately
-         localStorage.setItem(STORAGE_KEY, JSON.stringify(savedSettings));
-         
-         customConfirm("Audio settings saved. Reload to apply changes?", () => {
-             location.reload();
-         });
+
+        // Only save these specific keys to localStorage immediately
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(savedSettings));
+
+        customConfirm("Audio settings saved. Reload to apply changes?", () => {
+          location.reload();
+        });
       };
 
       window.resetTheme = () => {
@@ -1712,8 +1743,16 @@
             await loadAudioEngine(buf, t);
             $("#marquee").textContent = `${idx + 1}. ${t.name}`;
           } catch (e) {
+            // ----- START MODIFIED BLOCK (Play Error) -----
+            console.error("Play Error:", e);
             $("#marquee").textContent = "Error loading file.";
             isChangingTrack = false;
+
+            // Mark error and save to IndexedDB
+            t.hasError = true;
+            await saveTrackToLib(t);
+            renderPlaylistUI(); // Refresh UI to show red
+            // ----- END MODIFIED BLOCK -----
           }
         }, 200);
       }
@@ -1796,11 +1835,14 @@
 
       FREQUENCIES.forEach((f, i) => {
         const div = document.createElement("div");
+        // ----- START MODIFIED BLOCK (EQ Slider Padding) -----
+        // Changed from py-2 to pt-2 pb-6 to fix overlap
         div.className =
-          "flex flex-col items-center h-full flex-1 group relative py-2";
+          "flex flex-col items-center h-full flex-1 group relative py-3";
+        // ----- END MODIFIED BLOCK -----
         div.innerHTML = `<div class="relative h-full w-full flex justify-center"><div class="eq-bar-bg ${
           isEqOn ? "eq-bar-active" : ""
-        }" id="eq-bg-${i}"></div><div class="eq-thumb" style="top: 50%" id="thumb-${i}"></div><input type="range" class="vertical" min="-12" max="12" step="0.5" value="0" data-idx="${i}" data-tooltip-type="db"></div><div class="absolute -bottom-1 text-[7px] theme-text-main font-pixel tracking-tighter">${
+        }" id="eq-bg-${i}"></div><div class="eq-thumb " style="top: 50%" id="thumb-${i}"></div><input type="range" class="vertical" style="height: 120%; top: -10%;" min="-12" max="12" step="0.5" value="0" data-idx="${i}" data-tooltip-type="db"></div><div class="absolute -bottom-1 text-[7px] theme-text-main font-pixel tracking-tighter pointer-events-none">${
           f >= 1000 ? f / 1000 + "k" : f
         }</div>`;
         div.querySelector("input").ondblclick = (e) => {
@@ -2026,8 +2068,18 @@
         else {
           displayList.forEach((t, i) => {
             const d = document.createElement("div");
-            if (selectedIndices.has(i)) d.classList.add("theme-highlight-bg");
-            else d.className += " theme-text-main hover:bg-[#222]";
+            // ----- START MODIFIED BLOCK (Red Error Text) -----
+            if (selectedIndices.has(i)) {
+              d.classList.add("theme-highlight-bg");
+            } else {
+              // Check for hasError property
+              if (t.hasError) {
+                d.className += " text-red-500 hover:bg-[#222]";
+              } else {
+                d.className += " theme-text-main hover:bg-[#222]";
+              }
+            }
+            // ----- END MODIFIED BLOCK -----
             let textClass =
               i === currentTrackIndex ? "font-bold text-white" : "";
             d.className += ` cursor-pointer px-1 flex justify-between select-none ${textClass}`;
