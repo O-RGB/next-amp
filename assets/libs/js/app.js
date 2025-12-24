@@ -1626,11 +1626,11 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
 
   try {
     const extraTail = isReverbOn ? 2 : 0;
-
+    const targetRate = sourceBuffer.sampleRate;
     const offlineCtx = new OfflineAudioContext(
       2,
-      (duration + extraTail) * 44100,
-      44100
+      (duration + extraTail) * targetRate,
+      targetRate
     );
 
     const offStretch = await SignalsmithStretch(offlineCtx);
