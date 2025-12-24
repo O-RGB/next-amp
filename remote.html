@@ -10,245 +10,269 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link
-      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
 
     <style>
-      :root {
-        --win-gray: #c0c0c0;
-        --win-dark: #808080;
-        --win-light: #ffffff;
-        --win-black: #000000;
-        --win-blue: #000080;
-        --next-green: #00ff00;
-      }
-
       body {
-        background-color: #008080; /* Win98 Desktop Color */
+        background-color: #050505;
+        color: #e5e5e5;
         font-family: "Chakra Petch", sans-serif;
-        overflow: hidden; /* Prevent body scroll */
+        overflow: hidden;
       }
 
-      /* Windows 98 Button Style */
-      .win98-btn {
-        background: var(--win-gray);
-        color: black;
-        border-top: 2px solid var(--win-light);
-        border-left: 2px solid var(--win-light);
-        border-right: 2px solid var(--win-black);
-        border-bottom: 2px solid var(--win-black);
-        box-shadow: 1px 1px 0px var(--win-dark);
-        cursor: pointer;
-        font-weight: bold;
-        text-transform: uppercase;
-        font-size: 12px;
-        padding: 4px 8px;
-        active: none;
+      /* Neon Glow Effects */
+      .glow-text {
+        text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
       }
-      .win98-btn:active,
-      .win98-btn.pressed {
-        border-top: 2px solid var(--win-black);
-        border-left: 2px solid var(--win-black);
-        border-right: 2px solid var(--win-light);
-        border-bottom: 2px solid var(--win-light);
-        transform: translate(1px, 1px);
-        box-shadow: none;
+      .glow-border {
+        box-shadow: 0 0 15px rgba(0, 255, 0, 0.1);
       }
-      .win98-btn:disabled {
-        color: var(--win-dark);
-        text-shadow: 1px 1px 0px var(--win-light);
-        cursor: not-allowed;
-      }
-
-      /* Windows 98 Container Style */
-      .win98-box {
-        background: var(--win-gray);
-        border-top: 2px solid var(--win-light);
-        border-left: 2px solid var(--win-light);
-        border-right: 2px solid var(--win-black);
-        border-bottom: 2px solid var(--win-black);
-        box-shadow: 1px 1px 0px var(--win-dark);
-        padding: 2px;
-      }
-
-      /* Title Bar */
-      .win98-title {
-        background: linear-gradient(90deg, var(--win-blue), #1084d0);
-        color: white;
-        font-weight: bold;
-        padding: 2px 4px;
-        font-size: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        letter-spacing: 1px;
-      }
-
-      /* Inset Panel (Sunken) */
-      .win98-inset {
-        border-top: 2px solid var(--win-dark);
-        border-left: 2px solid var(--win-dark);
-        border-right: 2px solid var(--win-light);
-        border-bottom: 2px solid var(--win-light);
-        background: black;
+      .glow-border:hover {
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+        border-color: #00ff00;
       }
 
       /* Custom Scrollbar */
       .custom-scroll::-webkit-scrollbar {
-        width: 12px;
-        background: var(--win-gray);
+        width: 6px;
+      }
+      .custom-scroll::-webkit-scrollbar-track {
+        background: #111;
       }
       .custom-scroll::-webkit-scrollbar-thumb {
-        background: var(--win-gray);
-        border: 1px solid;
-        border-color: var(--win-light) var(--win-black) var(--win-black)
-          var(--win-light);
+        background: #333;
+        border-radius: 3px;
+      }
+      .custom-scroll::-webkit-scrollbar-thumb:hover {
+        background: #00ff00;
       }
 
-      .playlist-item:hover {
-        background-color: #222;
-        color: white;
+      /* Animations */
+      @keyframes pulse-green {
+        0%,
+        100% {
+          opacity: 0.1;
+        }
+        50% {
+          opacity: 0.2;
+        }
+      }
+      .bg-pulse {
+        animation: pulse-green 4s infinite;
       }
     </style>
   </head>
   <body
-    class="flex flex-col items-center justify-center min-h-screen p-2 select-none"
+    class="flex flex-col items-center justify-center min-h-screen p-4 relative"
   >
-    <div class="win98-box w-full max-w-sm flex flex-col relative z-10">
-      <div class="win98-title mb-1">
-        <span>NEXTAMP REMOTE</span>
-        <div
-          class="w-4 h-4 bg-[#c0c0c0] border border-white text-black text-[10px] flex items-center justify-center font-bold cursor-pointer"
-        >
-          X
-        </div>
-      </div>
+    <div
+      class="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-green-500/10 rounded-full blur-[100px] pointer-events-none bg-pulse"
+    ></div>
 
-      <div class="p-3 flex flex-col gap-4">
-        <div
-          class="win98-inset bg-black p-2 h-8 flex items-center justify-center"
-        >
+    <div
+      class="w-full max-w-md bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl relative z-10 flex flex-col gap-6"
+    >
+      <div class="text-center space-y-1">
+        <h1 class="text-3xl font-bold tracking-widest text-white glow-text">
+          NEXTAMP <span class="text-[#00ff00]">REMOTE</span>
+        </h1>
+        <div class="flex items-center justify-center gap-2">
+          <div id="status-dot" class="w-2 h-2 rounded-full bg-gray-500"></div>
           <div
             id="connection-status"
-            class="text-xs text-gray-400 font-mono animate-pulse"
+            class="text-xs text-gray-400 font-mono tracking-wider"
           >
-            Initializing...
-          </div>
-        </div>
-
-        <div id="main-interface" class="flex flex-col gap-2 hidden">
-          <input
-            type="file"
-            id="file-input"
-            accept="audio/*,.mp3,.wav,.m4a,.ogg"
-            multiple
-            class="hidden"
-          />
-
-          <div class="grid grid-cols-2 gap-2">
-            <button
-              id="btn-select"
-              onclick="document.getElementById('file-input').click()"
-              class="win98-btn py-4 flex flex-col items-center justify-center gap-1"
-            >
-              <span class="text-xl">📁</span>
-              <span>BROWSE FILES</span>
-            </button>
-            <button
-              id="btn-library"
-              onclick="openLibraryModal()"
-              class="win98-btn py-4 flex flex-col items-center justify-center gap-1"
-            >
-              <span class="text-xl">💾</span>
-              <span>LIBRARY</span>
-            </button>
-          </div>
-
-          <div id="queue-info" class="text-xs text-black mt-2 font-bold hidden">
-            QUEUE: <span id="queue-count">0/0</span>
-          </div>
-
-          <div id="progress-area" class="hidden mt-1">
-            <div class="flex justify-between text-[10px] mb-1 font-bold">
-              <span id="filename-disp" class="truncate max-w-[150px]">...</span>
-              <span id="percent-disp">0%</span>
-            </div>
-            <div class="border border-gray-600 h-4 bg-white relative">
-              <div id="progress-bar" class="h-full bg-[#000080] w-0"></div>
-              <div class="absolute inset-0 flex gap-[2px]"></div>
-            </div>
-            <div
-              class="text-[10px] text-gray-600 mt-1 text-center"
-              id="status-detail"
-            >
-              Waiting...
-            </div>
+            INITIALIZING...
           </div>
         </div>
       </div>
 
       <div
-        class="p-1 text-[10px] text-gray-500 text-center border-t border-gray-400 mt-2"
+        id="main-interface"
+        class="flex flex-col gap-4 hidden transition-opacity duration-300"
       >
-        NEXTAMP V.2.0 REMOTE
+        <input
+          type="file"
+          id="file-input"
+          accept="audio/*,.mp3,.wav,.m4a,.ogg"
+          multiple
+          class="hidden"
+        />
+
+        <div class="grid grid-cols-1 gap-4">
+          <button
+            id="btn-select"
+            onclick="document.getElementById('file-input').click()"
+            class="group relative overflow-hidden rounded-xl border border-white/20 bg-white/5 p-6 hover:bg-green-900/20 transition-all glow-border"
+          >
+            <div class="flex flex-col items-center gap-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="w-8 h-8 text-green-400 group-hover:scale-110 transition-transform"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                />
+              </svg>
+              <span class="font-bold text-lg text-white">SELECT FILES</span>
+              <span class="text-[10px] text-gray-400 group-hover:text-green-300"
+                >FROM DEVICE STORAGE</span
+              >
+            </div>
+          </button>
+
+          <button
+            id="btn-library"
+            onclick="openLibraryModal()"
+            class="group relative overflow-hidden rounded-xl border border-white/20 bg-white/5 p-4 hover:bg-green-900/20 transition-all glow-border"
+          >
+            <div class="flex flex-col items-center gap-1">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="w-6 h-6 text-green-400 group-hover:scale-110 transition-transform"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
+                />
+              </svg>
+              <span class="font-bold text-white">SELECT FROM LIBRARY</span>
+              <span class="text-[10px] text-gray-400 group-hover:text-green-300"
+                >NEXTAMP DATABASE</span
+              >
+            </div>
+          </button>
+        </div>
+
+        <div
+          id="progress-area"
+          class="hidden bg-black/50 border border-green-500/30 rounded-lg p-4 space-y-2 mt-2"
+        >
+          <div class="flex justify-between text-xs font-mono text-green-400">
+            <span id="filename-disp" class="truncate max-w-[200px]"
+              >Uploading...</span
+            >
+            <span id="percent-disp">0%</span>
+          </div>
+          <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+            <div
+              id="progress-bar"
+              class="h-full bg-green-500 shadow-[0_0_10px_#00ff00] w-0 transition-all duration-100"
+            ></div>
+          </div>
+          <div
+            id="queue-info"
+            class="text-[10px] text-gray-500 text-center flex justify-between"
+          >
+            <span id="status-detail">Waiting...</span>
+            <span id="queue-count">0/0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-center">
+        <p class="text-[10px] text-gray-600 font-mono">
+          SECURE P2P CONNECTION • V2.1
+        </p>
       </div>
     </div>
 
     <div
       id="lib-modal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 hidden"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden transition-opacity"
     >
-      <div class="win98-box w-[90%] max-w-sm h-[80vh] flex flex-col shadow-2xl">
-        <div class="win98-title mb-1 cursor-grab">
-          <span>SELECT TRACKS</span>
+      <div
+        class="w-full max-w-sm h-[80vh] bg-[#0a0a0a] border border-green-500/30 rounded-xl shadow-[0_0_30px_rgba(0,255,0,0.1)] flex flex-col overflow-hidden m-4"
+      >
+        <div
+          class="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center"
+        >
+          <h2
+            class="text-white font-bold tracking-wider flex items-center gap-2"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="w-5 h-5 text-green-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+              />
+            </svg>
+            LIBRARY
+          </h2>
           <button
             onclick="closeLibraryModal()"
-            class="w-4 h-4 bg-[#c0c0c0] border border-white text-black text-[10px] flex items-center justify-center font-bold"
+            class="text-gray-500 hover:text-white transition"
           >
-            X
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="w-6 h-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
         </div>
 
-        <div class="flex-1 flex flex-col p-2 gap-2 overflow-hidden">
-          <div class="flex items-center gap-2 text-xs font-bold">
-            <label>PLAYLIST:</label>
-            <select
-              id="playlist-select"
-              onchange="handlePlaylistChange()"
-              class="flex-1 bg-white border border-gray-600 text-xs p-1 outline-none"
-            >
-              <option value="main">Main Library (All)</option>
-            </select>
-          </div>
-
-          <div
-            class="flex-1 win98-inset overflow-y-auto custom-scroll p-1 relative bg-black"
+        <div class="p-3 border-b border-white/5 bg-black/20">
+          <select
+            id="playlist-select"
+            onchange="handlePlaylistChange()"
+            class="w-full bg-[#111] text-gray-300 text-sm p-2 rounded border border-white/10 focus:border-green-500 outline-none"
           >
-            <div id="lib-list" class="space-y-[2px]">
-              <div class="text-center text-[#00ff00] py-8 text-xs font-mono">
-                Loading Database...
-              </div>
-            </div>
-          </div>
+            <option value="main">Main Library (All Tracks)</option>
+          </select>
+        </div>
 
-          <div class="flex justify-between items-center px-1">
-            <span id="lib-count-disp" class="text-[10px] font-bold"
+        <div
+          id="lib-list"
+          class="flex-1 overflow-y-auto p-2 space-y-1 custom-scroll"
+        >
+          <div
+            class="text-center text-gray-600 py-10 text-xs font-mono animate-pulse"
+          >
+            Loading Database...
+          </div>
+        </div>
+
+        <div class="p-4 border-t border-white/10 bg-white/5">
+          <div class="flex justify-between items-center mb-3">
+            <span id="lib-count-disp" class="text-xs text-green-400 font-mono"
               >SELECTED: 0/10</span
             >
           </div>
-
-          <div class="flex gap-2 pt-2 border-t border-gray-400">
-            <button onclick="closeLibraryModal()" class="win98-btn flex-1 py-2">
-              CANCEL
-            </button>
-            <button
-              onclick="confirmLibrarySelection()"
-              class="win98-btn flex-1 py-2 font-bold text-blue-900"
-            >
-              SEND OK
-            </button>
-          </div>
+          <button
+            onclick="confirmLibrarySelection()"
+            class="w-full py-3 rounded-lg bg-green-600 hover:bg-green-500 text-black font-bold tracking-wide transition shadow-[0_0_15px_rgba(0,255,0,0.3)]"
+          >
+            SEND SELECTED TRACKS
+          </button>
         </div>
       </div>
     </div>
@@ -265,6 +289,7 @@
       const hostId = params.get("host");
 
       const statusEl = document.getElementById("connection-status");
+      const statusDot = document.getElementById("status-dot");
       const mainInterface = document.getElementById("main-interface");
       const btnSelect = document.getElementById("btn-select");
       const btnLibrary = document.getElementById("btn-library");
@@ -277,37 +302,42 @@
       let isProcessing = false;
 
       // Library Data
-      let dbLibrary = []; // All tracks
-      let dbPlaylists = {}; // Playlist definitions
-      let currentLibView = []; // Filtered list
+      let dbLibrary = [];
+      let dbPlaylists = {};
+      let currentLibView = [];
 
       // Sync
       let resolveUpload = null;
       let resolveSync = null;
 
+      function updateStatus(msg, colorClass, dotColor) {
+        statusEl.innerText = msg;
+        statusEl.className = `text-xs font-mono tracking-wider ${colorClass}`;
+        statusDot.className = `w-2 h-2 rounded-full ${dotColor} shadow-[0_0_5px_currentColor]`;
+      }
+
       if (!hostId) {
-        statusEl.innerText = "ERROR: NO HOST ID";
-        statusEl.className = "text-xs text-red-600 font-bold bg-white px-2";
+        updateStatus("ERROR: INVALID LINK", "text-red-500", "bg-red-500");
         throw new Error("No Host ID");
       }
 
       peer = new Peer();
 
       peer.on("open", (id) => {
-        statusEl.innerText = "Connecting to Host...";
+        updateStatus(
+          "CONNECTING...",
+          "text-yellow-500",
+          "bg-yellow-500 animate-pulse"
+        );
         conn = peer.connect(hostId, { reliable: true });
 
         conn.on("open", () => {
-          statusEl.innerText = "ONLINE: READY";
-          statusEl.className =
-            "text-xs text-[#008000] font-bold bg-white px-2 border border-gray-400";
+          updateStatus("CONNECTED / READY", "text-green-400", "bg-green-500");
           mainInterface.classList.remove("hidden");
         });
 
         conn.on("close", () => {
-          statusEl.innerText = "OFFLINE";
-          statusEl.className =
-            "text-xs text-red-600 font-bold bg-white px-2 border border-red-600";
+          updateStatus("DISCONNECTED", "text-red-500", "bg-red-500");
           btnSelect.disabled = true;
           btnLibrary.disabled = true;
           mainInterface.classList.add("opacity-50");
@@ -322,10 +352,9 @@
         });
       });
 
-      // --- File Input Handling ---
+      // --- File Input ---
       document.getElementById("file-input").addEventListener("change", (e) => {
-        const files = Array.from(e.target.files);
-        handleNewFiles(files);
+        handleNewFiles(Array.from(e.target.files));
         e.target.value = "";
       });
 
@@ -344,8 +373,7 @@
         processQueue();
       }
 
-      // --- Library & DB Handling ---
-
+      // --- Library & DB ---
       async function openLibraryModal() {
         if (isProcessing) return;
         document.getElementById("lib-modal").classList.remove("hidden");
@@ -353,28 +381,27 @@
         try {
           await loadDatabase();
           renderPlaylistOptions();
-          filterAndRenderLibrary("main"); // Default to main
+          filterAndRenderLibrary("main");
         } catch (e) {
           console.error(e);
           document.getElementById(
             "lib-list"
-          ).innerHTML = `<div class="text-red-500 text-center text-xs mt-4">DB Error: ${e}</div>`;
+          ).innerHTML = `<div class="text-red-500 text-center text-xs mt-10">Cannot access Nextamp Database.<br>Are you on the same device?</div>`;
         }
       }
 
       function closeLibraryModal() {
         document.getElementById("lib-modal").classList.add("hidden");
-        // Clear checkboxes visually? No need, logic handles it next open or we can reset
       }
 
       function loadDatabase() {
         return new Promise((resolve, reject) => {
           const req = indexedDB.open(DB_NAME, 8);
-          req.onerror = () => reject("Failed to open DB");
+          req.onerror = () => reject("DB Error");
           req.onupgradeneeded = (e) => {
             e.target.transaction.abort();
             resolve();
-          }; // No DB yet
+          };
 
           req.onsuccess = (e) => {
             const db = e.target.result;
@@ -383,11 +410,9 @@
               !db.objectStoreNames.contains("playlists")
             ) {
               db.close();
-              resolve(); // Empty
+              resolve();
               return;
             }
-
-            // Load Library
             const tx = db.transaction(["library", "playlists"], "readonly");
 
             const libReq = tx.objectStore("library").getAll();
@@ -401,7 +426,6 @@
               dbPlaylists = {};
               arr.forEach((p) => (dbPlaylists[p.id] = p));
             };
-
             tx.oncomplete = () => {
               db.close();
               resolve();
@@ -412,9 +436,10 @@
 
       function renderPlaylistOptions() {
         const select = document.getElementById("playlist-select");
-        select.innerHTML = '<option value="main">Main Library</option>';
+        select.innerHTML =
+          '<option value="main">Main Library (All Tracks)</option>';
         Object.keys(dbPlaylists).forEach((id) => {
-          if (id === "main") return; // skip if stored
+          if (id === "main") return;
           const opt = document.createElement("option");
           opt.value = id;
           opt.textContent = dbPlaylists[id].name;
@@ -433,14 +458,11 @@
           currentLibView = dbLibrary;
         } else {
           const pl = dbPlaylists[playlistId];
-          if (!pl) {
-            currentLibView = [];
-          } else {
-            // Map IDs to track objects
-            currentLibView = pl.trackIds
-              .map((tid) => dbLibrary.find((t) => t.id === tid))
-              .filter((t) => t);
-          }
+          currentLibView = pl
+            ? pl.trackIds
+                .map((tid) => dbLibrary.find((t) => t.id === tid))
+                .filter((t) => t)
+            : [];
         }
         renderList();
       }
@@ -450,15 +472,14 @@
         listEl.innerHTML = "";
 
         if (currentLibView.length === 0) {
-          listEl.innerHTML = `<div class="text-gray-500 text-center text-[10px] mt-4 font-mono">No tracks found.</div>`;
+          listEl.innerHTML = `<div class="text-gray-500 text-center text-xs mt-10">No tracks found in this playlist.</div>`;
           return;
         }
 
         currentLibView.forEach((track, idx) => {
-          // Style matching app.html: Green text on black, monospace font
           const row = document.createElement("div");
           row.className =
-            "flex items-center gap-2 p-1 cursor-pointer hover:bg-[#222] group";
+            "flex items-center gap-3 p-3 rounded hover:bg-white/5 cursor-pointer group transition-colors border border-transparent hover:border-white/10";
           row.onclick = (e) => {
             if (e.target.type !== "checkbox") {
               const cb = row.querySelector("input");
@@ -468,11 +489,16 @@
           };
 
           row.innerHTML = `
-                <input type="checkbox" class="cursor-pointer" value="${idx}">
-                <div class="flex-1 min-w-0 font-mono text-xs text-[#00ff00] truncate">
-                    <span class="text-[#008800] mr-1">${idx + 1}.</span>${
-            track.name
-          }
+                <input type="checkbox" class="accent-green-500 w-4 h-4 cursor-pointer" value="${idx}">
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm text-gray-200 group-hover:text-green-400 font-medium truncate">${
+                      track.name
+                    }</div>
+                    <div class="text-[10px] text-gray-500 font-mono">${(
+                      track.blob.size /
+                      1024 /
+                      1024
+                    ).toFixed(1)} MB</div>
                 </div>
             `;
           listEl.appendChild(row);
@@ -490,20 +516,17 @@
       window.confirmLibrarySelection = () => {
         const checks = document.querySelectorAll("#lib-list input:checked");
         if (checks.length === 0) return closeLibraryModal();
-        if (checks.length > LIMIT_MAX_FILES)
-          return alert("Too many files selected!");
 
         const selectedFiles = [];
         checks.forEach((cb) => {
-          const idx = parseInt(cb.value);
-          const track = currentLibView[idx];
+          const track = currentLibView[parseInt(cb.value)];
           if (track && track.blob) {
-            // Construct file
             try {
-              const f = new File([track.blob], track.name, {
-                type: track.blob.type || "audio/mpeg",
-              });
-              selectedFiles.push(f);
+              selectedFiles.push(
+                new File([track.blob], track.name, {
+                  type: track.blob.type || "audio/mpeg",
+                })
+              );
             } catch (e) {
               track.blob.name = track.name;
               selectedFiles.push(track.blob);
@@ -515,7 +538,7 @@
         handleNewFiles(selectedFiles);
       };
 
-      // --- Upload Process ---
+      // --- Upload ---
       async function processQueue() {
         if (isProcessing) return;
         isProcessing = true;
@@ -523,6 +546,10 @@
         btnLibrary.disabled = true;
         progressArea.classList.remove("hidden");
         document.getElementById("queue-info").classList.remove("hidden");
+
+        // Disable buttons visual
+        btnSelect.classList.add("opacity-50", "cursor-not-allowed");
+        btnLibrary.classList.add("opacity-50", "cursor-not-allowed");
 
         for (let i = 0; i < fileQueue.length; i++) {
           const file = fileQueue[i];
@@ -533,26 +560,28 @@
             await sendFileRobust(file);
           } catch (err) {
             console.error(err);
-            alert(`Error: ${file.name}`);
+            alert(`Failed: ${file.name}`);
           }
         }
 
         isProcessing = false;
         btnSelect.disabled = false;
         btnLibrary.disabled = false;
+        btnSelect.classList.remove("opacity-50", "cursor-not-allowed");
+        btnLibrary.classList.remove("opacity-50", "cursor-not-allowed");
 
-        document.getElementById("status-detail").innerText = "Success!";
+        document.getElementById("status-detail").innerText = "Completed";
         document
           .getElementById("status-detail")
-          .classList.add("text-[#008000]", "font-bold");
+          .classList.add("text-green-400");
 
         setTimeout(() => {
-          alert("All Files Transferred!");
+          alert("Transfer Complete!");
           progressArea.classList.add("hidden");
           document.getElementById("queue-info").classList.add("hidden");
           document
             .getElementById("status-detail")
-            .classList.remove("text-[#008000]", "font-bold");
+            .classList.remove("text-green-400");
           fileQueue = [];
         }, 500);
       }
@@ -561,7 +590,7 @@
         return new Promise((resolve, reject) => {
           if (!conn || !conn.open) return reject("No connection");
 
-          const fileName = file.name || "audio_file";
+          const fileName = file.name || "unknown";
           document.getElementById("filename-disp").innerText = fileName;
           document.getElementById("status-detail").innerText = "Sending...";
           document.getElementById("progress-bar").style.width = "0%";
@@ -585,7 +614,7 @@
               offset += chunk.byteLength;
               chunkCount++;
 
-              await new Promise((r) => setTimeout(r, 10)); // throttle
+              await new Promise((r) => setTimeout(r, 10));
 
               const p = Math.round((offset / file.size) * 100);
               document.getElementById("progress-bar").style.width = p + "%";
@@ -600,7 +629,7 @@
                 readNextChunk();
               } else {
                 document.getElementById("status-detail").innerText =
-                  "Finishing...";
+                  "Finalizing...";
                 conn.send({ type: "end" });
                 resolveUpload = resolve;
               }
