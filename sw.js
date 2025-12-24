@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v2025-12-24-1341"; // 🔥 เปลี่ยนทุกครั้งที่ deploy
+const CACHE_VERSION = "v2025-12-24-1343"; // 🔥 เปลี่ยนทุกครั้งที่ deploy
 const CACHE_NAME = `nextamp-${CACHE_VERSION}`;
 
 const ASSETS_TO_CACHE = [
@@ -14,6 +14,8 @@ const ASSETS_TO_CACHE = [
   "./assets/sounds/startup.mp3",
   "./assets/sounds/allow-sound.mp3",
   "./assets/libs/js/tailwindcss.js",
+  "https://unpkg.com/@phosphor-icons/web",
+  "https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;600&family=Sarabun:wght@300;400;600&display=swap",
 ];
 
 // ===== INSTALL =====
