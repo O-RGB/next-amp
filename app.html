@@ -570,21 +570,21 @@
           </div>
           <div id="eq-body" class="p-2 flex gap-1 h-[160px]">
             <div
-              class="w-[90px] flex flex-col gap-1 h-full items-center justify-between pr-1 border-r border-gray-600"
+              class="w-[80px] flex flex-col gap-1.5 h-full items-center justify-between pr-1 border-r border-gray-600"
             >
-              <select
-                id="eq-preset-select"
-                class="w-full text-[9px] bg-black theme-text-main border border-gray-500 outline-none"
-              >
-                <option value="flat">Flat</option>
-                <option value="rock">Rock</option>
-                <option value="pop">Pop</option>
-                <option value="jazz">Jazz</option>
-                <option value="fullbass">Bass</option>
-                <option value="custom">Manual</option>
-              </select>
+              <div class="w-full flex flex-col gap-1">
+                <select
+                  id="eq-preset-select"
+                  class="w-full text-[9px] bg-black theme-text-main border border-gray-500 outline-none"
+                >
+                  <option value="flat">Flat</option>
+                  <option value="rock">Rock</option>
+                  <option value="pop">Pop</option>
+                  <option value="jazz">Jazz</option>
+                  <option value="fullbass">Bass</option>
+                  <option value="custom">Manual</option>
+                </select>
 
-              <div class="flex flex-col border border-gray-600/50 p-1 h-full">
                 <div class="flex justify-between items-center w-full">
                   <a
                     href="https://github.com/signalsmith-audio/signalsmith-stretch"
@@ -601,71 +601,69 @@
                     </button>
                   </a>
                 </div>
-                <div class="flex flex-col justify-center h-full gap-3">
-                  <div class="flex flex-col gap-1">
-                    <div class="flex flex-col gap-1">
-                      <div
-                        class="flex justify-between text-[8px] text-gray-400"
-                      >
-                        <span>PITCH</span
-                        ><span id="val-pitch" class="theme-text-sec">0</span>
-                      </div>
-                      <input
-                        type="range"
-                        data-key="semitones"
-                        min="-12"
-                        max="12"
-                        step="1"
-                        value="0"
-                        class="w-full h-1 bg-gray-600"
-                        data-tooltip-type="val"
-                      />
-                    </div>
-                  </div>
+              </div>
+              <div class="flex flex-col pb-1 h-full justify-between">
+                <div class="flex flex-col gap-1">
                   <div class="flex flex-col gap-1">
                     <div class="flex justify-between text-[8px] text-gray-400">
-                      <span>SPEED</span
-                      ><span id="val-rate" class="theme-text-sec">1.0</span>
+                      <span>PITCH</span
+                      ><span id="val-pitch" class="theme-text-sec">0</span>
                     </div>
                     <input
                       type="range"
-                      data-key="rate"
-                      min="0.5"
-                      max="2"
-                      step="0.05"
-                      value="1"
+                      data-key="semitones"
+                      min="-12"
+                      max="12"
+                      step="1"
+                      value="0"
                       class="w-full h-1 bg-gray-600"
-                      data-tooltip-type="x"
+                      data-tooltip-type="val"
                     />
                   </div>
                 </div>
-              </div>
-              <div class="flex-1">
-                <div
-                  class="flex justify-between items-center text-[8px] text-gray-400 -mb-2"
-                >
-                  <div class="flex items-center gap-1">
-                    <span>REVERB</span>
-                    <button
-                      id="btn-reverb-toggle"
-                      class="font-pixel text-[7px] leading-none border border-gray-600 px-1 py-[0.5px] bg-black hover:bg-gray-800 cursor-pointer text-gray-500 z-20"
-                    >
-                      OFF
-                    </button>
+                <div class="flex flex-col gap-1">
+                  <div class="flex justify-between text-[8px] text-gray-400">
+                    <span>SPEED</span
+                    ><span id="val-rate" class="theme-text-sec">1.0</span>
                   </div>
-                  <span id="val-reverb" class="theme-text-sec">0.00</span>
+                  <input
+                    type="range"
+                    data-key="rate"
+                    min="0.5"
+                    max="2"
+                    step="0.05"
+                    value="1"
+                    class="w-full h-1 bg-gray-600"
+                    data-tooltip-type="x"
+                  />
                 </div>
-                <input
-                  type="range"
-                  id="main-reverb"
-                  data-key="reverb"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value="0"
-                  class="w-full h-1 bg-gray-600"
-                  data-tooltip-type="percent"
-                />
+                <div class="flex flex-col gap-1">
+                  <div
+                    class="flex justify-between items-center text-[8px] text-gray-400"
+                  >
+                    <div class="flex items-center gap-1">
+                      <span>REVERB</span>
+                      <button
+                        id="btn-reverb-toggle"
+                        class="font-pixel text-[7px] leading-none border border-gray-600 px-1 py-[0.5px] bg-black hover:bg-gray-800 cursor-pointer text-gray-500 z-20"
+                      >
+                        OFF
+                      </button>
+                    </div>
+                    <span id="val-reverb" class="theme-text-sec">0.00</span>
+                  </div>
+                  <input
+                    type="range"
+                    id="main-reverb"
+                    data-key="reverb"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0"
+                    class="w-full h-1 bg-gray-600"
+                    data-tooltip-type="percent"
+                  />
+                </div>
               </div>
             </div>
             <div class="flex-1 flex flex-col relative">
