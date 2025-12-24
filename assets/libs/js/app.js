@@ -14,6 +14,15 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
   }
 })();
 
+(function () {
+  const isDirectAccess = window.location.pathname.endsWith("app.html");
+  const hasNoToken = sessionStorage.getItem("access_allowed") !== "true";
+  if (isDirectAccess || hasNoToken) {
+    window.location.replace("index.html");
+    throw new Error("Access Denied");
+  }
+})();
+
 document.addEventListener("contextmenu", (event) => event.preventDefault());
 
 const $ = (s) => document.querySelector(s);
