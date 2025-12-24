@@ -2,8 +2,11 @@
 <html lang="th">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nextamp Remote Upload</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Nextamp Remote</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link
@@ -12,177 +15,247 @@
     />
 
     <style>
-      body {
-        background-color: #050505;
-        color: #00ff00;
-        font-family: "Chakra Petch", sans-serif;
+      :root {
+        --win-gray: #c0c0c0;
+        --win-dark: #808080;
+        --win-light: #ffffff;
+        --win-black: #000000;
+        --win-blue: #000080;
+        --next-green: #00ff00;
       }
-      .win-btn {
-        background: #c0c0c0;
+
+      body {
+        background-color: #008080; /* Win98 Desktop Color */
+        font-family: "Chakra Petch", sans-serif;
+        overflow: hidden; /* Prevent body scroll */
+      }
+
+      /* Windows 98 Button Style */
+      .win98-btn {
+        background: var(--win-gray);
         color: black;
-        border: 2px solid #fff;
-        border-right-color: #000;
-        border-bottom-color: #000;
+        border-top: 2px solid var(--win-light);
+        border-left: 2px solid var(--win-light);
+        border-right: 2px solid var(--win-black);
+        border-bottom: 2px solid var(--win-black);
+        box-shadow: 1px 1px 0px var(--win-dark);
         cursor: pointer;
         font-weight: bold;
         text-transform: uppercase;
-        transition: all 0.1s;
+        font-size: 12px;
+        padding: 4px 8px;
+        active: none;
       }
-      .win-btn:active {
-        border-color: #000;
-        border-right-color: #fff;
-        border-bottom-color: #fff;
+      .win98-btn:active,
+      .win98-btn.pressed {
+        border-top: 2px solid var(--win-black);
+        border-left: 2px solid var(--win-black);
+        border-right: 2px solid var(--win-light);
+        border-bottom: 2px solid var(--win-light);
         transform: translate(1px, 1px);
+        box-shadow: none;
       }
-      .win-btn:disabled {
-        background: #555;
-        color: #888;
-        border-color: #444;
+      .win98-btn:disabled {
+        color: var(--win-dark);
+        text-shadow: 1px 1px 0px var(--win-light);
         cursor: not-allowed;
-        transform: none;
       }
-      /* Custom Scrollbar for Modal */
+
+      /* Windows 98 Container Style */
+      .win98-box {
+        background: var(--win-gray);
+        border-top: 2px solid var(--win-light);
+        border-left: 2px solid var(--win-light);
+        border-right: 2px solid var(--win-black);
+        border-bottom: 2px solid var(--win-black);
+        box-shadow: 1px 1px 0px var(--win-dark);
+        padding: 2px;
+      }
+
+      /* Title Bar */
+      .win98-title {
+        background: linear-gradient(90deg, var(--win-blue), #1084d0);
+        color: white;
+        font-weight: bold;
+        padding: 2px 4px;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        letter-spacing: 1px;
+      }
+
+      /* Inset Panel (Sunken) */
+      .win98-inset {
+        border-top: 2px solid var(--win-dark);
+        border-left: 2px solid var(--win-dark);
+        border-right: 2px solid var(--win-light);
+        border-bottom: 2px solid var(--win-light);
+        background: black;
+      }
+
+      /* Custom Scrollbar */
       .custom-scroll::-webkit-scrollbar {
-        width: 8px;
-      }
-      .custom-scroll::-webkit-scrollbar-track {
-        background: #111;
+        width: 12px;
+        background: var(--win-gray);
       }
       .custom-scroll::-webkit-scrollbar-thumb {
-        background: #333;
-        border-radius: 4px;
+        background: var(--win-gray);
+        border: 1px solid;
+        border-color: var(--win-light) var(--win-black) var(--win-black)
+          var(--win-light);
       }
-      .custom-scroll::-webkit-scrollbar-thumb:hover {
-        background: #555;
+
+      .playlist-item:hover {
+        background-color: #222;
+        color: white;
       }
     </style>
   </head>
   <body
-    class="flex flex-col items-center justify-center min-h-screen p-4 space-y-6 select-none"
+    class="flex flex-col items-center justify-center min-h-screen p-2 select-none"
   >
-    <div class="text-center space-y-2">
-      <h1 class="text-3xl font-bold text-white tracking-widest">
-        NEXTAMP <span class="text-[#00ff00]">REMOTE</span>
-      </h1>
-      <div id="connection-status" class="text-xs text-gray-400 font-mono">
-        Initializing...
-      </div>
-    </div>
-
-    <div id="main-interface" class="w-full max-w-sm flex flex-col gap-6 hidden">
-      <input
-        type="file"
-        id="file-input"
-        accept="audio/*,.mp3,.wav,.m4a,.ogg"
-        multiple
-        class="hidden"
-      />
-
-      <div class="flex flex-col gap-4">
-        <button
-          id="btn-select"
-          onclick="document.getElementById('file-input').click()"
-          class="win-btn w-full py-6 text-xl shadow-[0_0_15px_rgba(0,255,0,0.2)] flex flex-col items-center gap-1"
-        >
-          <span>SELECT FILES</span>
-          <span class="text-[10px] font-normal text-gray-700"
-            >(Device Storage)</span
-          >
-        </button>
-
-        <button
-          id="btn-library"
-          onclick="openLibraryModal()"
-          class="win-btn w-full py-4 text-lg bg-[#a0a0a0] flex flex-col items-center gap-1"
-        >
-          <span>SELECT FROM LIBRARY</span>
-          <span class="text-[10px] font-normal text-gray-700"
-            >(Nextamp Database)</span
-          >
-        </button>
-      </div>
-
-      <div class="text-center text-[10px] text-gray-500">
-        Max 10 files per transfer
-      </div>
-
-      <div
-        id="queue-info"
-        class="text-center text-xs text-gray-400 hidden font-mono"
-      >
-        QUEUE: <span id="queue-count" class="text-white font-bold">0/0</span>
-      </div>
-
-      <div
-        id="progress-area"
-        class="bg-[#111] border border-[#333] p-4 rounded hidden"
-      >
-        <div class="flex justify-between text-xs mb-1 font-mono">
-          <span id="filename-disp" class="truncate max-w-[200px] text-white"
-            >...</span
-          >
-          <span id="percent-disp">0%</span>
-        </div>
-        <div class="w-full bg-[#333] h-2 border border-gray-600">
-          <div
-            id="progress-bar"
-            class="h-full bg-[#00ff00] w-0 transition-all duration-75"
-          ></div>
-        </div>
+    <div class="win98-box w-full max-w-sm flex flex-col relative z-10">
+      <div class="win98-title mb-1">
+        <span>NEXTAMP REMOTE</span>
         <div
-          class="text-[10px] text-gray-500 mt-2 text-center"
-          id="status-detail"
+          class="w-4 h-4 bg-[#c0c0c0] border border-white text-black text-[10px] flex items-center justify-center font-bold cursor-pointer"
         >
-          Waiting...
+          X
         </div>
+      </div>
+
+      <div class="p-3 flex flex-col gap-4">
+        <div
+          class="win98-inset bg-black p-2 h-8 flex items-center justify-center"
+        >
+          <div
+            id="connection-status"
+            class="text-xs text-gray-400 font-mono animate-pulse"
+          >
+            Initializing...
+          </div>
+        </div>
+
+        <div id="main-interface" class="flex flex-col gap-2 hidden">
+          <input
+            type="file"
+            id="file-input"
+            accept="audio/*,.mp3,.wav,.m4a,.ogg"
+            multiple
+            class="hidden"
+          />
+
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              id="btn-select"
+              onclick="document.getElementById('file-input').click()"
+              class="win98-btn py-4 flex flex-col items-center justify-center gap-1"
+            >
+              <span class="text-xl">📁</span>
+              <span>BROWSE FILES</span>
+            </button>
+            <button
+              id="btn-library"
+              onclick="openLibraryModal()"
+              class="win98-btn py-4 flex flex-col items-center justify-center gap-1"
+            >
+              <span class="text-xl">💾</span>
+              <span>LIBRARY</span>
+            </button>
+          </div>
+
+          <div id="queue-info" class="text-xs text-black mt-2 font-bold hidden">
+            QUEUE: <span id="queue-count">0/0</span>
+          </div>
+
+          <div id="progress-area" class="hidden mt-1">
+            <div class="flex justify-between text-[10px] mb-1 font-bold">
+              <span id="filename-disp" class="truncate max-w-[150px]">...</span>
+              <span id="percent-disp">0%</span>
+            </div>
+            <div class="border border-gray-600 h-4 bg-white relative">
+              <div id="progress-bar" class="h-full bg-[#000080] w-0"></div>
+              <div class="absolute inset-0 flex gap-[2px]"></div>
+            </div>
+            <div
+              class="text-[10px] text-gray-600 mt-1 text-center"
+              id="status-detail"
+            >
+              Waiting...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="p-1 text-[10px] text-gray-500 text-center border-t border-gray-400 mt-2"
+      >
+        NEXTAMP V.2.0 REMOTE
       </div>
     </div>
 
     <div
       id="lib-modal"
-      class="fixed inset-0 bg-black/90 z-50 hidden flex flex-col items-center justify-center p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 hidden"
     >
-      <div
-        class="bg-[#111] border border-[#333] w-full max-w-sm rounded-lg flex flex-col max-h-[80vh] shadow-[0_0_30px_rgba(0,255,0,0.1)]"
-      >
-        <div
-          class="p-4 border-b border-[#333] flex justify-between items-center bg-[#1a1a1a] rounded-t-lg"
-        >
-          <h2 class="text-white font-bold tracking-wider">SELECT TRACKS</h2>
-          <span id="lib-count-disp" class="text-xs text-[#00ff00] font-mono"
-            >0/10</span
-          >
-        </div>
-
-        <div
-          id="lib-list"
-          class="flex-1 overflow-y-auto p-2 space-y-1 custom-scroll bg-[#050505]"
-        >
-          <div class="text-center text-gray-500 py-8 text-xs">Loading...</div>
-        </div>
-
-        <div
-          class="p-4 border-t border-[#333] flex gap-3 bg-[#1a1a1a] rounded-b-lg"
-        >
+      <div class="win98-box w-[90%] max-w-sm h-[80vh] flex flex-col shadow-2xl">
+        <div class="win98-title mb-1 cursor-grab">
+          <span>SELECT TRACKS</span>
           <button
             onclick="closeLibraryModal()"
-            class="win-btn flex-1 py-3 text-sm"
+            class="w-4 h-4 bg-[#c0c0c0] border border-white text-black text-[10px] flex items-center justify-center font-bold"
           >
-            CANCEL
+            X
           </button>
-          <button
-            onclick="confirmLibrarySelection()"
-            class="win-btn flex-1 py-3 text-sm text-[#006600] font-bold"
+        </div>
+
+        <div class="flex-1 flex flex-col p-2 gap-2 overflow-hidden">
+          <div class="flex items-center gap-2 text-xs font-bold">
+            <label>PLAYLIST:</label>
+            <select
+              id="playlist-select"
+              onchange="handlePlaylistChange()"
+              class="flex-1 bg-white border border-gray-600 text-xs p-1 outline-none"
+            >
+              <option value="main">Main Library (All)</option>
+            </select>
+          </div>
+
+          <div
+            class="flex-1 win98-inset overflow-y-auto custom-scroll p-1 relative bg-black"
           >
-            SEND SELECTED
-          </button>
+            <div id="lib-list" class="space-y-[2px]">
+              <div class="text-center text-[#00ff00] py-8 text-xs font-mono">
+                Loading Database...
+              </div>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center px-1">
+            <span id="lib-count-disp" class="text-[10px] font-bold"
+              >SELECTED: 0/10</span
+            >
+          </div>
+
+          <div class="flex gap-2 pt-2 border-t border-gray-400">
+            <button onclick="closeLibraryModal()" class="win98-btn flex-1 py-2">
+              CANCEL
+            </button>
+            <button
+              onclick="confirmLibrarySelection()"
+              class="win98-btn flex-1 py-2 font-bold text-blue-900"
+            >
+              SEND OK
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
     <script>
       // CONFIG
-      const CHUNK_SIZE = 16 * 1024; // 16KB per chunk
+      const CHUNK_SIZE = 16 * 1024;
       const SYNC_INTERVAL = 20;
       const LIMIT_MAX_FILES = 10;
       const LIMIT_MAX_SIZE_MB = 100;
@@ -203,34 +276,38 @@
         totalFiles = 0;
       let isProcessing = false;
 
-      // Variables for Library Feature
-      let libFilesCache = [];
+      // Library Data
+      let dbLibrary = []; // All tracks
+      let dbPlaylists = {}; // Playlist definitions
+      let currentLibView = []; // Filtered list
 
-      // Variables for Sync
+      // Sync
       let resolveUpload = null;
       let resolveSync = null;
 
       if (!hostId) {
-        statusEl.innerText = "Error: Invalid Link";
-        statusEl.className = "text-xs text-red-500 font-mono";
+        statusEl.innerText = "ERROR: NO HOST ID";
+        statusEl.className = "text-xs text-red-600 font-bold bg-white px-2";
         throw new Error("No Host ID");
       }
 
       peer = new Peer();
 
       peer.on("open", (id) => {
-        statusEl.innerText = "Connecting...";
+        statusEl.innerText = "Connecting to Host...";
         conn = peer.connect(hostId, { reliable: true });
 
         conn.on("open", () => {
-          statusEl.innerText = "CONNECTED: Ready";
-          statusEl.className = "text-xs text-[#00ff00] font-mono";
+          statusEl.innerText = "ONLINE: READY";
+          statusEl.className =
+            "text-xs text-[#008000] font-bold bg-white px-2 border border-gray-400";
           mainInterface.classList.remove("hidden");
         });
 
         conn.on("close", () => {
-          statusEl.innerText = "Disconnected.";
-          statusEl.className = "text-xs text-red-500 font-mono";
+          statusEl.innerText = "OFFLINE";
+          statusEl.className =
+            "text-xs text-red-600 font-bold bg-white px-2 border border-red-600";
           btnSelect.disabled = true;
           btnLibrary.disabled = true;
           mainInterface.classList.add("opacity-50");
@@ -249,7 +326,7 @@
       document.getElementById("file-input").addEventListener("change", (e) => {
         const files = Array.from(e.target.files);
         handleNewFiles(files);
-        e.target.value = ""; // reset
+        e.target.value = "";
       });
 
       function handleNewFiles(files) {
@@ -260,167 +337,185 @@
         const validFiles = files.filter(
           (f) => f.size / 1024 / 1024 <= LIMIT_MAX_SIZE_MB
         );
-        if (validFiles.length === 0)
-          return alert("Files too large or invalid.");
+        if (validFiles.length === 0) return alert("Files too large.");
 
         fileQueue = validFiles;
         totalFiles = validFiles.length;
         processQueue();
       }
 
-      // --- Library Handling ---
+      // --- Library & DB Handling ---
+
       async function openLibraryModal() {
         if (isProcessing) return;
+        document.getElementById("lib-modal").classList.remove("hidden");
 
         try {
-          const files = await getLibraryFiles();
-          if (!files || files.length === 0) {
-            return alert("No tracks found in Nextamp Library on this device.");
-          }
-
-          libFilesCache = files;
-          renderLibraryList();
-          document.getElementById("lib-modal").classList.remove("hidden");
+          await loadDatabase();
+          renderPlaylistOptions();
+          filterAndRenderLibrary("main"); // Default to main
         } catch (e) {
           console.error(e);
-          alert("Could not access library database.");
+          document.getElementById(
+            "lib-list"
+          ).innerHTML = `<div class="text-red-500 text-center text-xs mt-4">DB Error: ${e}</div>`;
         }
       }
 
       function closeLibraryModal() {
         document.getElementById("lib-modal").classList.add("hidden");
-        libFilesCache = [];
+        // Clear checkboxes visually? No need, logic handles it next open or we can reset
       }
 
-      function getLibraryFiles() {
+      function loadDatabase() {
         return new Promise((resolve, reject) => {
-          const req = indexedDB.open(DB_NAME, 8); // Same version as app.js
-
-          req.onerror = () => reject("DB Open Error");
-
-          // If DB doesn't exist, this triggers. We don't want to create it here.
+          const req = indexedDB.open(DB_NAME, 8);
+          req.onerror = () => reject("Failed to open DB");
           req.onupgradeneeded = (e) => {
             e.target.transaction.abort();
-            resolve([]);
-          };
+            resolve();
+          }; // No DB yet
 
           req.onsuccess = (e) => {
             const db = e.target.result;
-            if (!db.objectStoreNames.contains("library")) {
+            if (
+              !db.objectStoreNames.contains("library") ||
+              !db.objectStoreNames.contains("playlists")
+            ) {
               db.close();
-              return resolve([]);
+              resolve(); // Empty
+              return;
             }
-            const tx = db.transaction("library", "readonly");
-            const store = tx.objectStore("library");
-            const getAll = store.getAll();
 
-            getAll.onsuccess = () => {
-              resolve(getAll.result);
-              db.close();
+            // Load Library
+            const tx = db.transaction(["library", "playlists"], "readonly");
+
+            const libReq = tx.objectStore("library").getAll();
+            const plReq = tx.objectStore("playlists").getAll();
+
+            libReq.onsuccess = () => {
+              dbLibrary = libReq.result || [];
             };
-            getAll.onerror = () => {
-              reject("Read Error");
+            plReq.onsuccess = () => {
+              const arr = plReq.result || [];
+              dbPlaylists = {};
+              arr.forEach((p) => (dbPlaylists[p.id] = p));
+            };
+
+            tx.oncomplete = () => {
               db.close();
+              resolve();
             };
           };
         });
       }
 
-      function renderLibraryList() {
-        const list = document.getElementById("lib-list");
-        list.innerHTML = "";
+      function renderPlaylistOptions() {
+        const select = document.getElementById("playlist-select");
+        select.innerHTML = '<option value="main">Main Library</option>';
+        Object.keys(dbPlaylists).forEach((id) => {
+          if (id === "main") return; // skip if stored
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = dbPlaylists[id].name;
+          select.appendChild(opt);
+        });
+        select.value = "main";
+      }
 
-        libFilesCache.forEach((item, idx) => {
-          const div = document.createElement("div");
-          div.className =
-            "flex items-center gap-3 p-3 hover:bg-[#222] cursor-pointer border border-transparent hover:border-[#444] rounded bg-[#0a0a0a] transition-colors";
-          div.onclick = (e) => {
+      window.handlePlaylistChange = () => {
+        const pid = document.getElementById("playlist-select").value;
+        filterAndRenderLibrary(pid);
+      };
+
+      function filterAndRenderLibrary(playlistId) {
+        if (playlistId === "main") {
+          currentLibView = dbLibrary;
+        } else {
+          const pl = dbPlaylists[playlistId];
+          if (!pl) {
+            currentLibView = [];
+          } else {
+            // Map IDs to track objects
+            currentLibView = pl.trackIds
+              .map((tid) => dbLibrary.find((t) => t.id === tid))
+              .filter((t) => t);
+          }
+        }
+        renderList();
+      }
+
+      function renderList() {
+        const listEl = document.getElementById("lib-list");
+        listEl.innerHTML = "";
+
+        if (currentLibView.length === 0) {
+          listEl.innerHTML = `<div class="text-gray-500 text-center text-[10px] mt-4 font-mono">No tracks found.</div>`;
+          return;
+        }
+
+        currentLibView.forEach((track, idx) => {
+          // Style matching app.html: Green text on black, monospace font
+          const row = document.createElement("div");
+          row.className =
+            "flex items-center gap-2 p-1 cursor-pointer hover:bg-[#222] group";
+          row.onclick = (e) => {
             if (e.target.type !== "checkbox") {
-              const cb = div.querySelector("input");
-              if (!cb.disabled) {
-                cb.checked = !cb.checked;
-                updateLibCount();
-              }
+              const cb = row.querySelector("input");
+              cb.checked = !cb.checked;
+              updateLibCount();
             }
           };
 
-          div.innerHTML = `
-            <input type="checkbox" class="accent-[#00ff00] w-5 h-5 flex-shrink-0 cursor-pointer" value="${idx}">
-            <div class="flex flex-col overflow-hidden">
-              <span class="truncate text-sm text-gray-200 font-bold pointer-events-none">${
-                item.name
-              }</span>
-              <span class="text-[10px] text-gray-500 pointer-events-none">ID: ${item.id.substring(
-                0,
-                8
-              )}...</span>
-            </div>
-          `;
-          list.appendChild(div);
+          row.innerHTML = `
+                <input type="checkbox" class="cursor-pointer" value="${idx}">
+                <div class="flex-1 min-w-0 font-mono text-xs text-[#00ff00] truncate">
+                    <span class="text-[#008800] mr-1">${idx + 1}.</span>${
+            track.name
+          }
+                </div>
+            `;
+          listEl.appendChild(row);
         });
         updateLibCount();
       }
 
       function updateLibCount() {
-        const checkboxes = document.querySelectorAll("#lib-list input:checked");
-        const count = checkboxes.length;
-        const countDisp = document.getElementById("lib-count-disp");
-
-        countDisp.innerText = `${count}/${LIMIT_MAX_FILES}`;
-        countDisp.classList.toggle("text-red-500", count > LIMIT_MAX_FILES);
-        countDisp.classList.toggle("text-[#00ff00]", count <= LIMIT_MAX_FILES);
-
-        // Optional: Disable unchecked inputs if limit reached
-        const allChecks = document.querySelectorAll("#lib-list input");
-        allChecks.forEach((cb) => {
-          if (!cb.checked) {
-            cb.disabled = count >= LIMIT_MAX_FILES;
-            cb.parentElement.classList.toggle(
-              "opacity-50",
-              count >= LIMIT_MAX_FILES
-            );
-          } else {
-            cb.disabled = false;
-            cb.parentElement.classList.remove("opacity-50");
-          }
-        });
+        const checks = document.querySelectorAll("#lib-list input:checked");
+        document.getElementById(
+          "lib-count-disp"
+        ).innerText = `SELECTED: ${checks.length}/${LIMIT_MAX_FILES}`;
       }
 
-      function confirmLibrarySelection() {
-        const checkboxes = document.querySelectorAll("#lib-list input:checked");
-        if (checkboxes.length === 0) return;
+      window.confirmLibrarySelection = () => {
+        const checks = document.querySelectorAll("#lib-list input:checked");
+        if (checks.length === 0) return closeLibraryModal();
+        if (checks.length > LIMIT_MAX_FILES)
+          return alert("Too many files selected!");
 
         const selectedFiles = [];
-        checkboxes.forEach((cb) => {
+        checks.forEach((cb) => {
           const idx = parseInt(cb.value);
-          const item = libFilesCache[idx];
-          if (item && item.blob) {
-            let file = item.blob;
-
-            // Ensure the file has the correct name (IndexedDB blobs might lose name)
+          const track = currentLibView[idx];
+          if (track && track.blob) {
+            // Construct file
             try {
-              // Try to construct a new File object to ensure name is correct
-              file = new File([item.blob], item.name, {
-                type: item.blob.type || "audio/mpeg",
+              const f = new File([track.blob], track.name, {
+                type: track.blob.type || "audio/mpeg",
               });
+              selectedFiles.push(f);
             } catch (e) {
-              // Fallback for older environments
-              console.warn("File constructor fallback", e);
-              // We just use the blob, but we'll send the name manually in 'meta'
-              file.name = item.name;
+              track.blob.name = track.name;
+              selectedFiles.push(track.blob);
             }
-            selectedFiles.push(file);
           }
         });
 
-        if (selectedFiles.length > 0) {
-          closeLibraryModal();
-          handleNewFiles(selectedFiles);
-        }
-      }
+        closeLibraryModal();
+        handleNewFiles(selectedFiles);
+      };
 
-      // --- Processing Queue ---
-
+      // --- Upload Process ---
       async function processQueue() {
         if (isProcessing) return;
         isProcessing = true;
@@ -438,28 +533,27 @@
             await sendFileRobust(file);
           } catch (err) {
             console.error(err);
-            alert(`Error sending ${file.name || "file"}`);
+            alert(`Error: ${file.name}`);
           }
         }
 
         isProcessing = false;
         btnSelect.disabled = false;
         btnLibrary.disabled = false;
-        btnSelect.innerText = "SEND MORE";
-        document.getElementById("status-detail").innerText = "All Done!";
+
+        document.getElementById("status-detail").innerText = "Success!";
         document
           .getElementById("status-detail")
-          .classList.add("text-[#00ff00]");
+          .classList.add("text-[#008000]", "font-bold");
+
         setTimeout(() => {
-          alert("Transfer Complete!");
+          alert("All Files Transferred!");
           progressArea.classList.add("hidden");
           document.getElementById("queue-info").classList.add("hidden");
           document
             .getElementById("status-detail")
-            .classList.remove("text-[#00ff00]");
-
-          // Reset Buttons
-          btnSelect.innerHTML = `<span>SELECT FILES</span><span class="text-[10px] font-normal text-gray-700">(Device Storage)</span>`;
+            .classList.remove("text-[#008000]", "font-bold");
+          fileQueue = [];
         }, 500);
       }
 
@@ -467,15 +561,12 @@
         return new Promise((resolve, reject) => {
           if (!conn || !conn.open) return reject("No connection");
 
-          // Ensure name exists (fallback if File object lost it)
-          const fileName = file.name || "unknown_audio.mp3";
-
+          const fileName = file.name || "audio_file";
           document.getElementById("filename-disp").innerText = fileName;
-          document.getElementById("status-detail").innerText = "Starting...";
+          document.getElementById("status-detail").innerText = "Sending...";
           document.getElementById("progress-bar").style.width = "0%";
           document.getElementById("percent-disp").innerText = "0%";
 
-          // 1. Send Meta
           conn.send({
             type: "meta",
             name: fileName,
@@ -494,28 +585,22 @@
               offset += chunk.byteLength;
               chunkCount++;
 
-              await new Promise((r) => setTimeout(r, 10));
+              await new Promise((r) => setTimeout(r, 10)); // throttle
 
-              // UI Update
-              const percent = Math.round((offset / file.size) * 100);
-              document.getElementById("progress-bar").style.width =
-                percent + "%";
-              document.getElementById("percent-disp").innerText = percent + "%";
+              const p = Math.round((offset / file.size) * 100);
+              document.getElementById("progress-bar").style.width = p + "%";
+              document.getElementById("percent-disp").innerText = p + "%";
 
               if (chunkCount % SYNC_INTERVAL === 0) {
-                document.getElementById("status-detail").innerText =
-                  "Syncing...";
                 conn.send({ type: "sync" });
-                await waitForSync();
-                document.getElementById("status-detail").innerText =
-                  "Sending...";
+                await new Promise((r) => (resolveSync = r));
               }
 
               if (offset < file.size) {
                 readNextChunk();
               } else {
                 document.getElementById("status-detail").innerText =
-                  "Verifying...";
+                  "Finishing...";
                 conn.send({ type: "end" });
                 resolveUpload = resolve;
               }
@@ -527,12 +612,6 @@
           const readNextChunk = () => {
             const slice = file.slice(offset, offset + CHUNK_SIZE);
             reader.readAsArrayBuffer(slice);
-          };
-
-          const waitForSync = () => {
-            return new Promise((r) => {
-              resolveSync = r;
-            });
           };
 
           readNextChunk();
