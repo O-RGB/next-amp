@@ -4,16 +4,82 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
-    <title>Nextamp Player</title>
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <title>Nextamp Player – เครื่องมือปรับแต่งเสียงเพลงออนไลน์</title>
+
+    <meta
+      name="description"
+      content="NEXTAMP โปรแกรมเล่นเพลงผ่านเว็บไซต์ เปลี่ยนคีย์เพลง เพิ่มความเร็ว และปรับ EQ ได้ฟรี ช่วยนักดนตรีแกะเพลงและฝึกซ้อม ด้วยเทคโนโลยี Web Audio API คุณภาพสูง"
+    />
+    <meta
+      name="keywords"
+      content="nextamp, โปรแกรมเล่นเพลง, เปลี่ยนคีย์เพลง, เพิ่มความเร็วเพลง, music player, pitch shift, time stretch, web audio, แกะเพลง, ฝึกร้องเพลง"
+    />
+    <meta name="author" content="NEXTAMP Team" />
     <link
-      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=Inter:wght@400;600&display=swap"
+      rel="icon"
+      type="image/png"
+      href="https://next-amp-player.vercel.app/assets/logo/logo.png"
+    />
+
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1343885117561998"
+      crossorigin="anonymous"
+    ></script>
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://next-amp-player.vercel.app/" />
+    <meta
+      property="og:title"
+      content="NEXTAMP – โปรแกรมเล่นเพลงสำหรับนักดนตรี"
+    />
+    <meta
+      property="og:description"
+      content="เครื่องมือฝึกซ้อมดนตรีออนไลน์ ปรับ Pitch, Speed และ EQ ได้ทันที ไม่ต้องลงโปรแกรม"
+    />
+    <meta
+      property="og:image"
+      content="https://next-amp-player.vercel.app/assets/post/image.png"
+    />
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta
+      property="twitter:url"
+      content="https://next-amp-player.vercel.app/"
+    />
+    <meta
+      property="twitter:title"
+      content="NEXTAMP – โปรแกรมเล่นเพลงสำหรับนักดนตรี"
+    />
+    <meta
+      property="twitter:description"
+      content="เครื่องมือฝึกซ้อมดนตรีออนไลน์ ปรับ Pitch, Speed และ EQ ได้ทันที"
+    />
+    <meta
+      property="twitter:image"
+      content="https://next-amp-player.vercel.app/assets/post/image.png"
+    />
+
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Nextamp" />
+    <link
+      rel="apple-touch-icon"
+      href="https://next-amp-player.vercel.app/assets/logo/logo.png"
+    />
+    <meta name="theme-color" content="#000000" />
+
+    <script src="/assets/libs/js/tailwindcss.js"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;600&family=Sarabun:wght@300;400;600&display=swap"
       rel="stylesheet"
     />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <script>
       tailwind.config = {
@@ -61,6 +127,9 @@
         user-select: none;
         -webkit-user-select: none;
         color: #e5e5e5;
+        -webkit-text-size-adjust: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
 
         /* --- NEW BACKGROUND: Deep Tech Green Gradient --- */
         /* Dark center with green tint, fading to absolute black edges */
@@ -982,7 +1051,6 @@
       const $$ = (s) => document.querySelectorAll(s);
       const STORAGE_KEY = "nextamp_settings_v9_stable";
 
-      // 1. Load Audio Settings Early
       const savedSettingsRaw = localStorage.getItem(STORAGE_KEY);
       let savedSettings = savedSettingsRaw ? JSON.parse(savedSettingsRaw) : {};
 
@@ -997,7 +1065,6 @@
         audioOptions.latencyHint = savedSettings.audioLatency;
       }
 
-      // 2. Initialize AudioContext with Options
       let audioContext;
       try {
         audioContext = new AudioContext(audioOptions);
@@ -1067,7 +1134,6 @@
         $("#modal-generic").classList.remove("hidden");
       };
 
-      // --- Tab Switching Logic ---
       window.switchSettingsTab = (tabName) => {
         ["audio", "appearance"].forEach((t) => {
           if (t === tabName) {
@@ -1083,7 +1149,6 @@
       window.openSettingsModal = () => {
         $("#modal-settings").classList.remove("hidden");
 
-        // Load Appearance
         $("#set-theme-window").value = currentTheme.window;
         $("#set-theme-text").value = currentTheme.text;
         $("#set-theme-high").value = currentTheme.highlight;
@@ -1091,11 +1156,10 @@
         $("#set-eq-2").value = currentTheme.eq2;
         $("#set-eq-3").value = currentTheme.eq3;
 
-        // Load Audio
         $("#set-audio-sr").value = savedSettings.audioSampleRate || "default";
         $("#set-audio-latency").value =
           savedSettings.audioLatency || "interactive";
-        // $("#set-rev-gain-sl").value = savedSettings.reverbGain || 0;
+
         $("#disp-rev-gain").textContent = savedSettings.reverbGain || "0.0";
 
         previewTheme();
@@ -1103,7 +1167,7 @@
 
       window.closeSettingsModal = () => {
         $("#modal-settings").classList.add("hidden");
-        // Revert theme preview if cancelled (optional, for now we assume they apply or cancel)
+
         applyThemeToDOM(currentTheme);
       };
 
@@ -1115,7 +1179,6 @@
         bg.style.backgroundColor = w;
         txt.style.color = t;
 
-        // Live preview to DOM (optional)
         document.documentElement.style.setProperty("--theme-window", w);
         document.documentElement.style.setProperty("--theme-text", t);
         document.documentElement.style.setProperty(
@@ -1145,16 +1208,14 @@
         currentTheme.eq3 = $("#set-eq-3").value;
         applyThemeToDOM(currentTheme);
         saveSettings();
-        // Don't close immediately, maybe user wants to change tabs
+
         $("#modal-settings").classList.add("hidden");
       };
 
       window.saveAudioSettings = () => {
         savedSettings.audioSampleRate = $("#set-audio-sr").value;
         savedSettings.audioLatency = $("#set-audio-latency").value;
-        //  savedSettings.reverbGain = $("#set-rev-gain-sl").value;
 
-        // Only save these specific keys to localStorage immediately
         localStorage.setItem(STORAGE_KEY, JSON.stringify(savedSettings));
 
         customConfirm("Audio settings saved. Reload to apply changes?", () => {
@@ -1358,7 +1419,7 @@
         window.savedEqGains = currentGains;
 
         const settings = {
-          ...savedSettings, // Preserve audio settings
+          ...savedSettings,
           vol: $("#main-vol").value,
           bal: $("#main-bal").value,
           rate: controlValues.rate,
@@ -1371,16 +1432,15 @@
           eqPreset: $("#eq-preset-select").value,
           isMono: isMono,
           theme: currentTheme,
-          // isReverbOn: isReverbOn,
+
           reverbGain: $("#main-reverb").value,
         };
-        // Update global var
+
         savedSettings = settings;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
       }
 
       function loadSettings() {
-        // savedSettings is already loaded at start
         const s = savedSettings;
         if (!s) {
           applyThemeToDOM(defaultTheme);
@@ -1425,7 +1485,6 @@
           applyThemeToDOM(defaultTheme);
         }
 
-        // if (s.isReverbOn !== undefined) isReverbOn = s.isReverbOn;
         if (s.reverbGain !== undefined) {
           $("#main-reverb").value = s.reverbGain;
           reverbGain.gain.value = parseFloat(s.reverbGain);
@@ -1474,6 +1533,13 @@
         )
           audioContext.resume();
         if (isEngineHot && audioLoop.paused) audioLoop.play().catch((e) => {});
+        if (stretch && controlValues.active && !isChangingTrack) {
+          const t = stretch.inputTime || 0;
+          if (t >= audioDuration - 0.5) {
+            console.log("Auto-Next (Background Check)");
+            handleNextTrack(true);
+          }
+        }
       };
       setInterval(checkAndResumeAudioContext, 1000);
       ["visibilitychange", "touchstart", "click"].forEach((evt) =>
@@ -1743,16 +1809,13 @@
             await loadAudioEngine(buf, t);
             $("#marquee").textContent = `${idx + 1}. ${t.name}`;
           } catch (e) {
-            // ----- START MODIFIED BLOCK (Play Error) -----
             console.error("Play Error:", e);
             $("#marquee").textContent = "Error loading file.";
             isChangingTrack = false;
 
-            // Mark error and save to IndexedDB
             t.hasError = true;
             await saveTrackToLib(t);
-            renderPlaylistUI(); // Refresh UI to show red
-            // ----- END MODIFIED BLOCK -----
+            renderPlaylistUI();
           }
         }, 200);
       }
@@ -1835,11 +1898,10 @@
 
       FREQUENCIES.forEach((f, i) => {
         const div = document.createElement("div");
-        // ----- START MODIFIED BLOCK (EQ Slider Padding) -----
-        // Changed from py-2 to pt-2 pb-6 to fix overlap
+
         div.className =
           "flex flex-col items-center h-full flex-1 group relative py-3";
-        // ----- END MODIFIED BLOCK -----
+
         div.innerHTML = `<div class="relative h-full w-full flex justify-center"><div class="eq-bar-bg ${
           isEqOn ? "eq-bar-active" : ""
         }" id="eq-bg-${i}"></div><div class="eq-thumb " style="top: 50%" id="thumb-${i}"></div><input type="range" class="vertical" style="height: 120%; top: -10%;" min="-12" max="12" step="0.5" value="0" data-idx="${i}" data-tooltip-type="db"></div><div class="absolute -bottom-1 text-[7px] theme-text-main font-pixel tracking-tighter pointer-events-none">${
@@ -2068,18 +2130,17 @@
         else {
           displayList.forEach((t, i) => {
             const d = document.createElement("div");
-            // ----- START MODIFIED BLOCK (Red Error Text) -----
+
             if (selectedIndices.has(i)) {
               d.classList.add("theme-highlight-bg");
             } else {
-              // Check for hasError property
               if (t.hasError) {
                 d.className += " text-red-500 hover:bg-[#222]";
               } else {
                 d.className += " theme-text-main hover:bg-[#222]";
               }
             }
-            // ----- END MODIFIED BLOCK -----
+
             let textClass =
               i === currentTrackIndex ? "font-bold text-white" : "";
             d.className += ` cursor-pointer px-1 flex justify-between select-none ${textClass}`;
