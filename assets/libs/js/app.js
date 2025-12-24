@@ -29,6 +29,8 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const STORAGE_KEY = "nextamp_settings_v9_stable";
 
+const worker = new Worker("/assets/libs/worker/mp3-worker.js");
+
 const savedSettingsRaw = localStorage.getItem(STORAGE_KEY);
 let savedSettings = savedSettingsRaw ? JSON.parse(savedSettingsRaw) : {};
 
@@ -1614,12 +1616,17 @@ function updateExportButtonState(isLoading) {
 }
 
 async function startRenderingProcess(sourceBuffer, duration, filename) {
-  updateExportButtonState(true);
+  const btn = $("#btn-export");
+  if (btn.disabled) return;
 
-  $("#marquee").textContent = "Rendering... (Please Wait)";
+  updateExportButtonState(true);
+  $("#marquee").textContent = "Processing Audio... 0%";
+
+  let mp3Worker = null;
 
   try {
     const extraTail = isReverbOn ? 2 : 0;
+
     const offlineCtx = new OfflineAudioContext(
       2,
       (duration + extraTail) * 44100,
@@ -1627,7 +1634,6 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
     );
 
     const offStretch = await SignalsmithStretch(offlineCtx);
-
     const channelBuffers = [];
     for (let c = 0; c < sourceBuffer.numberOfChannels; c++) {
       channelBuffers.push(sourceBuffer.getChannelData(c));
@@ -1641,8 +1647,8 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
       semitones: controlValues.semitones,
     });
 
-    let inputNode = offStretch;
     let outputNode = offStretch;
+
     const currentEqGains = Array.from(
       document.querySelectorAll("input[data-idx]")
     ).map((inp) => parseFloat(inp.value));
@@ -1676,32 +1682,71 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
       revGain.connect(offlineCtx.destination);
     }
 
+    $("#marquee").textContent = "Rendering Effects... (Please wait)";
+
     const renderedBuffer = await offlineCtx.startRendering();
 
-    $("#marquee").textContent = "Encoding WAV...";
+    $("#marquee").textContent = "Encoding MP3... (0%)";
 
-    await new Promise((r) => setTimeout(r, 10));
+    return new Promise((resolve, reject) => {
+      mp3Worker = new Worker("/assets/libs/worker/mp3-worker.js");
 
-    const wavBlob = audioBufferToWav(renderedBuffer, { float32: false });
-    const url = URL.createObjectURL(wavBlob);
-    const a = document.createElement("a");
-    a.style.display = "none";
-    a.href = url;
-    a.download = `Remix_${filename}.wav`;
-    document.body.appendChild(a);
-    a.click();
+      const channels = 2;
+      const channelData = [
+        renderedBuffer.getChannelData(0),
+        renderedBuffer.numberOfChannels > 1
+          ? renderedBuffer.getChannelData(1)
+          : renderedBuffer.getChannelData(0),
+      ];
 
-    setTimeout(() => {
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      $("#marquee").textContent = "Export Complete.";
-    }, 100);
+      mp3Worker.postMessage({
+        channelData: channelData,
+        sampleRate: renderedBuffer.sampleRate,
+        channels: channels,
+      });
+
+      mp3Worker.onmessage = function (e) {
+        if (e.data.type === "progress") {
+          const percent = Math.round(e.data.value * 100);
+          $("#marquee").textContent = `Encoding MP3... (${percent}%)`;
+        } else if (e.data.type === "done") {
+          const url = URL.createObjectURL(e.data.blob);
+          const a = document.createElement("a");
+          a.style.display = "none";
+          a.href = url;
+          const cleanName = filename.replace(/\.[^/.]+$/, "");
+          a.download = `Remix_${cleanName}.mp3`;
+          document.body.appendChild(a);
+          a.click();
+
+          setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            $("#marquee").textContent = "Export Complete.";
+            updateExportButtonState(false);
+
+            if (mp3Worker) mp3Worker.terminate();
+            resolve();
+          }, 100);
+        }
+      };
+
+      mp3Worker.onerror = function (error) {
+        console.error(error);
+        customAlert("Worker Error: " + error.message);
+        updateExportButtonState(false);
+
+        if (mp3Worker) mp3Worker.terminate();
+        reject(error);
+      };
+    });
   } catch (e) {
     console.error(e);
     customAlert("Export Failed: " + e.message);
     $("#marquee").textContent = "Error.";
-  } finally {
     updateExportButtonState(false);
+
+    if (mp3Worker) mp3Worker.terminate();
   }
 }
 

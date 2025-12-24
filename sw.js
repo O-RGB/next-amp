@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v2025-12-24-1314"; // 🔥 เปลี่ยนทุกครั้งที่ deploy
+const CACHE_VERSION = "v2025-12-24-1341"; // 🔥 เปลี่ยนทุกครั้งที่ deploy
 const CACHE_NAME = `nextamp-${CACHE_VERSION}`;
 
 const ASSETS_TO_CACHE = [
@@ -8,6 +8,8 @@ const ASSETS_TO_CACHE = [
   "./manifest.json",
   "./assets/libs/mjs/SignalsmithStretch.mjs",
   "./assets/libs/js/obfuscator.js",
+  "./assets/libs/js/lame.min.js",
+  "./assets/libs/worker/mp3-worker.js",
   "./assets/logo/logo.png",
   "./assets/sounds/startup.mp3",
   "./assets/sounds/allow-sound.mp3",
