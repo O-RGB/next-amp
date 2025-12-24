@@ -4,274 +4,270 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <title>Nextamp Remote</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link
-      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&display=swap"
       rel="stylesheet"
     />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <style>
+      :root {
+        --theme-window: #000080;
+        --theme-text: #00ff00;
+        --theme-text-sec: #ffcc00;
+      }
+
       body {
-        background-color: #050505;
+        background: radial-gradient(circle at center, #003504 0%, #020617 80%);
         color: #e5e5e5;
         font-family: "Chakra Petch", sans-serif;
+        height: 100vh;
+        width: 100vw;
         overflow: hidden;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
-      /* Neon Glow Effects */
-      .glow-text {
-        text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+      /* Win98 Button Style from app.html */
+      .win-btn {
+        background-color: #c0c0c0;
+        color: black;
+        border-top: 2px solid #fff;
+        border-left: 2px solid #fff;
+        border-right: 2px solid #000;
+        border-bottom: 2px solid #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: bold;
+        transition: all 0.1s;
       }
-      .glow-border {
-        box-shadow: 0 0 15px rgba(0, 255, 0, 0.1);
+      .win-btn:active {
+        border-top: 2px solid #000;
+        border-left: 2px solid #000;
+        border-right: 2px solid #fff;
+        border-bottom: 2px solid #fff;
+        transform: translate(1px, 1px);
       }
-      .glow-border:hover {
-        box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
-        border-color: #00ff00;
+      .win-btn:disabled {
+        color: #888;
+        cursor: not-allowed;
+        transform: none;
+        border-color: #555;
       }
 
-      /* Custom Scrollbar */
+      /* Containers */
+      .win-box {
+        background-color: #292929;
+        border-top: 2px solid #888;
+        border-left: 2px solid #888;
+        border-right: 2px solid #000;
+        border-bottom: 2px solid #000;
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
+      }
+
+      .theme-bar {
+        background-color: var(--theme-window);
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        padding: 2px 4px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .inset-panel {
+        background-color: black;
+        border: 2px solid #444;
+        border-right-color: #fff;
+        border-bottom-color: #fff;
+        color: var(--theme-text);
+      }
+
+      /* Scrollbar */
       .custom-scroll::-webkit-scrollbar {
-        width: 6px;
-      }
-      .custom-scroll::-webkit-scrollbar-track {
-        background: #111;
+        width: 8px;
+        background: #292929;
       }
       .custom-scroll::-webkit-scrollbar-thumb {
-        background: #333;
-        border-radius: 3px;
-      }
-      .custom-scroll::-webkit-scrollbar-thumb:hover {
-        background: #00ff00;
+        background: #c0c0c0;
+        border: 1px solid #fff;
+        border-right: 1px solid #000;
+        border-bottom: 1px solid #000;
       }
 
-      /* Animations */
-      @keyframes pulse-green {
-        0%,
-        100% {
-          opacity: 0.1;
-        }
-        50% {
-          opacity: 0.2;
-        }
+      .track-item:hover {
+        background-color: #222;
+        color: white;
       }
-      .bg-pulse {
-        animation: pulse-green 4s infinite;
+
+      /* Progress Bar Block Style */
+      .progress-block {
+        background: repeating-linear-gradient(
+          90deg,
+          #00ff00,
+          #00ff00 4px,
+          #000 4px,
+          #000 5px
+        );
       }
     </style>
   </head>
-  <body
-    class="flex flex-col items-center justify-center min-h-screen p-4 relative"
-  >
-    <div
-      class="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-green-500/10 rounded-full blur-[100px] pointer-events-none bg-pulse"
-    ></div>
-
-    <div
-      class="w-full max-w-md bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl relative z-10 flex flex-col gap-6"
-    >
-      <div class="text-center space-y-1">
-        <h1 class="text-3xl font-bold tracking-widest text-white glow-text">
-          NEXTAMP <span class="text-[#00ff00]">REMOTE</span>
-        </h1>
-        <div class="flex items-center justify-center gap-2">
-          <div id="status-dot" class="w-2 h-2 rounded-full bg-gray-500"></div>
-          <div
-            id="connection-status"
-            class="text-xs text-gray-400 font-mono tracking-wider"
-          >
-            INITIALIZING...
-          </div>
+  <body>
+    <div class="win-box w-full max-w-sm flex flex-col relative z-10">
+      <div class="theme-bar h-6 border-b border-black">
+        <div class="flex items-center gap-1">
+          <i class="ph-bold ph-broadcast text-xs"></i>
+          <span>REMOTE UPLOAD</span>
+        </div>
+        <div
+          id="connection-status"
+          class="text-[9px] font-mono uppercase bg-black px-1 border border-gray-600 text-yellow-500"
+        >
+          Connecting...
         </div>
       </div>
 
-      <div
-        id="main-interface"
-        class="flex flex-col gap-4 hidden transition-opacity duration-300"
-      >
-        <input
-          type="file"
-          id="file-input"
-          accept="audio/*,.mp3,.wav,.m4a,.ogg"
-          multiple
-          class="hidden"
-        />
+      <div class="p-3 flex flex-col gap-3">
+        <div id="main-interface" class="flex flex-col gap-2 hidden">
+          <input
+            type="file"
+            id="file-input"
+            accept="audio/*,.mp3,.wav,.m4a,.ogg"
+            multiple
+            class="hidden"
+          />
 
-        <div class="grid grid-cols-1 gap-4">
-          <button
-            id="btn-select"
-            onclick="document.getElementById('file-input').click()"
-            class="group relative overflow-hidden rounded-xl border border-white/20 bg-white/5 p-6 hover:bg-green-900/20 transition-all glow-border"
-          >
-            <div class="flex flex-col items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="w-8 h-8 text-green-400 group-hover:scale-110 transition-transform"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
-                />
-              </svg>
-              <span class="font-bold text-lg text-white">SELECT FILES</span>
-              <span class="text-[10px] text-gray-400 group-hover:text-green-300"
-                >FROM DEVICE STORAGE</span
-              >
-            </div>
-          </button>
-
-          <button
-            id="btn-library"
-            onclick="openLibraryModal()"
-            class="group relative overflow-hidden rounded-xl border border-white/20 bg-white/5 p-4 hover:bg-green-900/20 transition-all glow-border"
-          >
-            <div class="flex flex-col items-center gap-1">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="w-6 h-6 text-green-400 group-hover:scale-110 transition-transform"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
-                />
-              </svg>
-              <span class="font-bold text-white">SELECT FROM LIBRARY</span>
-              <span class="text-[10px] text-gray-400 group-hover:text-green-300"
-                >NEXTAMP DATABASE</span
-              >
-            </div>
-          </button>
-        </div>
-
-        <div
-          id="progress-area"
-          class="hidden bg-black/50 border border-green-500/30 rounded-lg p-4 space-y-2 mt-2"
-        >
-          <div class="flex justify-between text-xs font-mono text-green-400">
-            <span id="filename-disp" class="truncate max-w-[200px]"
-              >Uploading...</span
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              id="btn-select"
+              onclick="document.getElementById('file-input').click()"
+              class="win-btn h-12 flex flex-col gap-0.5 shadow-lg"
             >
-            <span id="percent-disp">0%</span>
+              <i class="ph-bold ph-folder-open text-base"></i>
+              <span class="text-[9px]">LOCAL FILES</span>
+            </button>
+            <button
+              id="btn-library"
+              onclick="openLibraryModal()"
+              class="win-btn h-12 flex flex-col gap-0.5 shadow-lg"
+            >
+              <i class="ph-bold ph-database text-base"></i>
+              <span class="text-[9px]">LIBRARY</span>
+            </button>
           </div>
-          <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
-            <div
-              id="progress-bar"
-              class="h-full bg-green-500 shadow-[0_0_10px_#00ff00] w-0 transition-all duration-100"
-            ></div>
-          </div>
+
           <div
             id="queue-info"
-            class="text-[10px] text-gray-500 text-center flex justify-between"
+            class="text-[9px] text-gray-400 font-bold hidden flex justify-between px-1"
           >
-            <span id="status-detail">Waiting...</span>
-            <span id="queue-count">0/0</span>
+            <span>TRANSFER QUEUE</span>
+            <span id="queue-count" class="text-white">0/0</span>
+          </div>
+
+          <div id="progress-area" class="hidden">
+            <div class="bg-black border border-gray-600 p-1 mb-1">
+              <div
+                class="flex justify-between text-[9px] font-mono text-green-500 mb-0.5"
+              >
+                <span id="filename-disp" class="truncate max-w-[150px]"
+                  >...</span
+                >
+                <span id="percent-disp">0%</span>
+              </div>
+              <div class="w-full h-3 bg-[#111] border border-gray-700 relative">
+                <div
+                  id="progress-bar"
+                  class="h-full bg-green-600 w-0 transition-all duration-75"
+                ></div>
+                <div
+                  class="absolute inset-0 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVQIW2NkQAKrVq36zwjjgzjwqgABXA0UBVYJIoAFCAwAVkIgE+q02bwAAAAASUVORK5CYII=')] opacity-30"
+                ></div>
+              </div>
+            </div>
+            <div
+              class="text-[9px] text-gray-500 text-center"
+              id="status-detail"
+            >
+              Waiting...
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="text-center">
-        <p class="text-[10px] text-gray-600 font-mono">
-          SECURE P2P CONNECTION • V2.1
-        </p>
+      <div class="bg-[#292929] p-1 border-t border-gray-500 text-center">
+        <div class="text-[8px] text-gray-500 font-mono">
+          NEXTAMP V2.1 REMOTE
+        </div>
       </div>
     </div>
 
     <div
       id="lib-modal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden transition-opacity"
+      class="absolute inset-0 z-50 flex items-center justify-center bg-black/80 hidden"
     >
       <div
-        class="w-full max-w-sm h-[80vh] bg-[#0a0a0a] border border-green-500/30 rounded-xl shadow-[0_0_30px_rgba(0,255,0,0.1)] flex flex-col overflow-hidden m-4"
+        class="bg-[#292929] border-2 border-white w-72 shadow-2xl flex flex-col h-[80vh]"
       >
-        <div
-          class="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center"
-        >
-          <h2
-            class="text-white font-bold tracking-wider flex items-center gap-2"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="w-5 h-5 text-green-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              />
-            </svg>
-            LIBRARY
-          </h2>
+        <div class="theme-bar px-2 py-1 mb-1 border-b border-black">
+          <span>SELECT TRACKS</span>
           <button
             onclick="closeLibraryModal()"
-            class="text-gray-500 hover:text-white transition"
+            class="hover:text-red-500 text-xs"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="w-6 h-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <i class="ph-bold ph-x"></i>
           </button>
         </div>
 
-        <div class="p-3 border-b border-white/5 bg-black/20">
-          <select
-            id="playlist-select"
-            onchange="handlePlaylistChange()"
-            class="w-full bg-[#111] text-gray-300 text-sm p-2 rounded border border-white/10 focus:border-green-500 outline-none"
-          >
-            <option value="main">Main Library (All Tracks)</option>
-          </select>
-        </div>
-
-        <div
-          id="lib-list"
-          class="flex-1 overflow-y-auto p-2 space-y-1 custom-scroll"
-        >
-          <div
-            class="text-center text-gray-600 py-10 text-xs font-mono animate-pulse"
-          >
-            Loading Database...
-          </div>
-        </div>
-
-        <div class="p-4 border-t border-white/10 bg-white/5">
-          <div class="flex justify-between items-center mb-3">
-            <span id="lib-count-disp" class="text-xs text-green-400 font-mono"
-              >SELECTED: 0/10</span
+        <div class="px-2 pt-2 pb-1 bg-[#292929]">
+          <div class="flex gap-1 mb-1">
+            <select
+              id="playlist-select"
+              onchange="handlePlaylistChange()"
+              class="w-full bg-black text-green-500 border border-gray-600 text-[10px] p-1 h-6 focus:outline-none font-mono"
             >
+              <option value="main">Main Library</option>
+            </select>
           </div>
+        </div>
+
+        <div class="flex-1 px-2 pb-2 min-h-0 flex flex-col">
+          <div
+            class="flex-1 bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 overflow-y-auto custom-scroll p-1 font-mono text-[10px] shadow-inner select-none relative"
+            id="lib-list"
+          >
+            <div class="text-gray-500 text-center mt-10">Loading DB...</div>
+          </div>
+
+          <div
+            class="flex justify-between items-center mt-1 text-[9px] text-gray-400 font-mono px-1"
+          >
+            <span id="lib-count-disp">SEL: 0/10</span>
+          </div>
+        </div>
+
+        <div class="p-2 border-t border-gray-600 bg-[#292929] flex gap-2">
+          <button
+            onclick="closeLibraryModal()"
+            class="win-btn flex-1 h-6 text-[10px]"
+          >
+            CANCEL
+          </button>
           <button
             onclick="confirmLibrarySelection()"
-            class="w-full py-3 rounded-lg bg-green-600 hover:bg-green-500 text-black font-bold tracking-wide transition shadow-[0_0_15px_rgba(0,255,0,0.3)]"
+            class="win-btn flex-1 h-6 text-[10px] text-green-900 font-bold border-green-900/30"
           >
-            SEND SELECTED TRACKS
+            SEND
           </button>
         </div>
       </div>
@@ -289,7 +285,6 @@
       const hostId = params.get("host");
 
       const statusEl = document.getElementById("connection-status");
-      const statusDot = document.getElementById("status-dot");
       const mainInterface = document.getElementById("main-interface");
       const btnSelect = document.getElementById("btn-select");
       const btnLibrary = document.getElementById("btn-library");
@@ -301,43 +296,37 @@
         totalFiles = 0;
       let isProcessing = false;
 
-      // Library Data
       let dbLibrary = [];
       let dbPlaylists = {};
       let currentLibView = [];
 
-      // Sync
       let resolveUpload = null;
       let resolveSync = null;
 
-      function updateStatus(msg, colorClass, dotColor) {
-        statusEl.innerText = msg;
-        statusEl.className = `text-xs font-mono tracking-wider ${colorClass}`;
-        statusDot.className = `w-2 h-2 rounded-full ${dotColor} shadow-[0_0_5px_currentColor]`;
-      }
-
       if (!hostId) {
-        updateStatus("ERROR: INVALID LINK", "text-red-500", "bg-red-500");
+        statusEl.innerText = "NO ID";
+        statusEl.className =
+          "text-[9px] font-mono uppercase bg-black px-1 border border-gray-600 text-red-500";
         throw new Error("No Host ID");
       }
 
       peer = new Peer();
 
       peer.on("open", (id) => {
-        updateStatus(
-          "CONNECTING...",
-          "text-yellow-500",
-          "bg-yellow-500 animate-pulse"
-        );
+        statusEl.innerText = "CONNECTING...";
         conn = peer.connect(hostId, { reliable: true });
 
         conn.on("open", () => {
-          updateStatus("CONNECTED / READY", "text-green-400", "bg-green-500");
+          statusEl.innerText = "CONNECTED";
+          statusEl.className =
+            "text-[9px] font-mono uppercase bg-black px-1 border border-gray-600 text-[#00ff00]";
           mainInterface.classList.remove("hidden");
         });
 
         conn.on("close", () => {
-          updateStatus("DISCONNECTED", "text-red-500", "bg-red-500");
+          statusEl.innerText = "OFFLINE";
+          statusEl.className =
+            "text-[9px] font-mono uppercase bg-black px-1 border border-gray-600 text-red-500";
           btnSelect.disabled = true;
           btnLibrary.disabled = true;
           mainInterface.classList.add("opacity-50");
@@ -386,7 +375,7 @@
           console.error(e);
           document.getElementById(
             "lib-list"
-          ).innerHTML = `<div class="text-red-500 text-center text-xs mt-10">Cannot access Nextamp Database.<br>Are you on the same device?</div>`;
+          ).innerHTML = `<div class="text-red-500 text-center mt-10">DB Error (Same Device Only)</div>`;
         }
       }
 
@@ -436,8 +425,7 @@
 
       function renderPlaylistOptions() {
         const select = document.getElementById("playlist-select");
-        select.innerHTML =
-          '<option value="main">Main Library (All Tracks)</option>';
+        select.innerHTML = '<option value="main">Main Library</option>';
         Object.keys(dbPlaylists).forEach((id) => {
           if (id === "main") return;
           const opt = document.createElement("option");
@@ -472,14 +460,15 @@
         listEl.innerHTML = "";
 
         if (currentLibView.length === 0) {
-          listEl.innerHTML = `<div class="text-gray-500 text-center text-xs mt-10">No tracks found in this playlist.</div>`;
+          listEl.innerHTML = `<div class="text-gray-500 text-center mt-10">Empty Playlist</div>`;
           return;
         }
 
         currentLibView.forEach((track, idx) => {
           const row = document.createElement("div");
+          // Compact style mirroring app.html playlist items
           row.className =
-            "flex items-center gap-3 p-3 rounded hover:bg-white/5 cursor-pointer group transition-colors border border-transparent hover:border-white/10";
+            "flex justify-between cursor-pointer hover:bg-[#222] select-none text-green-500 group";
           row.onclick = (e) => {
             if (e.target.type !== "checkbox") {
               const cb = row.querySelector("input");
@@ -489,16 +478,14 @@
           };
 
           row.innerHTML = `
-                <input type="checkbox" class="accent-green-500 w-4 h-4 cursor-pointer" value="${idx}">
-                <div class="flex-1 min-w-0">
-                    <div class="text-sm text-gray-200 group-hover:text-green-400 font-medium truncate">${
+                <div class="flex truncate w-full pointer-events-none items-center">
+                    <input type="checkbox" class="mr-2 pointer-events-auto accent-green-500" value="${idx}">
+                    <span class="w-4 text-right mr-1 flex-shrink-0 text-green-700 font-bold">${
+                      idx + 1
+                    }.</span>
+                    <span class="truncate text-gray-300 group-hover:text-white">${
                       track.name
-                    }</div>
-                    <div class="text-[10px] text-gray-500 font-mono">${(
-                      track.blob.size /
-                      1024 /
-                      1024
-                    ).toFixed(1)} MB</div>
+                    }</span>
                 </div>
             `;
           listEl.appendChild(row);
@@ -510,7 +497,7 @@
         const checks = document.querySelectorAll("#lib-list input:checked");
         document.getElementById(
           "lib-count-disp"
-        ).innerText = `SELECTED: ${checks.length}/${LIMIT_MAX_FILES}`;
+        ).innerText = `SEL: ${checks.length}/${LIMIT_MAX_FILES}`;
       }
 
       window.confirmLibrarySelection = () => {
@@ -547,10 +534,6 @@
         progressArea.classList.remove("hidden");
         document.getElementById("queue-info").classList.remove("hidden");
 
-        // Disable buttons visual
-        btnSelect.classList.add("opacity-50", "cursor-not-allowed");
-        btnLibrary.classList.add("opacity-50", "cursor-not-allowed");
-
         for (let i = 0; i < fileQueue.length; i++) {
           const file = fileQueue[i];
           document.getElementById("queue-count").innerText = `${
@@ -567,13 +550,11 @@
         isProcessing = false;
         btnSelect.disabled = false;
         btnLibrary.disabled = false;
-        btnSelect.classList.remove("opacity-50", "cursor-not-allowed");
-        btnLibrary.classList.remove("opacity-50", "cursor-not-allowed");
 
-        document.getElementById("status-detail").innerText = "Completed";
+        document.getElementById("status-detail").innerText = "Completed!";
         document
           .getElementById("status-detail")
-          .classList.add("text-green-400");
+          .classList.add("text-green-500");
 
         setTimeout(() => {
           alert("Transfer Complete!");
@@ -581,7 +562,7 @@
           document.getElementById("queue-info").classList.add("hidden");
           document
             .getElementById("status-detail")
-            .classList.remove("text-green-400");
+            .classList.remove("text-green-500");
           fileQueue = [];
         }, 500);
       }
