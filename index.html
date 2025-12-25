@@ -204,6 +204,25 @@
         line-height: 1.8;
         color: #d1d5db;
       }
+      nav {
+        padding-top: calc(
+          1rem + env(safe-area-inset-top)
+        ); /* เพิ่ม padding ด้านบนให้พ้นติ่ง */
+        background-color: rgba(
+          0,
+          0,
+          0,
+          0.8
+        ); /* เพิ่มความเข้มเพื่อให้มองเห็นเนื้อหาชัดเจน */
+      }
+      header {
+        padding-top: calc(5rem + env(safe-area-inset-top));
+      }
+
+      /* หากมีปุ่มหรือเนื้อหาด้านล่างสุด ให้รองรับพื้นที่ด้านล่าง (Home Indicator) */
+      footer {
+        padding-bottom: calc(3rem + env(safe-area-inset-bottom));
+      }
     </style>
   </head>
 

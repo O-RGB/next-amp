@@ -160,6 +160,9 @@
 
       /* Navigation Scroll Animation */
       #main-nav {
+        padding-top: calc(
+          0.75rem + env(safe-area-inset-top)
+        ); /* เพิ่ม padding ด้านบน */
         transition: transform 0.3s ease-in-out, background-color 0.3s;
         transform: translateY(-100%);
       }
@@ -172,6 +175,8 @@
         position: relative;
         width: 100%;
         height: 100dvh;
+        /* ดันเนื้อหาด้านบนลงมาตามขนาดติ่งของ iPhone */
+        padding-top: env(safe-area-inset-top);
         border-bottom: 1px solid #333;
         background: radial-gradient(circle at center, #003504 0%, #020617 80%);
       }
@@ -1415,15 +1420,33 @@
         }
       });
 
+      // 2. ตรวจสอบการรองรับ Fullscreen (iPhone ปกติจะไม่รองรับ Document Fullscreen)
+      function checkFullscreenSupport() {
+        const btnFS = document.querySelector(
+          'button[onclick="toggleFullscreen()"]'
+        );
+        if (!document.fullscreenEnabled && !document.webkitFullscreenEnabled) {
+          // ถ้าเครื่องไม่รองรับ Fullscreen API ให้ซ่อนปุ่ม (เช่น iPhone)
+          if (btnFS) btnFS.style.display = "none";
+        }
+      }
+      checkFullscreenSupport();
+
+      if (isPopup) {
+        document.body.classList.add("popup-mode");
+      }
+
+      // แก้ไขฟังก์ชัน toggleFullscreen ให้รองรับ Webkit (สำหรับ iPad)
       function toggleFullscreen() {
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch((e) => {
-            console.log(e);
-          });
+        const docElm = document.documentElement;
+        const requestFS =
+          docElm.requestFullscreen || docElm.webkitRequestFullscreen;
+        const exitFS = document.exitFullscreen || document.webkitExitFullscreen;
+
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+          if (requestFS) requestFS.call(docElm).catch((e) => console.log(e));
         } else {
-          if (document.exitFullscreen) {
-            document.exitFullscreen();
-          }
+          if (exitFS) exitFS.call(document);
         }
       }
 
@@ -1434,12 +1457,17 @@
           document.body.classList.remove("fullscreen-mode");
         }
       });
-
       const urlParams = new URLSearchParams(window.location.search);
       const isPopup = urlParams.get("popup") === "1";
 
-      if (isPopup) {
-        document.body.classList.add("popup-mode");
+      // ตรวจสอบว่าเป็น Mobile หรือไม่
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isiPhone = /iPhone/i.test(navigator.userAgent) && !window.MSStream;
+
+      // 1. ซ่อนปุ่ม Popup ถ้าเปิดในมือถือ
+      if (isMobile || isPopup) {
+        const btnPopout = document.getElementById("btn-popout");
+        if (btnPopout) btnPopout.style.display = "none";
       }
 
       function openPopup() {

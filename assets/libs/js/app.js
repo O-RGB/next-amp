@@ -14,18 +14,25 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
   }
 })();
 
+// [แก้ไขใน assets/libs/js/app.js ส่วนตรวจสอบ Access]
 (function () {
   const isAppPage = window.location.pathname.endsWith("app.html");
   const hasToken = sessionStorage.getItem("access_allowed") === "true";
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   const urlParams = new URLSearchParams(window.location.search);
-  const isValidPopup =
-    isAppPage &&
-    urlParams.get("popup") === "1" &&
-    window.opener &&
-    !window.opener.closed;
+  const isPopupMode = urlParams.get("popup") === "1";
 
-  if ((isAppPage && !isValidPopup) || !hasToken) {
+  // ถ้าเป็น Mobile แต่พยายามเปิดแบบ Popup ให้เด้งกลับ index
+  if (isAppPage && isMobile && isPopupMode) {
+    window.location.replace("index.html");
+    throw new Error("Popup mode not allowed on mobile");
+  }
+
+  // เงื่อนไขเดิมที่มีอยู่
+  const isValidPopup =
+    isAppPage && isPopupMode && window.opener && !window.opener.closed;
+  if ((isAppPage && !isValidPopup && !isMobile) || !hasToken) {
     window.location.replace("index.html");
     throw new Error("Access Denied");
   }
