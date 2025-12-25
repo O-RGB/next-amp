@@ -1432,10 +1432,6 @@
       }
       checkFullscreenSupport();
 
-      if (isPopup) {
-        document.body.classList.add("popup-mode");
-      }
-
       // แก้ไขฟังก์ชัน toggleFullscreen ให้รองรับ Webkit (สำหรับ iPad)
       function toggleFullscreen() {
         const docElm = document.documentElement;
@@ -1461,6 +1457,10 @@
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       const urlParams = new URLSearchParams(window.location.search);
       const isPopup = urlParams.get("popup") === "1";
+
+      if (isPopup) {
+        document.body.classList.add("popup-mode");
+      }
 
       // แก้ไขจุดนี้: ใช้ CSS class เพื่อซ่อนให้แน่นอน
       if (isMobile || isPopup) {
