@@ -7,6 +7,12 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
 
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1343885117561998"
+      crossorigin="anonymous"
+    ></script>
+
     <title>Nextamp Player – เครื่องมือปรับแต่งเสียงเพลงออนไลน์</title>
 
     <meta
@@ -119,28 +125,70 @@
 
       html,
       body {
-        height: 100vh;
-        width: 100vw;
-        position: fixed;
-        inset: 0;
-        overflow: hidden;
-        overscroll-behavior: none;
-        touch-action: none;
+        width: 100%;
+        min-height: 100vh;
+        margin: 0;
+        overflow-x: hidden;
+        overflow-y: auto !important;
+        touch-action: pan-y;
         user-select: none;
         -webkit-user-select: none;
         color: #e5e5e5;
         -webkit-text-size-adjust: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-
         background: radial-gradient(circle at center, #003504 0%, #020617 80%);
-
-        padding-top: max(4px, env(safe-area-inset-top));
-        padding-bottom: max(4px, env(safe-area-inset-bottom));
-        padding-left: max(4px, env(safe-area-inset-left));
-        padding-right: max(4px, env(safe-area-inset-right));
+        position: relative;
       }
 
+      /* Styles from Index.html */
+      .font-display {
+        font-family: "Chakra Petch", sans-serif;
+      }
+
+      .tech-card {
+        background: linear-gradient(
+          145deg,
+          rgba(0, 50, 0, 0.2),
+          rgba(0, 0, 0, 0.8)
+        );
+        border: 1px solid rgba(0, 255, 0, 0.2);
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.05);
+      }
+      .feature-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      /* Navigation Scroll Animation */
+      #main-nav {
+        transition: transform 0.3s ease-in-out, background-color 0.3s;
+        transform: translateY(-100%);
+      }
+      #main-nav.nav-visible {
+        transform: translateY(0);
+      }
+
+      /* App Viewport Container */
+      .app-viewport {
+        position: relative;
+        width: 100%;
+        height: 100dvh;
+        border-bottom: 1px solid #333;
+        background: radial-gradient(circle at center, #003504 0%, #020617 80%);
+      }
+
+      /* Content Section (Info below player) */
+      .content-section {
+        position: relative;
+        z-index: 5;
+        background-color: #080808;
+        color: #aaa;
+        padding: 3rem 1.5rem;
+        border-top: 1px solid #333;
+        font-family: "Sarabun", sans-serif;
+        width: 100%;
+      }
+
+      /* WinUI Styles */
       .win-btn {
         background-color: #c0c0c0;
         color: black;
@@ -362,9 +410,86 @@
         transform-origin: center;
         display: inline-block;
       }
+
+      /* ========================================================================= */
+      /* [CRITICAL FIX] Modal Positioning & Popup/Fullscreen Logic */
+      /* ========================================================================= */
+
+      /* Force Modals to stay FIXED on screen (Viewport) regardless of page length */
+      .app-modal {
+        position: fixed !important;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9999;
+      }
+
+      /* ซ่อน Content และ Navbar เมื่ออยู่ในโหมด Popup หรือ Fullscreen */
+      body.popup-mode #main-nav,
+      body.fullscreen-mode #main-nav,
+      body.popup-mode .content-section,
+      body.fullscreen-mode .content-section,
+      body.popup-mode #features,
+      body.fullscreen-mode #features,
+      body.popup-mode footer,
+      body.fullscreen-mode footer,
+      body.popup-mode #btn-popout,
+      body.fullscreen-mode #btn-popout,
+      body.popup-mode #btn-install-pwa,
+      body.fullscreen-mode #btn-install-pwa {
+        display: none !important;
+      }
+
+      /* ปรับ Body ให้ไม่มี Scroll */
+      body.popup-mode,
+      body.fullscreen-mode {
+        background: #000;
+        overflow: hidden;
+      }
+
+      /* ขยาย Viewport ให้เต็ม 100% ของหน้าจอ */
+      body.popup-mode .app-viewport,
+      body.fullscreen-mode .app-viewport {
+        height: 100vh;
+        width: 100vw;
+        padding: 0;
+        border: none;
+        background: radial-gradient(circle at center, #003504 0%, #000000 90%);
+      }
+
+      /* เอาเงาออกเพื่อให้เนียนไปกับขอบจอ */
+      body.popup-mode .sci-fi-container-glow,
+      body.fullscreen-mode .sci-fi-container-glow {
+        box-shadow: none;
+      }
     </style>
   </head>
-  <body class="flex flex-col items-center w-full h-full">
+  <body class="flex flex-col items-center w-full">
+    <nav
+      id="main-nav"
+      class="w-full py-3 px-6 flex justify-between items-center border-b border-white/10 bg-black/80 backdrop-blur-md fixed top-0 z-[100]"
+    >
+      <div class="flex items-center gap-2">
+        <img
+          src="https://next-amp-player.vercel.app/assets/logo/logo.png"
+          alt="Logo"
+          class="w-8 h-8 rounded shadow-lg"
+        />
+        <span class="font-display font-bold text-xl tracking-wider text-white"
+          >NEXTAMP</span
+        >
+      </div>
+      <div class="hidden md:flex gap-6 text-sm text-gray-400 font-display">
+        <a href="#manual-section" class="hover:text-green-400 transition"
+          >คู่มือการใช้งาน</a
+        >
+        <a href="#features" class="hover:text-green-400 transition">ฟีเจอร์</a>
+        <a href="#footer-section" class="hover:text-green-400 transition"
+          >ติดต่อเรา</a
+        >
+      </div>
+    </nav>
     <div id="slider-tooltip">0</div>
 
     <audio
@@ -385,667 +510,812 @@
       INSTALL APP
     </button>
 
-    <div
-      class="fixed top-0 left-0 w-full h-full max-w-xl xl:max-w-sm mx-auto overflow-hidden flex flex-col pb-1 sci-fi-container-glow relative z-10"
-    >
+    <div class="app-viewport">
       <div
-        class="flex-none flex flex-col gap-2 origin-center transition-transform duration-300"
+        class="w-full h-full max-w-xl xl:max-w-sm mx-auto overflow-hidden flex flex-col pb-1 sci-fi-container-glow relative z-10 transition-all duration-300"
       >
         <div
-          class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-20 shadow-lg"
+          class="flex-none flex flex-col gap-2 origin-center transition-transform duration-300"
         >
           <div
-            class="theme-bar h-5 flex justify-between items-center px-1 text-[10px] font-bold cursor-grab"
+            class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-20 shadow-lg"
           >
-            <div class="flex items-center gap-1">
-              <i class="ph-bold ph-music-note"></i><span>NEXTAMP</span>
-            </div>
-            <div class="flex gap-1 items-center">
-              <div
-                id="engine-status"
-                class="w-2 h-2 rounded-full bg-red-900 border border-black mr-1"
-                title="Engine Status"
-              ></div>
-              <button
-                onclick="openSettingsModal()"
-                class="w-3 h-3 bg-btn-face text-black flex items-center justify-center border border-white text-[8px] leading-none"
-              >
-                <i class="ph-fill ph-wrench"></i>
-              </button>
-            </div>
-          </div>
-          <div class="p-2">
             <div
-              class="grid grid-cols-5 border border-gray-600 border-r-white/50 border-b-white/50 p-2 mb-2 flex gap-2 h-[94px] shadow-inner relative overflow-hidden"
+              class="theme-bar h-5 flex justify-between items-center px-1 text-[10px] font-bold cursor-grab"
             >
+              <div class="flex items-center gap-1">
+                <i class="ph-bold ph-music-note"></i><span>NEXTAMP PLAYER</span>
+              </div>
+              <div class="flex gap-1 items-center">
+                <button
+                  id="btn-popout"
+                  onclick="openPopup()"
+                  class="w-4 h-3 bg-btn-face text-black flex items-center justify-center border border-white hover:bg-white"
+                  title="Pop-out Window (Desktop)"
+                >
+                  <i class="ph-bold ph-arrow-square-out text-[9px]"></i>
+                </button>
+                <button
+                  onclick="toggleFullscreen()"
+                  class="w-4 h-3 bg-btn-face text-black flex items-center justify-center border border-white hover:bg-white"
+                  title="Fullscreen"
+                >
+                  <i class="ph-bold ph-arrows-out text-[9px]"></i>
+                </button>
+                <div class="w-[1px] h-3 bg-gray-500 mx-0.5"></div>
+
+                <div
+                  id="engine-status"
+                  class="w-2 h-2 rounded-full bg-red-900 border border-black mr-1"
+                  title="Engine Status"
+                ></div>
+                <button
+                  onclick="openSettingsModal()"
+                  class="w-3 h-3 bg-btn-face text-black flex items-center justify-center border border-white text-[8px] leading-none"
+                  title="Settings"
+                >
+                  <i class="ph-fill ph-wrench"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="p-2">
               <div
-                class="col-span-2 bg-black border border-gray-700 relative overflow-hidden cursor-pointer"
-                id="visualizer-container"
-                title="Click to change visualizer style"
+                class="grid grid-cols-5 border border-gray-600 border-r-white/50 border-b-white/50 p-2 mb-2 flex gap-2 h-[94px] shadow-inner relative overflow-hidden"
               >
                 <div
-                  id="time-display"
-                  class="absolute top-1 right-1 font-pixel text-2xl theme-text-main leading-none tracking-widest text-shadow z-20"
+                  class="col-span-2 bg-black border border-gray-700 relative overflow-hidden cursor-pointer"
+                  id="visualizer-container"
+                  title="Click to change visualizer style"
                 >
-                  00:00
+                  <div
+                    id="time-display"
+                    class="absolute top-1 right-1 font-pixel text-2xl theme-text-main leading-none tracking-widest text-shadow z-20"
+                  >
+                    00:00
+                  </div>
+
+                  <div
+                    class="absolute top-0.5 left-0.5 font-pixel theme-text-main text-[5px] z-30 opacity-70 pointer-events-none"
+                  >
+                    VIS:<span id="v-status-indicator">SPEC</span>
+                  </div>
+
+                  <canvas
+                    id="visualizer"
+                    class="w-full h-full absolute top-0 left-0 block"
+                  ></canvas>
                 </div>
 
                 <div
-                  class="absolute top-0.5 left-0.5 font-pixel theme-text-main text-[5px] z-30 opacity-70 pointer-events-none"
+                  class="col-span-3 flex-1 flex flex-col gap-1.5 bg-[#292929]"
                 >
-                  VIS:<span id="v-status-indicator">SPEC</span>
-                </div>
+                  <div
+                    id="marquee"
+                    class="font-pixel theme-text-main text-[11px] whitespace-nowrap overflow-hidden text-ellipsis leading-tight text-shadow bg-black border border-gray-800 px-2 py-1.5"
+                  >
+                    System Ready.
+                  </div>
 
-                <canvas
-                  id="visualizer"
-                  class="w-full h-full absolute top-0 left-0 block"
-                ></canvas>
+                  <div class="flex justify-between items-center">
+                    <div class="flex gap-2 items-center">
+                      <span
+                        id="info-bitrate"
+                        class="font-pixel theme-text-sec text-[9px] leading-none"
+                      >
+                        -- kbps
+                      </span>
+                      <span
+                        id="info-samplerate"
+                        class="font-pixel theme-text-sec text-[9px] leading-none"
+                      >
+                        -- khz
+                      </span>
+                    </div>
+                    <button
+                      id="btn-mono-stereo"
+                      class="font-pixel theme-text-main text-[8px] leading-none border border-gray-600 px-1 py-[1px] bg-black hover:bg-gray-800 cursor-pointer"
+                    >
+                      STEREO
+                    </button>
+                  </div>
+
+                  <div class="flex gap-3 items-center">
+                    <div class="flex flex-col flex-1">
+                      <div
+                        class="flex justify-between text-[8px] theme-text-main font-pixel mb-0.5"
+                      >
+                        <span>VOL</span><span id="txt-vol">80%</span>
+                      </div>
+                      <input
+                        type="range"
+                        id="main-vol"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value="0.8"
+                        class="w-full h-2 bg-black"
+                        data-tooltip-type="percent"
+                      />
+                    </div>
+
+                    <div class="flex flex-col flex-1">
+                      <div
+                        class="flex justify-between text-[8px] theme-text-sec font-pixel mb-0.5"
+                      >
+                        <span>L</span><span>BAL</span><span>R</span>
+                      </div>
+                      <input
+                        type="range"
+                        id="main-bal"
+                        min="-1"
+                        max="1"
+                        step="0.1"
+                        value="0"
+                        class="w-full h-2 bg-black"
+                        data-tooltip-type="balance"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div class="col-span-3 flex-1 flex flex-col gap-1.5 bg-[#292929]">
-                <div
-                  id="marquee"
-                  class="font-pixel theme-text-main text-[11px] whitespace-nowrap overflow-hidden text-ellipsis leading-tight text-shadow bg-black border border-gray-800 px-2 py-1.5"
-                >
-                  System Ready.
+              <div class="flex flex-col gap-1 mb-2">
+                <div class="relative h-4">
+                  <input
+                    type="range"
+                    id="playback"
+                    min="0"
+                    max="1"
+                    step="0.001"
+                    value="0"
+                    class="w-full h-3 cursor-pointer"
+                    data-tooltip-type="time"
+                  />
                 </div>
+              </div>
 
-                <div class="flex justify-between items-center">
-                  <div class="flex gap-2 items-center">
-                    <span
-                      id="info-bitrate"
-                      class="font-pixel theme-text-sec text-[9px] leading-none"
-                    >
-                      -- kbps
-                    </span>
-                    <span
-                      id="info-samplerate"
-                      class="font-pixel theme-text-sec text-[9px] leading-none"
-                    >
-                      -- khz
-                    </span>
-                  </div>
+              <div class="flex justify-between items-end">
+                <div class="flex gap-[2px]">
+                  <button id="btn-prev" class="win-btn w-8 h-8" title="Prev">
+                    <i class="ph-fill ph-skip-back"></i>
+                  </button>
+                  <button id="btn-play" class="win-btn w-10 h-8" title="Play">
+                    <i class="ph-fill ph-play text-base"></i>
+                  </button>
+                  <button id="btn-pause" class="win-btn w-10 h-8" title="Pause">
+                    <i class="ph-fill ph-pause text-base"></i>
+                  </button>
+                  <button id="btn-stop" class="win-btn w-10 h-8" title="Stop">
+                    <i class="ph-fill ph-stop text-base"></i>
+                  </button>
+                  <button id="btn-next" class="win-btn w-8 h-8" title="Next">
+                    <i class="ph-fill ph-skip-forward"></i>
+                  </button>
                   <button
-                    id="btn-mono-stereo"
-                    class="font-pixel theme-text-main text-[8px] leading-none border border-gray-600 px-1 py-[1px] bg-black hover:bg-gray-800 cursor-pointer"
+                    id="btn-export"
+                    onclick="exportCurrentTrackWav()"
+                    class="win-btn w-8 h-8"
+                    title="Export WAV"
                   >
-                    STEREO
+                    <i class="ph-fill ph-floppy-disk-back"></i>
                   </button>
                 </div>
 
-                <div class="flex gap-3 items-center">
-                  <div class="flex flex-col flex-1">
-                    <div
-                      class="flex justify-between text-[8px] theme-text-main font-pixel mb-0.5"
+                <div class="flex flex-col gap-[2px]">
+                  <button
+                    id="tog-shuffle"
+                    class="retro-txt-btn w-12 h-4 text-[9px]"
+                    title="Shuffle"
+                  >
+                    SHUFFLE
+                  </button>
+                  <button
+                    id="tog-repeat"
+                    class="retro-txt-btn w-12 h-4 text-[9px]"
+                    title="Repeat Mode"
+                  >
+                    REPEAT
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-10 shadow-lg"
+          >
+            <div
+              class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold cursor-pointer"
+              onclick="toggleSection('eq-body')"
+            >
+              <span>EQUALIZER & PITCH</span
+              ><i class="ph-bold ph-caret-down"></i>
+            </div>
+            <div id="eq-body" class="p-2 flex gap-1 h-[160px]">
+              <div
+                class="w-[80px] flex flex-col gap-1.5 h-full items-center justify-between pr-1 border-r border-gray-600"
+              >
+                <div class="w-full flex flex-col gap-1">
+                  <select
+                    id="eq-preset-select"
+                    class="w-full text-[9px] bg-black theme-text-main border border-gray-500 outline-none"
+                  >
+                    <option value="flat">Flat</option>
+                    <option value="rock">Rock</option>
+                    <option value="pop">Pop</option>
+                    <option value="jazz">Jazz</option>
+                    <option value="fullbass">Bass</option>
+                    <option value="custom">Manual</option>
+                  </select>
+
+                  <div class="flex justify-between items-center w-full">
+                    <a
+                      href="https://github.com/signalsmith-audio/signalsmith-stretch"
+                      target="_blank"
+                      class="flex justify-center items-end w-full"
                     >
-                      <span>VOL</span><span id="txt-vol">80%</span>
+                      <button
+                        class="win-btn text-[9px] font-bold shadow-sm w-full !h-4"
+                      >
+                        <div class="pr-0.5">
+                          <i class="ph-bold ph-github-logo text-[10px]"></i>
+                        </div>
+                        <div class="text-[7px] pb-0.5">Signalsmith</div>
+                      </button>
+                    </a>
+                  </div>
+                </div>
+                <div class="flex flex-col pb-1 h-full justify-between">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex flex-col gap-1">
+                      <div
+                        class="flex justify-between text-[8px] text-gray-400"
+                      >
+                        <span>PITCH</span
+                        ><span id="val-pitch" class="theme-text-sec">0</span>
+                      </div>
+                      <input
+                        type="range"
+                        data-key="semitones"
+                        min="-12"
+                        max="12"
+                        step="1"
+                        value="0"
+                        class="w-full h-1 bg-gray-600"
+                        data-tooltip-type="val"
+                      />
+                    </div>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <div class="flex justify-between text-[8px] text-gray-400">
+                      <span>SPEED</span
+                      ><span id="val-rate" class="theme-text-sec">1.0</span>
                     </div>
                     <input
                       type="range"
-                      id="main-vol"
+                      data-key="rate"
+                      min="0.5"
+                      max="2"
+                      step="0.05"
+                      value="1"
+                      class="w-full h-1 bg-gray-600"
+                      data-tooltip-type="x"
+                    />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <div
+                      class="flex justify-between items-center text-[8px] text-gray-400"
+                    >
+                      <div class="flex items-center gap-1">
+                        <span>REVERB</span>
+                        <button
+                          id="btn-reverb-toggle"
+                          class="font-pixel text-[7px] leading-none border border-gray-600 px-1 py-[0.5px] bg-black hover:bg-gray-800 cursor-pointer text-gray-500 z-20"
+                        >
+                          OFF
+                        </button>
+                      </div>
+                      <span id="val-reverb" class="theme-text-sec">0.00</span>
+                    </div>
+                    <input
+                      type="range"
+                      id="main-reverb"
+                      data-key="reverb"
                       min="0"
                       max="1"
                       step="0.01"
-                      value="0.8"
-                      class="w-full h-2 bg-black"
+                      value="0"
+                      class="w-full h-1 bg-gray-600"
                       data-tooltip-type="percent"
                     />
                   </div>
-
-                  <div class="flex flex-col flex-1">
-                    <div
-                      class="flex justify-between text-[8px] theme-text-sec font-pixel mb-0.5"
-                    >
-                      <span>L</span><span>BAL</span><span>R</span>
-                    </div>
-                    <input
-                      type="range"
-                      id="main-bal"
-                      min="-1"
-                      max="1"
-                      step="0.1"
-                      value="0"
-                      class="w-full h-2 bg-black"
-                      data-tooltip-type="balance"
-                    />
-                  </div>
                 </div>
               </div>
-            </div>
-
-            <div class="flex flex-col gap-1 mb-2">
-              <div class="relative h-4">
-                <input
-                  type="range"
-                  id="playback"
-                  min="0"
-                  max="1"
-                  step="0.001"
-                  value="0"
-                  class="w-full h-3 cursor-pointer"
-                  data-tooltip-type="time"
-                />
-              </div>
-            </div>
-
-            <div class="flex justify-between items-end">
-              <div class="flex gap-[2px]">
-                <button id="btn-prev" class="win-btn w-8 h-8" title="Prev">
-                  <i class="ph-fill ph-skip-back"></i>
-                </button>
-                <button id="btn-play" class="win-btn w-10 h-8" title="Play">
-                  <i class="ph-fill ph-play text-base"></i>
-                </button>
-                <button id="btn-pause" class="win-btn w-10 h-8" title="Pause">
-                  <i class="ph-fill ph-pause text-base"></i>
-                </button>
-                <button id="btn-stop" class="win-btn w-10 h-8" title="Stop">
-                  <i class="ph-fill ph-stop text-base"></i>
-                </button>
-                <button id="btn-next" class="win-btn w-8 h-8" title="Next">
-                  <i class="ph-fill ph-skip-forward"></i>
-                </button>
-                <button
-                  id="btn-export"
-                  onclick="exportCurrentTrackWav()"
-                  class="win-btn w-8 h-8"
-                  title="Export WAV"
+              <div class="flex-1 flex flex-col relative">
+                <div
+                  class="flex items-center mb-2 h-[35px] border border-gray-600 bg-black p-[2px]"
                 >
-                  <i class="ph-fill ph-floppy-disk-back"></i>
-                </button>
-              </div>
-
-              <div class="flex flex-col gap-[2px]">
-                <button
-                  id="tog-shuffle"
-                  class="retro-txt-btn w-12 h-4 text-[9px]"
-                  title="Shuffle"
-                >
-                  SHUFFLE
-                </button>
-                <button
-                  id="tog-repeat"
-                  class="retro-txt-btn w-12 h-4 text-[9px]"
-                  title="Repeat Mode"
-                >
-                  REPEAT
-                </button>
+                  <canvas
+                    id="eq-graph"
+                    class="flex-1 h-full bg-[#111] border border-gray-800"
+                    width="180"
+                    height="30"
+                  ></canvas>
+                  <button
+                    id="btn-eq-toggle"
+                    class="win-btn h-full w-12 text-[9px] flex flex-col gap-0 leading-none"
+                  >
+                    <span>EQ</span
+                    ><span id="txt-eq-status" class="text-[7px]">ON</span>
+                  </button>
+                </div>
+                <div
+                  class="flex-1 flex gap-1 pb-1 px-1 bg-black border border-gray-600 shadow-inner relative"
+                  id="eq-container"
+                ></div>
               </div>
             </div>
           </div>
         </div>
 
         <div
-          class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-10 shadow-lg"
+          class="w-full h-40 bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-0 shadow-lg flex-1 min-h-0 flex flex-col mt-2"
         >
           <div
-            class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold cursor-pointer"
-            onclick="toggleSection('eq-body')"
+            class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold flex-none"
           >
-            <span>EQUALIZER</span><i class="ph-bold ph-caret-down"></i>
+            <span>LIBRARY & PLAYLIST</span>
           </div>
-          <div id="eq-body" class="p-2 flex gap-1 h-[160px]">
+          <div class="p-2 flex flex-col h-full relative overflow-hidden">
+            <div class="flex justify-between mb-1 flex-none">
+              <select
+                id="playlist-select"
+                class="bg-black theme-text-main border border-gray-600 text-[10px] px-1 h-5 w-32 font-pixel focus:outline-none"
+              >
+                <option value="main">Main Library</option>
+              </select>
+              <div class="flex gap-1">
+                <button
+                  onclick="openNewPlaylistModal()"
+                  class="win-btn px-2 h-5 text-[9px] font-bold shadow-sm"
+                >
+                  NEW
+                </button>
+                <button
+                  onclick="handleDeletePlaylist()"
+                  id="btn-del-pl"
+                  class="win-btn px-2 h-5 text-[9px] font-bold text-red-900 shadow-sm hidden"
+                  title="Delete Playlist"
+                >
+                  <i class="ph-bold ph-trash"></i>
+                </button>
+              </div>
+            </div>
+
             <div
-              class="w-[80px] flex flex-col gap-1.5 h-full items-center justify-between pr-1 border-r border-gray-600"
+              class="flex-1 bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 overflow-y-auto custom-scroll p-1 font-pixel text-xs mb-2 shadow-inner select-none min-h-0"
+              id="pl-box"
             >
-              <div class="w-full flex flex-col gap-1">
-                <select
-                  id="eq-preset-select"
-                  class="w-full text-[9px] bg-black theme-text-main border border-gray-500 outline-none"
-                >
-                  <option value="flat">Flat</option>
-                  <option value="rock">Rock</option>
-                  <option value="pop">Pop</option>
-                  <option value="jazz">Jazz</option>
-                  <option value="fullbass">Bass</option>
-                  <option value="custom">Manual</option>
-                </select>
-
-                <div class="flex justify-between items-center w-full">
-                  <a
-                    href="https://github.com/signalsmith-audio/signalsmith-stretch"
-                    target="_blank"
-                    class="flex justify-center items-end w-full"
-                  >
-                    <button
-                      class="win-btn text-[9px] font-bold shadow-sm w-full !h-4"
-                    >
-                      <div class="pr-0.5">
-                        <i class="ph-bold ph-github-logo text-[10px]"></i>
-                      </div>
-                      <div class="text-[7px] pb-0.5">Signalsmith</div>
-                    </button>
-                  </a>
-                </div>
-              </div>
-              <div class="flex flex-col pb-1 h-full justify-between">
-                <div class="flex flex-col gap-1">
-                  <div class="flex flex-col gap-1">
-                    <div class="flex justify-between text-[8px] text-gray-400">
-                      <span>PITCH</span
-                      ><span id="val-pitch" class="theme-text-sec">0</span>
-                    </div>
-                    <input
-                      type="range"
-                      data-key="semitones"
-                      min="-12"
-                      max="12"
-                      step="1"
-                      value="0"
-                      class="w-full h-1 bg-gray-600"
-                      data-tooltip-type="val"
-                    />
-                  </div>
-                </div>
-                <div class="flex flex-col gap-1">
-                  <div class="flex justify-between text-[8px] text-gray-400">
-                    <span>SPEED</span
-                    ><span id="val-rate" class="theme-text-sec">1.0</span>
-                  </div>
-                  <input
-                    type="range"
-                    data-key="rate"
-                    min="0.5"
-                    max="2"
-                    step="0.05"
-                    value="1"
-                    class="w-full h-1 bg-gray-600"
-                    data-tooltip-type="x"
-                  />
-                </div>
-                <div class="flex flex-col gap-1">
-                  <div
-                    class="flex justify-between items-center text-[8px] text-gray-400"
-                  >
-                    <div class="flex items-center gap-1">
-                      <span>REVERB</span>
-                      <button
-                        id="btn-reverb-toggle"
-                        class="font-pixel text-[7px] leading-none border border-gray-600 px-1 py-[0.5px] bg-black hover:bg-gray-800 cursor-pointer text-gray-500 z-20"
-                      >
-                        OFF
-                      </button>
-                    </div>
-                    <span id="val-reverb" class="theme-text-sec">0.00</span>
-                  </div>
-                  <input
-                    type="range"
-                    id="main-reverb"
-                    data-key="reverb"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value="0"
-                    class="w-full h-1 bg-gray-600"
-                    data-tooltip-type="percent"
-                  />
-                </div>
+              <div class="text-gray-500 text-center mt-10 text-[10px]">
+                Drop files or Click ADD...
               </div>
             </div>
-            <div class="flex-1 flex flex-col relative">
-              <div
-                class="flex items-center mb-2 h-[35px] border border-gray-600 bg-black p-[2px]"
-              >
-                <canvas
-                  id="eq-graph"
-                  class="flex-1 h-full bg-[#111] border border-gray-800"
-                  width="180"
-                  height="30"
-                ></canvas>
+
+            <div class="flex justify-between items-center h-6 flex-none">
+              <div class="flex gap-1">
                 <button
-                  id="btn-eq-toggle"
-                  class="win-btn h-full w-12 text-[9px] flex flex-col gap-0 leading-none"
+                  id="btn-pl-add"
+                  class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm"
                 >
-                  <span>EQ</span
-                  ><span id="txt-eq-status" class="text-[7px]">ON</span>
+                  <i class="ph-bold ph-plus"></i> ADD
+                </button>
+                <button
+                  onclick="handleDeleteTracks()"
+                  id="btn-del-track"
+                  class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
+                  disabled
+                >
+                  <i class="ph-bold ph-minus"></i> REM
+                </button>
+                <button
+                  onclick="openAddToModal()"
+                  class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm"
+                >
+                  <i class="ph-bold ph-list-plus"></i> TO...
+                </button>
+                <button
+                  onclick="moveTrack(-1)"
+                  id="btn-move-up"
+                  class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
+                  disabled
+                >
+                  <i class="ph-bold ph-caret-up"></i>
+                </button>
+                <button
+                  onclick="moveTrack(1)"
+                  id="btn-move-down"
+                  class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
+                  disabled
+                >
+                  <i class="ph-bold ph-caret-down"></i>
                 </button>
               </div>
-              <div
-                class="flex-1 flex gap-1 pb-1 px-1 bg-black border border-gray-600 shadow-inner relative"
-                id="eq-container"
-              ></div>
+              <div class="font-pixel theme-text-main text-[10px]" id="pl-count">
+                0 TRACKS
+              </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <div
-        class="h-full bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-0 shadow-lg flex-1 min-h-0 flex flex-col mt-2"
-      >
-        <div
-          class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold flex-none"
+    <div class="content-section" id="manual-section">
+      <div class="max-w-4xl mx-auto">
+        <h2
+          class="text-2xl font-bold text-green-400 mb-6 flex items-center gap-2 font-pixel"
         >
-          <span>LIBRARY & PLAYLIST</span>
+          <i class="ph-bold ph-book-open"></i> Nextamp User Manual
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm">
+          <div class="space-y-4">
+            <div class="bg-[#111] p-4 rounded border border-gray-800">
+              <h3 class="text-white font-bold mb-2 flex items-center gap-2">
+                <i class="ph-bold ph-music-notes-plus"></i> 1. Add Tracks
+              </h3>
+              <div>
+                คุณสามารถเพิ่มเพลงได้ง่ายๆ โดยการ:
+                <ul class="list-disc pl-5 mt-2 space-y-1 text-gray-400">
+                  <li>กดปุ่ม <strong>ADD</strong> ด้านขวาล่าง</li>
+                  <li>ลากไฟล์เพลง (Drag & Drop) ลงในหน้าจอ</li>
+                  <li>
+                    ใช้ปุ่ม <strong>Remote</strong> ในเมนู Settings
+                    เพื่อส่งจากมือถือ
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="bg-[#111] p-4 rounded border border-gray-800">
+              <h3 class="text-white font-bold mb-2 flex items-center gap-2">
+                <i class="ph-bold ph-sliders-horizontal"></i> 2. Audio Control
+              </h3>
+
+              ปรับแต่งเสียงได้ทันทีที่แผงควบคุม EQ:
+              <ul class="list-disc pl-5 mt-2 space-y-1 text-gray-400">
+                <li><strong>PITCH:</strong> เปลี่ยนคีย์เพลงสูง-ต่ำ</li>
+                <li><strong>SPEED:</strong> เร่งหรือลดความเร็วเพลง</li>
+                <li><strong>REVERB:</strong> จำลองเสียงก้องในห้อง</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="bg-[#111] p-4 rounded border border-gray-800">
+              <h3 class="text-white font-bold mb-2 flex items-center gap-2">
+                <i class="ph-bold ph-question"></i> FAQ & Tips
+              </h3>
+              <p class="mb-2">
+                <strong>Q: โปรแกรมรองรับไฟล์อะไรบ้าง?</strong><br />A: MP3, WAV,
+                OGG และ M4A
+              </p>
+              <p>
+                <strong>Q: ใช้แบบ Offline ได้ไหม?</strong><br />A: ได้, กดปุ่ม
+                "INSTALL APP" เพื่อติดตั้งลงเครื่อง
+              </p>
+            </div>
+          </div>
         </div>
-        <div class="p-2 flex flex-col h-full relative overflow-hidden">
-          <div class="flex justify-between mb-1 flex-none">
-            <select
-              id="playlist-select"
-              class="bg-black theme-text-main border border-gray-600 text-[10px] px-1 h-5 w-32 font-pixel focus:outline-none"
+      </div>
+    </div>
+
+    <div
+      class="w-full bg-[#050505] py-12 px-4 border-t border-gray-800"
+      id="features"
+    >
+      <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div
+          class="tech-card p-6 rounded-xl md:col-span-2 relative overflow-hidden group"
+        >
+          <div
+            class="absolute top-0 right-0 bg-green-900 text-green-400 text-[10px] font-bold px-3 py-1 rounded-bl-lg border-l border-b border-green-700/50 shadow-lg"
+          >
+            CORE TECHNOLOGY
+          </div>
+          <div
+            class="flex flex-col md:flex-row gap-5 items-start md:items-center"
+          >
+            <div
+              class="bg-black/50 p-4 rounded-full border border-green-500/30 text-green-400"
             >
-              <option value="main">Main Library</option>
-            </select>
-            <div class="flex gap-1">
-              <button
-                onclick="openNewPlaylistModal()"
-                class="win-btn px-2 h-5 text-[9px] font-bold shadow-sm"
-              >
-                NEW
-              </button>
-              <button
-                onclick="handleDeletePlaylist()"
-                id="btn-del-pl"
-                class="win-btn px-2 h-5 text-[9px] font-bold text-red-900 shadow-sm hidden"
-                title="Delete Playlist"
-              >
-                <i class="ph-bold ph-trash"></i>
-              </button>
+              <i class="ph-fill ph-wave-sine text-3xl"></i>
             </div>
-          </div>
-
-          <div
-            class="flex-1 bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 overflow-y-auto custom-scroll p-1 font-pixel text-xs mb-2 shadow-inner select-none min-h-0"
-            id="pl-box"
-          >
-            <div class="text-gray-500 text-center mt-10 text-[10px]">
-              Drop files or Click ADD...
-            </div>
-          </div>
-
-          <div class="flex justify-between items-center h-6 flex-none">
-            <div class="flex gap-1">
-              <button
-                id="btn-pl-add"
-                class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm"
+            <div>
+              <h3
+                class="font-display font-bold text-xl text-white mb-2 flex items-center gap-2"
               >
-                <i class="ph-bold ph-plus"></i> ADD
-              </button>
-              <button
-                onclick="handleDeleteTracks()"
-                id="btn-del-track"
-                class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
-                disabled
-              >
-                <i class="ph-bold ph-minus"></i> REM
-              </button>
-              <button
-                onclick="openAddToModal()"
-                class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm"
-              >
-                <i class="ph-bold ph-list-plus"></i> TO...
-              </button>
-              <button
-                onclick="moveTrack(-1)"
-                id="btn-move-up"
-                class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
-                disabled
-              >
-                <i class="ph-bold ph-caret-up"></i>
-              </button>
-              <button
-                onclick="moveTrack(1)"
-                id="btn-move-down"
-                class="win-btn px-2 h-6 text-[10px] gap-1 font-bold shadow-sm text-gray-500 cursor-default"
-                disabled
-              >
-                <i class="ph-bold ph-caret-down"></i>
-              </button>
-            </div>
-            <div class="font-pixel theme-text-main text-[10px]" id="pl-count">
-              0 TRACKS
+                High-Quality Pitch & Speed Control
+              </h3>
+              <p class="text-sm text-gray-300">
+                ปรับคีย์เพลงได้ +/- 12 semitones และเร่งความเร็วได้ตั้งแต่ 0.5x
+                ถึง 2.0x โดยที่เสียงยังคงความเป็นธรรมชาติ
+                ไม่เพี้ยนหรือกลายเป็นเสียงหุ่นยนต์
+              </p>
             </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <div
-        id="modal-generic"
-        class="absolute inset-0 bg-black/80 z-[200] flex items-center justify-center hidden"
-      >
-        <div class="bg-[#292929] border-2 border-white w-64 p-3 shadow-2xl">
-          <div class="theme-bar px-2 py-1 text-[10px] font-bold mb-3">
-            SYSTEM MESSAGE
-          </div>
-          <div
-            id="modal-generic-msg"
-            class="text-white text-xs mb-4 text-center font-ui px-2"
-          ></div>
-          <div class="flex gap-2 justify-center" id="modal-generic-btns"></div>
-        </div>
+    <footer
+      id="footer-section"
+      class="bg-black border-t border-gray-900 py-12 w-full"
+    >
+      <div class="container mx-auto px-4 text-center">
+        <img
+          src="https://next-amp-player.vercel.app/assets/logo/logo.png"
+          alt="Logo"
+          class="w-12 h-12 mx-auto mb-4 grayscale hover:grayscale-0 transition opacity-50 hover:opacity-100"
+        />
+        <h3 class="font-display font-bold text-white text-lg mb-2">
+          NEXTAMP PLAYER
+        </h3>
+        <p class="text-gray-500 text-sm mb-6 max-w-md mx-auto">
+          Web Audio Player for Musicians. Pitch Shift, Time Stretch, EQ, and
+          Reverb in your browser.
+        </p>
+        <p class="text-gray-700 text-xs font-mono">
+          &copy; 2025 Nextamp Project. All rights reserved.
+        </p>
       </div>
+    </footer>
 
-      <div
-        id="modal-add-to"
-        class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
-      >
-        <div class="bg-[#292929] border-2 border-white w-48 p-2 shadow-2xl">
-          <div
-            class="theme-text-main font-pixel text-center mb-2 border-b border-gray-600 pb-1"
-          >
-            SELECT PLAYLIST
-          </div>
-          <div
-            id="modal-list"
-            class="flex flex-col gap-1 max-h-32 overflow-y-auto custom-scroll"
-          ></div>
+    <div
+      id="modal-generic"
+      class="app-modal bg-black/80 flex items-center justify-center hidden"
+    >
+      <div class="bg-[#292929] border-2 border-white w-64 p-3 shadow-2xl">
+        <div class="theme-bar px-2 py-1 text-[10px] font-bold mb-3">
+          SYSTEM MESSAGE
+        </div>
+        <div
+          id="modal-generic-msg"
+          class="text-white text-xs mb-4 text-center font-ui px-2"
+        ></div>
+        <div class="flex gap-2 justify-center" id="modal-generic-btns"></div>
+      </div>
+    </div>
+
+    <div
+      id="modal-add-to"
+      class="app-modal bg-black/80 flex items-center justify-center hidden"
+    >
+      <div class="bg-[#292929] border-2 border-white w-48 p-2 shadow-2xl">
+        <div
+          class="theme-text-main font-pixel text-center mb-2 border-b border-gray-600 pb-1"
+        >
+          SELECT PLAYLIST
+        </div>
+        <div
+          id="modal-list"
+          class="flex flex-col gap-1 max-h-32 overflow-y-auto custom-scroll"
+        ></div>
+        <button
+          onclick="closeAddToModal()"
+          class="win-btn w-full mt-2 h-5 text-[9px]"
+        >
+          CANCEL
+        </button>
+      </div>
+    </div>
+
+    <div
+      id="modal-new-playlist"
+      class="app-modal bg-black/80 flex items-center justify-center hidden"
+    >
+      <div class="bg-[#292929] border-2 border-white w-56 p-3 shadow-2xl">
+        <div
+          class="theme-text-main font-pixel text-center mb-3 border-b border-gray-600 pb-1 text-xs"
+        >
+          CREATE NEW PLAYLIST
+        </div>
+        <input
+          type="text"
+          id="new-playlist-name"
+          class="w-full bg-black text-white border border-gray-500 text-xs p-1 mb-3 font-pixel focus:outline-none"
+          placeholder="Playlist Name..."
+        />
+        <div class="flex gap-2">
           <button
-            onclick="closeAddToModal()"
-            class="win-btn w-full mt-2 h-5 text-[9px]"
+            onclick="closeNewPlaylistModal()"
+            class="win-btn flex-1 h-6 text-[10px]"
           >
             CANCEL
           </button>
-        </div>
-      </div>
-
-      <div
-        id="modal-new-playlist"
-        class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
-      >
-        <div class="bg-[#292929] border-2 border-white w-56 p-3 shadow-2xl">
-          <div
-            class="theme-text-main font-pixel text-center mb-3 border-b border-gray-600 pb-1 text-xs"
+          <button
+            onclick="confirmNewPlaylist()"
+            class="win-btn flex-1 h-6 text-[10px]"
           >
-            CREATE NEW PLAYLIST
-          </div>
-          <input
-            type="text"
-            id="new-playlist-name"
-            class="w-full bg-black text-white border border-gray-500 text-xs p-1 mb-3 font-pixel focus:outline-none"
-            placeholder="Playlist Name..."
-          />
-          <div class="flex gap-2">
-            <button
-              onclick="closeNewPlaylistModal()"
-              class="win-btn flex-1 h-6 text-[10px]"
-            >
-              CANCEL
-            </button>
-            <button
-              onclick="confirmNewPlaylist()"
-              class="win-btn flex-1 h-6 text-[10px]"
-            >
-              CREATE
-            </button>
-          </div>
+            CREATE
+          </button>
         </div>
       </div>
+    </div>
 
+    <div
+      id="modal-settings"
+      class="app-modal bg-black/80 flex items-center justify-center hidden"
+      onclick="if(event.target === this) closeSettingsModal()"
+    >
       <div
-        id="modal-settings"
-        class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center hidden"
-        onclick="if(event.target === this) closeSettingsModal()"
+        class="bg-[#292929] border-2 border-white w-72 p-1 shadow-2xl overflow-y-auto max-h-[90%]"
       >
         <div
-          class="bg-[#292929] border-2 border-white w-72 p-1 shadow-2xl overflow-y-auto max-h-[90%]"
+          class="theme-bar px-2 py-1 text-[10px] font-bold mb-1 flex justify-between items-center"
         >
-          <div
-            class="theme-bar px-2 py-1 text-[10px] font-bold mb-1 flex justify-between items-center"
+          <span>SETTINGS</span>
+          <button onclick="closeSettingsModal()" class="hover:text-red-500">
+            <i class="ph-bold ph-x"></i>
+          </button>
+        </div>
+
+        <div class="flex gap-0.5 px-1 mb-2">
+          <button
+            onclick="switchSettingsTab('audio')"
+            id="tab-btn-audio"
+            class="tab-btn px-3 py-1 rounded-t active"
           >
-            <span>SETTINGS</span>
-            <button onclick="closeSettingsModal()" class="hover:text-red-500">
-              <i class="ph-bold ph-x"></i>
-            </button>
-          </div>
+            AUDIO
+          </button>
+          <button
+            onclick="switchSettingsTab('appearance')"
+            id="tab-btn-appearance"
+            class="tab-btn px-3 py-1 rounded-t"
+          >
+            APPEARANCE
+          </button>
+        </div>
 
-          <div class="flex gap-0.5 px-1 mb-2">
-            <button
-              onclick="switchSettingsTab('audio')"
-              id="tab-btn-audio"
-              class="tab-btn px-3 py-1 rounded-t active"
-            >
-              AUDIO
-            </button>
-            <button
-              onclick="switchSettingsTab('appearance')"
-              id="tab-btn-appearance"
-              class="tab-btn px-3 py-1 rounded-t"
-            >
-              APPEARANCE
-            </button>
-          </div>
-
-          <div class="px-2 pb-2">
-            <div id="tab-content-audio" class="space-y-3">
-              <div class="bg-black/20 p-2 border border-gray-600 rounded">
-                <div
-                  class="text-[9px] text-gray-400 mb-2 font-bold text-center"
-                >
-                  CPU / QUALITY CONTROL
+        <div class="px-2 pb-2">
+          <div id="tab-content-audio" class="space-y-3">
+            <div class="bg-black/20 p-2 border border-gray-600 rounded">
+              <div class="text-[9px] text-gray-400 mb-2 font-bold text-center">
+                CPU / QUALITY CONTROL
+              </div>
+              <div class="space-y-2">
+                <div class="flex flex-col gap-1">
+                  <label
+                    class="text-white text-[10px] font-ui flex justify-between"
+                  >
+                    <span>Sample Rate (Quality)</span>
+                    <span class="text-gray-500 text-[9px]"
+                      >Requires Reload</span
+                    >
+                  </label>
+                  <select
+                    id="set-audio-sr"
+                    class="w-full bg-black text-white border border-gray-500 text-[10px] p-1 h-6 focus:outline-none"
+                  >
+                    <option value="default">Default (System)</option>
+                    <option value="48000">48000 Hz (High)</option>
+                    <option value="44100">44100 Hz (CD)</option>
+                    <option value="22050">22050 Hz (Low CPU)</option>
+                  </select>
                 </div>
-                <div class="space-y-2">
-                  <div class="flex flex-col gap-1">
-                    <label
-                      class="text-white text-[10px] font-ui flex justify-between"
-                    >
-                      <span>Sample Rate (Quality)</span>
-                      <span class="text-gray-500 text-[9px]"
-                        >Requires Reload</span
-                      >
-                    </label>
-                    <select
-                      id="set-audio-sr"
-                      class="w-full bg-black text-white border border-gray-500 text-[10px] p-1 h-6 focus:outline-none"
-                    >
-                      <option value="default">Default (System)</option>
-                      <option value="48000">48000 Hz (High)</option>
-                      <option value="44100">44100 Hz (CD)</option>
-                      <option value="22050">22050 Hz (Low CPU)</option>
-                    </select>
-                  </div>
 
-                  <div class="flex flex-col gap-1">
-                    <label class="text-white text-[10px] font-ui"
-                      >Latency Mode</label
-                    >
-                    <select
-                      id="set-audio-latency"
-                      class="w-full bg-black text-white border border-gray-500 text-[10px] p-1 h-6 focus:outline-none"
-                    >
-                      <option value="interactive">Interactive (Fast)</option>
-                      <option value="balanced">Balanced</option>
-                      <option value="playback">Playback (Less CPU)</option>
-                    </select>
-                  </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-white text-[10px] font-ui"
+                    >Latency Mode</label
+                  >
+                  <select
+                    id="set-audio-latency"
+                    class="w-full bg-black text-white border border-gray-500 text-[10px] p-1 h-6 focus:outline-none"
+                  >
+                    <option value="interactive">Interactive (Fast)</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="playback">Playback (Less CPU)</option>
+                  </select>
                 </div>
               </div>
-
-              <button
-                onclick="saveAudioSettings()"
-                class="win-btn w-full h-6 text-[10px] mt-2"
-              >
-                APPLY & RELOAD
-              </button>
             </div>
 
-            <div id="tab-content-appearance" class="space-y-3 hidden">
-              <div class="flex items-center justify-between">
-                <span class="text-white text-[10px] font-ui">Window Color</span>
-                <input
-                  type="color"
-                  id="set-theme-window"
-                  class="h-5 w-8 p-0 border-0"
-                  onchange="previewTheme()"
-                />
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-white text-[10px] font-ui"
-                  >Text/Icon Color</span
-                >
-                <input
-                  type="color"
-                  id="set-theme-text"
-                  class="h-5 w-8 p-0 border-0"
-                  onchange="previewTheme()"
-                />
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-white text-[10px] font-ui"
-                  >Highlight Color</span
-                >
-                <input
-                  type="color"
-                  id="set-theme-high"
-                  class="h-5 w-8 p-0 border-0"
-                  onchange="previewTheme()"
-                />
-              </div>
-              <div class="border-t border-gray-600 my-2"></div>
-              <div class="text-[9px] text-gray-400 mb-1">EQ BAR GRADIENT</div>
-              <div class="flex justify-between gap-1">
-                <div class="flex flex-col items-center">
-                  <span class="text-[8px] text-gray-500">LOW</span
-                  ><input
-                    type="color"
-                    id="set-eq-1"
-                    class="h-4 w-6 p-0 border-0"
-                    onchange="previewTheme()"
-                  />
-                </div>
-                <div class="flex flex-col items-center">
-                  <span class="text-[8px] text-gray-500">MID</span
-                  ><input
-                    type="color"
-                    id="set-eq-2"
-                    class="h-4 w-6 p-0 border-0"
-                    onchange="previewTheme()"
-                  />
-                </div>
-                <div class="flex flex-col items-center">
-                  <span class="text-[8px] text-gray-500">HIGH</span
-                  ><input
-                    type="color"
-                    id="set-eq-3"
-                    class="h-4 w-6 p-0 border-0"
-                    onchange="previewTheme()"
-                  />
-                </div>
-              </div>
-              <div
-                class="border border-gray-600 h-8 w-full mt-2 relative"
-                id="theme-preview-box"
-              >
-                <div
-                  class="absolute inset-0 flex items-center justify-center text-[10px] font-bold"
-                  id="theme-preview-text"
-                >
-                  PREVIEW
-                </div>
-              </div>
+            <button
+              onclick="saveAudioSettings()"
+              class="win-btn w-full h-6 text-[10px] mt-2"
+            >
+              APPLY & RELOAD
+            </button>
+          </div>
 
-              <div class="flex gap-2 mt-4">
-                <button
-                  onclick="resetTheme()"
-                  class="win-btn flex-1 h-6 text-[10px] text-red-900"
-                >
-                  RESET
-                </button>
-                <button
-                  onclick="applyThemeSettings()"
-                  class="win-btn flex-1 h-6 text-[10px]"
-                >
-                  APPLY
-                </button>
+          <div id="tab-content-appearance" class="space-y-3 hidden">
+            <div class="flex items-center justify-between">
+              <span class="text-white text-[10px] font-ui">Window Color</span>
+              <input
+                type="color"
+                id="set-theme-window"
+                class="h-5 w-8 p-0 border-0"
+                onchange="previewTheme()"
+              />
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-white text-[10px] font-ui"
+                >Text/Icon Color</span
+              >
+              <input
+                type="color"
+                id="set-theme-text"
+                class="h-5 w-8 p-0 border-0"
+                onchange="previewTheme()"
+              />
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-white text-[10px] font-ui"
+                >Highlight Color</span
+              >
+              <input
+                type="color"
+                id="set-theme-high"
+                class="h-5 w-8 p-0 border-0"
+                onchange="previewTheme()"
+              />
+            </div>
+            <div class="border-t border-gray-600 my-2"></div>
+            <div class="text-[9px] text-gray-400 mb-1">EQ BAR GRADIENT</div>
+            <div class="flex justify-between gap-1">
+              <div class="flex flex-col items-center">
+                <span class="text-[8px] text-gray-500">LOW</span
+                ><input
+                  type="color"
+                  id="set-eq-1"
+                  class="h-4 w-6 p-0 border-0"
+                  onchange="previewTheme()"
+                />
               </div>
+              <div class="flex flex-col items-center">
+                <span class="text-[8px] text-gray-500">MID</span
+                ><input
+                  type="color"
+                  id="set-eq-2"
+                  class="h-4 w-6 p-0 border-0"
+                  onchange="previewTheme()"
+                />
+              </div>
+              <div class="flex flex-col items-center">
+                <span class="text-[8px] text-gray-500">HIGH</span
+                ><input
+                  type="color"
+                  id="set-eq-3"
+                  class="h-4 w-6 p-0 border-0"
+                  onchange="previewTheme()"
+                />
+              </div>
+            </div>
+            <div
+              class="border border-gray-600 h-8 w-full mt-2 relative"
+              id="theme-preview-box"
+            >
+              <div
+                class="absolute inset-0 flex items-center justify-center text-[10px] font-bold"
+                id="theme-preview-text"
+              >
+                PREVIEW
+              </div>
+            </div>
+
+            <div class="flex gap-2 mt-4">
+              <button
+                onclick="resetTheme()"
+                class="win-btn flex-1 h-6 text-[10px] text-red-900"
+              >
+                RESET
+              </button>
+              <button
+                onclick="applyThemeSettings()"
+                class="win-btn flex-1 h-6 text-[10px]"
+              >
+                APPLY
+              </button>
             </div>
           </div>
         </div>
@@ -1054,7 +1324,7 @@
 
     <div
       id="modal-add-method"
-      class="absolute inset-0 bg-black/80 z-[60] flex items-center justify-center hidden"
+      class="app-modal bg-black/80 flex items-center justify-center hidden"
     >
       <div class="bg-[#292929] border-2 border-white w-64 p-3 shadow-2xl">
         <div class="theme-bar px-2 py-1 text-[10px] font-bold mb-3">
@@ -1071,7 +1341,9 @@
             onclick="openPeerModal()"
             class="win-btn w-full h-8 text-[11px] flex gap-2"
           >
-            <i class="ph-bold ph-qr-code"></i> REMOTE / PHONE
+            <i class="ph-bold ph-wifi-high"></i>
+
+            RECEIVE FROM DEVICE
           </button>
           <button
             onclick="closeAddMethodModal()"
@@ -1085,7 +1357,7 @@
 
     <div
       id="modal-peer-receive"
-      class="absolute inset-0 bg-black/90 z-[70] flex items-center justify-center hidden"
+      class="app-modal bg-black/90 flex items-center justify-center hidden"
     >
       <div
         class="bg-[#292929] border-2 border-white w-72 p-4 shadow-2xl flex flex-col items-center"
@@ -1132,5 +1404,58 @@
       accept="audio/*,.mp3,.wav,.m4a,.ogg"
     />
     <script type="module" src="/assets/libs/js/obfuscator.js"></script>
+
+    <script>
+      const nav = document.getElementById("main-nav");
+      window.addEventListener("scroll", () => {
+        if (window.scrollY > 80) {
+          nav.classList.add("nav-visible");
+        } else {
+          nav.classList.remove("nav-visible");
+        }
+      });
+
+      function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch((e) => {
+            console.log(e);
+          });
+        } else {
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          }
+        }
+      }
+
+      document.addEventListener("fullscreenchange", () => {
+        if (document.fullscreenElement) {
+          document.body.classList.add("fullscreen-mode");
+        } else {
+          document.body.classList.remove("fullscreen-mode");
+        }
+      });
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const isPopup = urlParams.get("popup") === "1";
+
+      if (isPopup) {
+        document.body.classList.add("popup-mode");
+      }
+
+      function openPopup() {
+        if (isPopup) return;
+
+        const width = 380;
+        const height = 700;
+        const left = (screen.width - width) / 2;
+        const top = (screen.height - height) / 2;
+
+        window.open(
+          "app.html?popup=1",
+          "NextampPlayer",
+          `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no`
+        );
+      }
+    </script>
   </body>
 </html>

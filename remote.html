@@ -6,11 +6,17 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
-    <title>Nextamp Remote</title>
+    <title>Nextamp Remote - อัปโหลดไฟล์ไร้สาย</title>
+
+    <meta
+      name="description"
+      content="Nextamp Remote เครื่องมือส่งไฟล์เพลงจากมือถือเข้าคอมพิวเตอร์ผ่าน WebRTC สำหรับนักดนตรี เพื่อการฝึกซ้อมที่มีประสิทธิภาพ"
+    />
+
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link
-      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&family=Sarabun:wght@300;400;600&display=swap"
       rel="stylesheet"
     />
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
@@ -25,17 +31,15 @@
       body {
         background: radial-gradient(circle at center, #003504 0%, #020617 80%);
         color: #e5e5e5;
-        font-family: "Chakra Petch", sans-serif;
-        height: 100vh;
+        font-family: "Sarabun", "Chakra Petch", sans-serif;
+        min-height: 100vh;
         width: 100vw;
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto; /* ปลดล็อกเพื่อให้เห็น Content */
         user-select: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
       }
 
-      /* Win98 Button Style from app.html */
+      /* UI เดิมทั้งหมด */
       .win-btn {
         background-color: #c0c0c0;
         color: black;
@@ -65,7 +69,6 @@
         border-color: #555;
       }
 
-      /* Containers */
       .win-box {
         background-color: #292929;
         border-top: 2px solid #888;
@@ -86,15 +89,6 @@
         justify-content: space-between;
       }
 
-      .inset-panel {
-        background-color: black;
-        border: 2px solid #444;
-        border-right-color: #fff;
-        border-bottom-color: #fff;
-        color: var(--theme-text);
-      }
-
-      /* Scrollbar */
       .custom-scroll::-webkit-scrollbar {
         width: 8px;
         background: #292929;
@@ -106,115 +100,241 @@
         border-bottom: 1px solid #000;
       }
 
-      .track-item:hover {
-        background-color: #222;
-        color: white;
+      /* Element สไตล์หน้าแรก */
+      .feature-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        transition: all 0.3s;
+      }
+      .tech-card {
+        background: linear-gradient(
+          145deg,
+          rgba(0, 50, 0, 0.2),
+          rgba(0, 0, 0, 0.8)
+        );
+        border: 1px solid rgba(0, 255, 0, 0.2);
+      }
+      .content-article h3 {
+        font-family: "Chakra Petch", sans-serif;
+        color: #fff;
+        border-left: 4px solid #00ff00;
+        padding-left: 1rem;
+        margin: 1.5rem 0 1rem 0;
       }
 
-      /* Progress Bar Block Style */
-      .progress-block {
-        background: repeating-linear-gradient(
-          90deg,
-          #00ff00,
-          #00ff00 4px,
-          #000 4px,
-          #000 5px
-        );
+      /* Container สำหรับจัดหน้า */
+      .tool-section {
+        min-height: 30vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
       }
     </style>
   </head>
   <body>
-    <div class="win-box w-full max-w-sm flex flex-col relative z-10">
-      <div class="theme-bar h-6 border-b border-black">
-        <div class="flex items-center gap-1">
-          <i class="ph-bold ph-broadcast text-xs"></i>
-          <span>REMOTE UPLOAD</span>
-        </div>
-        <div
-          id="connection-status"
-          class="text-[9px] font-mono uppercase bg-black px-1 border border-gray-600 text-yellow-500"
+    <nav
+      class="w-full py-4 px-6 flex justify-between items-center border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-50"
+    >
+      <div class="flex items-center gap-2">
+        <img
+          src="https://next-amp-player.vercel.app/assets/logo/logo.png"
+          alt="Logo"
+          class="w-8 h-8 rounded shadow-lg"
+        />
+        <span class="font-display font-bold text-xl tracking-wider text-white"
+          >NEXTAMP</span
         >
-          Connecting...
-        </div>
       </div>
-
-      <div class="p-3 flex flex-col gap-3">
-        <div id="main-interface" class="flex flex-col gap-2 hidden">
-          <input
-            type="file"
-            id="file-input"
-            accept="audio/*,.mp3,.wav,.m4a,.ogg"
-            multiple
-            class="hidden"
-          />
-
-          <div class="grid grid-cols-2 gap-2">
-            <button
-              id="btn-select"
-              onclick="document.getElementById('file-input').click()"
-              class="win-btn h-12 flex flex-col gap-0.5 shadow-lg"
-            >
-              <i class="ph-bold ph-folder-open text-base"></i>
-              <span class="text-[9px]">LOCAL FILES</span>
-            </button>
-            <button
-              id="btn-library"
-              onclick="openLibraryModal()"
-              class="win-btn h-12 flex flex-col gap-0.5 shadow-lg"
-            >
-              <i class="ph-bold ph-database text-base"></i>
-              <span class="text-[9px]">LIBRARY</span>
-            </button>
+      <div class="hidden md:flex gap-6 text-sm text-gray-400 font-display">
+        <a href="#features" class="hover:text-green-400 transition">ฟีเจอร์</a>
+        <a href="#knowledge" class="hover:text-green-400 transition">บทความ</a>
+        <a href="#contact" class="hover:text-green-400 transition">ติดต่อเรา</a>
+      </div>
+    </nav>
+    <div class="tool-section">
+      <div class="win-box w-full max-w-sm flex flex-col relative z-10">
+        <div class="theme-bar h-6 border-b border-black">
+          <div class="flex items-center gap-1">
+            <i class="ph-bold ph-broadcast text-xs"></i>
+            <span>REMOTE UPLOAD</span>
           </div>
-
           <div
-            id="queue-info"
-            class="text-[9px] text-gray-400 font-bold hidden flex justify-between px-1"
+            id="connection-status"
+            class="text-[9px] font-mono uppercase bg-black px-1 border border-gray-600 text-yellow-500"
           >
-            <span>TRANSFER QUEUE</span>
-            <span id="queue-count" class="text-white">0/0</span>
+            Connecting...
           </div>
+        </div>
 
-          <div id="progress-area" class="hidden">
-            <div class="bg-black border border-gray-600 p-1 mb-1">
-              <div
-                class="flex justify-between text-[9px] font-mono text-green-500 mb-0.5"
+        <div class="p-3 flex flex-col gap-3">
+          <div id="main-interface" class="flex flex-col gap-2 hidden">
+            <input
+              type="file"
+              id="file-input"
+              accept="audio/*,.mp3,.wav,.m4a,.ogg"
+              multiple
+              class="hidden"
+            />
+
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                id="btn-select"
+                onclick="document.getElementById('file-input').click()"
+                class="win-btn h-12 flex flex-col gap-0.5 shadow-lg"
               >
-                <span id="filename-disp" class="truncate max-w-[150px]"
-                  >...</span
-                >
-                <span id="percent-disp">0%</span>
-              </div>
-              <div class="w-full h-3 bg-[#111] border border-gray-700 relative">
-                <div
-                  id="progress-bar"
-                  class="h-full bg-green-600 w-0 transition-all duration-75"
-                ></div>
-                <div
-                  class="absolute inset-0 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVQIW2NkQAKrVq36zwjjgzjwqgABXA0UBVYJIoAFCAwAVkIgE+q02bwAAAAASUVORK5CYII=')] opacity-30"
-                ></div>
-              </div>
+                <i class="ph-bold ph-folder-open text-base"></i>
+                <span class="text-[9px]">LOCAL FILES</span>
+              </button>
+              <button
+                id="btn-library"
+                onclick="openLibraryModal()"
+                class="win-btn h-12 flex flex-col gap-0.5 shadow-lg"
+              >
+                <i class="ph-bold ph-database text-base"></i>
+                <span class="text-[9px]">LIBRARY</span>
+              </button>
             </div>
+
             <div
-              class="text-[9px] text-gray-500 text-center"
-              id="status-detail"
+              id="queue-info"
+              class="text-[9px] text-gray-400 font-bold hidden flex justify-between px-1"
             >
-              Waiting...
+              <span>TRANSFER QUEUE</span>
+              <span id="queue-count" class="text-white">0/0</span>
+            </div>
+
+            <div id="progress-area" class="hidden">
+              <div class="bg-black border border-gray-600 p-1 mb-1">
+                <div
+                  class="flex justify-between text-[9px] font-mono text-green-500 mb-0.5"
+                >
+                  <span id="filename-disp" class="truncate max-w-[150px]"
+                    >...</span
+                  >
+                  <span id="percent-disp">0%</span>
+                </div>
+                <div
+                  class="w-full h-3 bg-[#111] border border-gray-700 relative"
+                >
+                  <div
+                    id="progress-bar"
+                    class="h-full bg-green-600 w-0 transition-all duration-75"
+                  ></div>
+                </div>
+              </div>
+              <div
+                class="text-[9px] text-gray-500 text-center"
+                id="status-detail"
+              >
+                Waiting...
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="bg-[#292929] p-1 border-t border-gray-500 text-center">
-        <div class="text-[8px] text-gray-500 font-mono">
-          NEXTAMP V2.1 REMOTE
+        <div class="bg-[#292929] p-1 border-t border-gray-500 text-center">
+          <div
+            class="text-[8px] text-gray-500 font-mono uppercase tracking-widest"
+          >
+            Nextamp Secure Remote Protocol v2.1
+          </div>
         </div>
       </div>
     </div>
 
+    <main
+      class="container mx-auto px-4 py-12 max-w-4xl border-t border-white/10"
+    >
+      <section class="space-y-12">
+        <div class="text-center">
+          <h2 class="text-3xl font-bold font-display text-green-400 mb-4">
+            NEXTAMP REMOTE TECHNOLOGY
+          </h2>
+          <p class="text-gray-400 leading-relaxed">
+            สัมผัสประสบการณ์การส่งไฟล์เพลงที่รวดเร็วและปลอดภัยที่สุดผ่านเทคโนโลยี
+            WebRTC แบบ Peer-to-Peer ส่งตรงจากมือถือของคุณไปยัง Nextamp Player
+            โดยไม่ต้องผ่านเซิร์ฟเวอร์กลาง
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div
+            class="tech-card p-6 rounded-xl relative overflow-hidden group border border-green-500/20"
+          >
+            <h3 class="font-display font-bold text-xl text-white mb-2">
+              High-Speed Transfer
+            </h3>
+            <p class="text-sm text-gray-400 leading-relaxed">
+              รองรับการส่งไฟล์ความเร็วสูง ไม่ว่าจะเป็น MP3, WAV หรือ M4A
+              ไฟล์จะถูกส่งผ่านระบบ LAN หรืออินเทอร์เน็ตความเร็วสูงโดยตรง
+              ทำให้คุณพร้อมซ้อมดนตรีได้ในทันที
+            </p>
+          </div>
+
+          <div class="feature-card p-6 rounded-xl border border-white/5">
+            <h3 class="font-display font-bold text-xl text-white mb-2">
+              Privacy & Security
+            </h3>
+            <p class="text-sm text-gray-400 leading-relaxed">
+              ข้อมูลของคุณคือสิ่งสำคัญ ระบบ Remote Upload
+              ไม่มีการบันทึกไฟล์ของคุณลงในเซิร์ฟเวอร์ใดๆ
+              เป็นการเชื่อมต่อระหว่างอุปกรณ์ต่ออุปกรณ์เท่านั้น (P2P)
+            </p>
+          </div>
+        </div>
+
+        <article
+          class="content-article bg-black/30 p-8 rounded-2xl border border-white/5"
+        >
+          <h2
+            class="text-2xl font-display font-bold text-white mb-6 underline decoration-green-500 underline-offset-8"
+          >
+            บทความ: การใช้ Remote Upload เพื่อการซ้อมดนตรี
+          </h2>
+
+          <div class="space-y-6 text-gray-300">
+            <div>
+              <h3>ทำไมนักดนตรีถึงเลือกใช้ Nextamp Remote?</h3>
+              <p class="leading-relaxed">
+                ในสถานการณ์การซ้อมดนตรีจริง ความเร็วคือสิ่งสำคัญ การต้องหาพอร์ต
+                USB หรือส่งไฟล์ผ่านแอปพลิเคชันแชท
+                อาจทำให้คุณภาพเสียงลดลงหรือเสียเวลา Nextamp Remote
+                ถูกออกแบบมาเพื่อขจัดปัญหานั้น เพียงสแกน เลือกไฟล์
+                และเล่นเพลงได้ทันที
+              </p>
+            </div>
+
+            <div>
+              <h3>รองรับทุกแพลตฟอร์มมือถือ</h3>
+              <p class="leading-relaxed">
+                ไม่ว่าคุณจะใช้ iOS หรือ Android
+                คุณสามารถใช้งานหน้านี้ผ่านเบราว์เซอร์มาตรฐานได้ทันที
+                โดยระบบจะเรียกใช้งาน File Picker ของตัวเครื่อง
+                เพื่อให้คุณเลือกเพลงจากโฟลเดอร์ที่ต้องการได้ง่ายที่สุด
+              </p>
+            </div>
+
+            <div>
+              <h3>เทคโนโลยี Web Audio และการประมวลผลเสียง</h3>
+              <p class="leading-relaxed">
+                ไฟล์ที่ส่งผ่านระบบนี้จะยังคงคุณภาพต้นฉบับไว้ 100%
+                เมื่อเข้าสู่หน้า Player คุณสามารถนำไปปรับ Pitch, Speed หรือใส่
+                Reverb ได้ทันทีผ่านเอนจิน Signalsmith Stretch คุณภาพสูง
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <div class="text-center text-xs text-gray-600 font-mono pb-12">
+          &copy; 2025 NEXTAMP PROJECT. ALL RIGHTS RESERVED.
+        </div>
+      </section>
+    </main>
+
     <div
       id="lib-modal"
-      class="absolute inset-0 z-50 flex items-center justify-center bg-black/80 hidden"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 hidden"
     >
       <div
         class="bg-[#292929] border-2 border-white w-72 shadow-2xl flex flex-col h-[80vh]"
@@ -228,7 +348,6 @@
             <i class="ph-bold ph-x"></i>
           </button>
         </div>
-
         <div class="px-2 pt-2 pb-1 bg-[#292929]">
           <div class="flex gap-1 mb-1">
             <select
@@ -240,7 +359,6 @@
             </select>
           </div>
         </div>
-
         <div class="flex-1 px-2 pb-2 min-h-0 flex flex-col">
           <div
             class="flex-1 bg-black border-2 border-gray-600 border-r-white/50 border-b-white/50 overflow-y-auto custom-scroll p-1 font-mono text-[10px] shadow-inner select-none relative"
@@ -248,14 +366,12 @@
           >
             <div class="text-gray-500 text-center mt-10">Loading DB...</div>
           </div>
-
           <div
             class="flex justify-between items-center mt-1 text-[9px] text-gray-400 font-mono px-1"
           >
             <span id="lib-count-disp">SEL: 0/10</span>
           </div>
         </div>
-
         <div class="p-2 border-t border-gray-600 bg-[#292929] flex gap-2">
           <button
             onclick="closeLibraryModal()"
@@ -274,7 +390,6 @@
     </div>
 
     <script>
-      // CONFIG
       const CHUNK_SIZE = 16 * 1024;
       const SYNC_INTERVAL = 20;
       const LIMIT_MAX_FILES = 10;
@@ -283,7 +398,6 @@
 
       const params = new URLSearchParams(window.location.search);
       const hostId = params.get("host");
-
       const statusEl = document.getElementById("connection-status");
       const mainInterface = document.getElementById("main-interface");
       const btnSelect = document.getElementById("btn-select");
@@ -295,13 +409,11 @@
       let fileQueue = [],
         totalFiles = 0;
       let isProcessing = false;
-
-      let dbLibrary = [];
-      let dbPlaylists = {};
-      let currentLibView = [];
-
-      let resolveUpload = null;
-      let resolveSync = null;
+      let dbLibrary = [],
+        dbPlaylists = {},
+        currentLibView = [];
+      let resolveUpload = null,
+        resolveSync = null;
 
       if (!hostId) {
         statusEl.innerText = "NO ID";
@@ -311,18 +423,15 @@
       }
 
       peer = new Peer();
-
       peer.on("open", (id) => {
         statusEl.innerText = "CONNECTING...";
         conn = peer.connect(hostId, { reliable: true });
-
         conn.on("open", () => {
           statusEl.innerText = "CONNECTED";
           statusEl.className =
             "text-[9px] font-mono uppercase bg-black px-1 border border-gray-600 text-[#00ff00]";
           mainInterface.classList.remove("hidden");
         });
-
         conn.on("close", () => {
           statusEl.innerText = "OFFLINE";
           statusEl.className =
@@ -331,7 +440,6 @@
           btnLibrary.disabled = true;
           mainInterface.classList.add("opacity-50");
         });
-
         conn.on("data", (data) => {
           if (data.type === "file_received") {
             if (resolveUpload) resolveUpload();
@@ -341,7 +449,6 @@
         });
       });
 
-      // --- File Input ---
       document.getElementById("file-input").addEventListener("change", (e) => {
         handleNewFiles(Array.from(e.target.files));
         e.target.value = "";
@@ -351,22 +458,18 @@
         if (files.length === 0) return;
         if (files.length > LIMIT_MAX_FILES)
           return alert(`Max ${LIMIT_MAX_FILES} files.`);
-
         const validFiles = files.filter(
           (f) => f.size / 1024 / 1024 <= LIMIT_MAX_SIZE_MB
         );
         if (validFiles.length === 0) return alert("Files too large.");
-
         fileQueue = validFiles;
         totalFiles = validFiles.length;
         processQueue();
       }
 
-      // --- Library & DB ---
       async function openLibraryModal() {
         if (isProcessing) return;
         document.getElementById("lib-modal").classList.remove("hidden");
-
         try {
           await loadDatabase();
           renderPlaylistOptions();
@@ -378,7 +481,6 @@
           ).innerHTML = `<div class="text-red-500 text-center mt-10">DB Error (Same Device Only)</div>`;
         }
       }
-
       function closeLibraryModal() {
         document.getElementById("lib-modal").classList.add("hidden");
       }
@@ -387,26 +489,16 @@
         return new Promise((resolve, reject) => {
           const req = indexedDB.open(DB_NAME, 8);
           req.onerror = () => reject("DB Error");
-          req.onupgradeneeded = (e) => {
-            e.target.transaction.abort();
-            resolve();
-          };
-
           req.onsuccess = (e) => {
             const db = e.target.result;
-            if (
-              !db.objectStoreNames.contains("library") ||
-              !db.objectStoreNames.contains("playlists")
-            ) {
+            if (!db.objectStoreNames.contains("library")) {
               db.close();
               resolve();
               return;
             }
             const tx = db.transaction(["library", "playlists"], "readonly");
-
             const libReq = tx.objectStore("library").getAll();
             const plReq = tx.objectStore("playlists").getAll();
-
             libReq.onsuccess = () => {
               dbLibrary = libReq.result || [];
             };
@@ -437,10 +529,10 @@
       }
 
       window.handlePlaylistChange = () => {
-        const pid = document.getElementById("playlist-select").value;
-        filterAndRenderLibrary(pid);
+        filterAndRenderLibrary(
+          document.getElementById("playlist-select").value
+        );
       };
-
       function filterAndRenderLibrary(playlistId) {
         if (playlistId === "main") {
           currentLibView = dbLibrary;
@@ -458,15 +550,12 @@
       function renderList() {
         const listEl = document.getElementById("lib-list");
         listEl.innerHTML = "";
-
         if (currentLibView.length === 0) {
           listEl.innerHTML = `<div class="text-gray-500 text-center mt-10">Empty Playlist</div>`;
           return;
         }
-
         currentLibView.forEach((track, idx) => {
           const row = document.createElement("div");
-          // Compact style mirroring app.html playlist items
           row.className =
             "flex justify-between cursor-pointer hover:bg-[#222] select-none text-green-500 group";
           row.onclick = (e) => {
@@ -476,18 +565,11 @@
               updateLibCount();
             }
           };
-
-          row.innerHTML = `
-                <div class="flex truncate w-full pointer-events-none items-center">
-                    <input type="checkbox" class="mr-2 pointer-events-auto accent-green-500" value="${idx}">
-                    <span class="w-4 text-right mr-1 flex-shrink-0 text-green-700 font-bold">${
-                      idx + 1
-                    }.</span>
-                    <span class="truncate text-gray-300 group-hover:text-white">${
-                      track.name
-                    }</span>
-                </div>
-            `;
+          row.innerHTML = `<div class="flex truncate w-full pointer-events-none items-center"><input type="checkbox" class="mr-2 pointer-events-auto accent-green-500" value="${idx}"><span class="w-4 text-right mr-1 flex-shrink-0 text-green-700 font-bold">${
+            idx + 1
+          }.</span><span class="truncate text-gray-300 group-hover:text-white">${
+            track.name
+          }</span></div>`;
           listEl.appendChild(row);
         });
         updateLibCount();
@@ -499,33 +581,24 @@
           "lib-count-disp"
         ).innerText = `SEL: ${checks.length}/${LIMIT_MAX_FILES}`;
       }
-
       window.confirmLibrarySelection = () => {
         const checks = document.querySelectorAll("#lib-list input:checked");
         if (checks.length === 0) return closeLibraryModal();
-
         const selectedFiles = [];
         checks.forEach((cb) => {
           const track = currentLibView[parseInt(cb.value)];
           if (track && track.blob) {
-            try {
-              selectedFiles.push(
-                new File([track.blob], track.name, {
-                  type: track.blob.type || "audio/mpeg",
-                })
-              );
-            } catch (e) {
-              track.blob.name = track.name;
-              selectedFiles.push(track.blob);
-            }
+            selectedFiles.push(
+              new File([track.blob], track.name, {
+                type: track.blob.type || "audio/mpeg",
+              })
+            );
           }
         });
-
         closeLibraryModal();
         handleNewFiles(selectedFiles);
       };
 
-      // --- Upload ---
       async function processQueue() {
         if (isProcessing) return;
         isProcessing = true;
@@ -533,7 +606,6 @@
         btnLibrary.disabled = true;
         progressArea.classList.remove("hidden");
         document.getElementById("queue-info").classList.remove("hidden");
-
         for (let i = 0; i < fileQueue.length; i++) {
           const file = fileQueue[i];
           document.getElementById("queue-count").innerText = `${
@@ -542,22 +614,17 @@
           try {
             await sendFileRobust(file);
           } catch (err) {
-            console.error(err);
             alert(`Failed: ${file.name}`);
           }
         }
-
         isProcessing = false;
         btnSelect.disabled = false;
         btnLibrary.disabled = false;
-
         document.getElementById("status-detail").innerText = "Completed!";
         document
           .getElementById("status-detail")
           .classList.add("text-green-500");
-
         setTimeout(() => {
-          alert("Transfer Complete!");
           progressArea.classList.add("hidden");
           document.getElementById("queue-info").classList.add("hidden");
           document
@@ -570,47 +637,33 @@
       function sendFileRobust(file) {
         return new Promise((resolve, reject) => {
           if (!conn || !conn.open) return reject("No connection");
-
-          const fileName = file.name || "unknown";
-          document.getElementById("filename-disp").innerText = fileName;
+          document.getElementById("filename-disp").innerText = file.name;
           document.getElementById("status-detail").innerText = "Sending...";
-          document.getElementById("progress-bar").style.width = "0%";
-          document.getElementById("percent-disp").innerText = "0%";
-
           conn.send({
             type: "meta",
-            name: fileName,
+            name: file.name,
             size: file.size,
             mime: file.type || "audio/mpeg",
           });
-
-          let offset = 0;
-          let chunkCount = 0;
+          let offset = 0,
+            chunkCount = 0;
           const reader = new FileReader();
-
           reader.onload = async (event) => {
             try {
-              const chunk = event.target.result;
-              conn.send(chunk);
-              offset += chunk.byteLength;
+              conn.send(event.target.result);
+              offset += event.target.result.byteLength;
               chunkCount++;
-
               await new Promise((r) => setTimeout(r, 10));
-
               const p = Math.round((offset / file.size) * 100);
               document.getElementById("progress-bar").style.width = p + "%";
               document.getElementById("percent-disp").innerText = p + "%";
-
               if (chunkCount % SYNC_INTERVAL === 0) {
                 conn.send({ type: "sync" });
                 await new Promise((r) => (resolveSync = r));
               }
-
               if (offset < file.size) {
                 readNextChunk();
               } else {
-                document.getElementById("status-detail").innerText =
-                  "Finalizing...";
                 conn.send({ type: "end" });
                 resolveUpload = resolve;
               }
@@ -618,12 +671,9 @@
               reject(e);
             }
           };
-
           const readNextChunk = () => {
-            const slice = file.slice(offset, offset + CHUNK_SIZE);
-            reader.readAsArrayBuffer(slice);
+            reader.readAsArrayBuffer(file.slice(offset, offset + CHUNK_SIZE));
           };
-
           readNextChunk();
         });
       }

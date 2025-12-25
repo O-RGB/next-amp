@@ -3,8 +3,8 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 (function () {
   const allowedDomains = [
     "next-amp-player.vercel.app",
-    // "localhost",
-    // "127.0.0.1",
+    "localhost",
+    "127.0.0.1",
   ];
   const currentDomain = window.location.hostname;
 
@@ -15,9 +15,17 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 })();
 
 (function () {
-  const isDirectAccess = window.location.pathname.endsWith("app.html");
-  const hasNoToken = sessionStorage.getItem("access_allowed") !== "true";
-  if (isDirectAccess || hasNoToken) {
+  const isAppPage = window.location.pathname.endsWith("app.html");
+  const hasToken = sessionStorage.getItem("access_allowed") === "true";
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const isValidPopup =
+    isAppPage &&
+    urlParams.get("popup") === "1" &&
+    window.opener &&
+    !window.opener.closed;
+
+  if ((isAppPage && !isValidPopup) || !hasToken) {
     window.location.replace("index.html");
     throw new Error("Access Denied");
   }
@@ -46,8 +54,6 @@ document.addEventListener("contextmenu", (event) => event.preventDefault());
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const STORAGE_KEY = "nextamp_settings_v9_stable";
-
-const worker = new Worker("/assets/libs/worker/mp3-worker.js");
 
 const savedSettingsRaw = localStorage.getItem(STORAGE_KEY);
 let savedSettings = savedSettingsRaw ? JSON.parse(savedSettingsRaw) : {};
@@ -1846,7 +1852,20 @@ window.openPeerModal = () => {
   $("#modal-add-method").classList.add("hidden");
   $("#modal-peer-receive").classList.remove("hidden");
 
-  if (!peerHost) initPeerHost();
+  if (!peerHost) {
+    initPeerHost();
+  } else if (peerHost.id) {
+    const url = `${window.location.origin}/remote.html?host=${peerHost.id}`;
+
+    $("#peer-link-text").textContent = url;
+
+    $("#qrcode-container").innerHTML = "";
+    new QRCode(document.getElementById("qrcode-container"), {
+      text: url,
+      width: 150,
+      height: 150,
+    });
+  }
 };
 
 window.closePeerModal = () => {
