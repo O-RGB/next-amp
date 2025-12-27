@@ -1,0 +1,195 @@
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;600;700&family=Inter:wght@300;400;600&display=swap');
+
+:root {
+  --primary: #00ff00;
+  --bg-color: #000000;
+  --panel-bg: rgba(20, 20, 20, 0.95);
+  --border-color: rgba(255, 255, 255, 0.1);
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-color);
+  color: #e5e5e5;
+  margin: 0;
+  width: 400px;
+  height: 550px;
+  overflow: hidden;
+}
+
+/* --- Nextamp Header Style --- */
+header {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand img {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(0,255,0,0.3);
+}
+
+.brand-text {
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  font-size: 1.2rem;
+  letter-spacing: 1px;
+  color: #fff;
+}
+
+.status-badge {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.6rem;
+  background: rgba(0, 255, 0, 0.1);
+  color: var(--primary);
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  padding: 2px 8px;
+  border-radius: 4px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0.4); }
+  70% { box-shadow: 0 0 0 5px rgba(0, 255, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0); }
+}
+
+/* Visualizer Area */
+.vis-container {
+  height: 80px;
+  background: radial-gradient(circle at center, #111 0%, #000 100%);
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+}
+#visualizer {
+  width: 100%;
+  height: 100%;
+}
+
+/* Controls */
+.main-content {
+  padding: 20px;
+  height: calc(100% - 140px);
+  overflow-y: auto;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #000; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+.control-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.card-header {
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #fff;
+  margin-bottom: 15px;
+  display: flex;
+  justify-content: space-between;
+  text-transform: uppercase;
+}
+
+/* Pitch Control Highlight */
+.tech-card {
+  background: linear-gradient(145deg, rgba(0,50,0,0.2), rgba(0,0,0,0.8));
+  border: 1px solid rgba(0,255,0,0.2);
+  box-shadow: 0 0 15px rgba(0,255,0,0.05);
+}
+
+/* Sliders */
+.slider-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 5px;
+}
+
+.label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #888;
+  width: 50px;
+}
+
+.val {
+  font-family: 'Chakra Petch', monospace;
+  font-size: 0.9rem;
+  color: var(--primary);
+  width: 40px;
+  text-align: right;
+  font-weight: bold;
+}
+
+input[type=range] {
+  flex: 1;
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+  appearance: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--primary);
+  border: 2px solid #000;
+  margin-top: -6px;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+}
+
+/* EQ Vertical */
+.eq-grid {
+  display: flex;
+  justify-content: space-between;
+  height: 120px;
+  padding-top: 10px;
+}
+.eq-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+.eq-col input[type=range] {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 20px;
+  height: 90px;
+  margin: 0;
+  background: #222;
+}
+.eq-freq {
+  font-size: 8px;
+  color: #555;
+  margin-top: 8px;
+  font-family: 'Chakra Petch', monospace;
+}

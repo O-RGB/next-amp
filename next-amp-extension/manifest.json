@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Nextamp Extension",
+  "version": "4.2",
+  "permissions": ["tabCapture", "offscreen", "activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "assets/logo.png"
+  },
+  "icons": {
+    "128": "assets/logo.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/libs/mjs/SignalsmithStretch.mjs",
+        "assets/libs/js/tailwindcss.js",
+        "assets/libs/js/phosphor.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

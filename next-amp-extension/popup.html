@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="./assets/js/tailwindcss.js"></script>
+    <script src="./assets/js/phosphor.js"></script>
+
+    <style>
+      :root {
+        --theme-window: #000080;
+        --theme-text: #00ff00;
+        --theme-text-sec: #ffcc00;
+      }
+
+      body {
+        width: 360px;
+        height: 600px; /* เพิ่มความสูงเผื่อ Pan */
+        background: radial-gradient(circle at center, #003504 0%, #020617 90%);
+        color: #e5e5e5;
+        margin: 0;
+        overflow: hidden;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+        user-select: none;
+      }
+
+      /* Custom Range Slider */
+      input[type="range"] {
+        -webkit-appearance: none;
+        background: transparent;
+        cursor: pointer;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 10px;
+        width: 10px;
+        background: #c0c0c0;
+        border: 1px solid #000;
+        box-shadow: inset 1px 1px #fff;
+        margin-top: -3px;
+        border-radius: 0; /* Square thumb like Win95 */
+      }
+      input[type="range"]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 4px;
+        background: #000;
+        border-bottom: 1px solid #333;
+      }
+
+      /* Vertical Sliders (EQ) - Fix Warning */
+      .eq-slider {
+        writing-mode: vertical-lr;
+        direction: rtl;
+        width: 20px;
+        height: 100px;
+        margin: 0 auto;
+        -webkit-appearance: none;
+        background: transparent;
+      }
+      .eq-slider::-webkit-slider-runnable-track {
+        background: #222;
+        border: 1px solid #444;
+        width: 6px;
+      }
+      .eq-slider::-webkit-slider-thumb {
+        margin-left: -3px; /* Center align */
+        width: 12px;
+        height: 6px;
+      }
+
+      /* Glow Effect */
+      .glow-container {
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
+      }
+
+      .theme-bar {
+        background: var(--theme-window);
+        color: white;
+        padding: 2px 4px;
+        font-weight: bold;
+        font-size: 11px;
+      }
+      .win-border {
+        border: 2px solid;
+        border-color: gray #000 #000 gray;
+        box-shadow: 1px 1px 0 #000;
+      }
+    </style>
+  </head>
+  <body class="flex flex-col p-3 gap-3">
+    <div
+      class="bg-[#292929] border border-gray-600 glow-container relative z-20 shadow-lg"
+    >
+      <div class="theme-bar flex justify-between items-center">
+        <div class="flex items-center gap-1">
+          <i class="ph-bold ph-music-note"></i> MASTER
+        </div>
+      </div>
+
+      <div
+        class="p-2 grid grid-cols-5 gap-2 bg-[#111] border-t border-gray-500"
+      >
+        <div class="col-span-3 bg-black border border-gray-700 relative h-20">
+          <canvas id="visualizer" class="w-full h-full block"></canvas>
+          <div
+            class="absolute top-0.5 left-1 text-[8px] text-[#00ff00] opacity-50"
+          >
+            VISUALIZER
+          </div>
+        </div>
+
+        <div class="col-span-2 flex flex-col justify-between">
+          <div class="flex flex-col gap-1">
+            <div class="flex justify-between text-[9px] text-[#00ff00]">
+              <span>VOL</span><span id="txt-vol">100%</span>
+            </div>
+            <input
+              type="range"
+              id="main-vol"
+              min="0"
+              max="1"
+              step="0.05"
+              value="1.0"
+              class="w-full"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <div class="flex justify-between text-[9px] text-[#ffcc00]">
+              <span>L</span><span>PAN</span><span>R</span>
+            </div>
+            <input
+              type="range"
+              id="main-pan"
+              min="-1"
+              max="1"
+              step="0.1"
+              value="0"
+              class="w-full"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="bg-[#292929] border border-gray-600 shadow-lg flex-1 flex flex-col"
+    >
+      <div class="theme-bar flex justify-between items-center">
+        <span>FX RACK</span>
+        <button
+          id="btn-reset"
+          class="bg-[#c0c0c0] text-black px-1 text-[9px] border border-white"
+        >
+          RESET
+        </button>
+      </div>
+
+      <div class="p-3 flex flex-col gap-3 h-full">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-black/30 p-2 border border-gray-700 rounded">
+            <div class="flex justify-between text-[9px] text-gray-400 mb-1">
+              <span>PITCH</span
+              ><span id="txt-pitch" class="text-[#ffcc00]">0</span>
+            </div>
+            <input
+              type="range"
+              id="main-pitch"
+              min="-12"
+              max="12"
+              step="1"
+              value="0"
+              class="w-full"
+            />
+          </div>
+          <div class="bg-black/30 p-2 border border-gray-700 rounded">
+            <div class="flex justify-between text-[9px] text-gray-400 mb-1">
+              <span>REVERB</span
+              ><span id="txt-verb" class="text-[#00ff00]">0.0</span>
+            </div>
+            <input
+              type="range"
+              id="main-verb"
+              min="0"
+              max="2"
+              step="0.1"
+              value="0"
+              class="w-full"
+            />
+          </div>
+        </div>
+
+        <div>
+          <select
+            id="eq-preset"
+            class="w-full bg-black text-[#00ff00] text-[10px] border border-gray-600 p-1 outline-none font-mono"
+          >
+            <option value="flat">PRESET: FLAT</option>
+            <option value="bass">PRESET: BASS BOOST</option>
+            <option value="rock">PRESET: ROCK</option>
+            <option value="pop">PRESET: POP</option>
+            <option value="voice">PRESET: VOICE</option>
+          </select>
+        </div>
+
+        <div
+          class="flex-1 bg-black border border-gray-700 p-2 flex justify-between items-end"
+          id="eq-container"
+        ></div>
+        <div class="text-[8px] text-center text-gray-500 -mt-1">10-BAND EQ</div>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
