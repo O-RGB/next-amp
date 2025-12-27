@@ -1,3 +1,8 @@
+/* NEXTAMP PLAYER - OPTIMIZED VERSION
+   Performance tuned for Mobile & Background Playback
+   Date: 2025-12-27
+*/
+
 import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 
 (function () {
@@ -14,7 +19,6 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
   }
 })();
 
-// [แก้ไขใน assets/libs/js/app.js ส่วนตรวจสอบ Access]
 (function () {
   const isAppPage = window.location.pathname.endsWith("app.html");
   const hasToken = sessionStorage.getItem("access_allowed") === "true";
@@ -23,13 +27,11 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
   const urlParams = new URLSearchParams(window.location.search);
   const isPopupMode = urlParams.get("popup") === "1";
 
-  // ถ้าเป็น Mobile แต่พยายามเปิดแบบ Popup ให้เด้งกลับ index
   if (isAppPage && isMobile && isPopupMode) {
     window.location.replace("index.html");
     throw new Error("Popup mode not allowed on mobile");
   }
 
-  // เงื่อนไขเดิมที่มีอยู่
   const isValidPopup =
     isAppPage && isPopupMode && window.opener && !window.opener.closed;
   if ((isAppPage && !isValidPopup && !isMobile) || !hasToken) {
@@ -40,7 +42,6 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 
 (function checkBrowserAndDisableExport() {
   const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
   const isIOS =
     /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -65,7 +66,11 @@ const STORAGE_KEY = "nextamp_settings_v9_stable";
 const savedSettingsRaw = localStorage.getItem(STORAGE_KEY);
 let savedSettings = savedSettingsRaw ? JSON.parse(savedSettingsRaw) : {};
 
-const audioOptions = {};
+const audioOptions = {
+  latencyHint: "playback",
+  sampleRate: 44100,
+};
+
 if (
   savedSettings.audioSampleRate &&
   savedSettings.audioSampleRate !== "default"
@@ -99,6 +104,16 @@ let reverbNode = audioContext.createConvolver();
 let reverbGain = audioContext.createGain();
 reverbGain.gain.value = 0;
 let isReverbOn = false;
+
+let currentAudioBuffer = null;
+let isStretchOn = false;
+
+let simpleSource = null;
+let simpleState = {
+  startTime: 0,
+  startOffset: 0,
+  playing: false,
+};
 
 function applyThemeToDOM(t) {
   const r = document.documentElement;
@@ -177,7 +192,6 @@ window.openSettingsModal = () => {
 
 window.closeSettingsModal = () => {
   $("#modal-settings").classList.add("hidden");
-
   applyThemeToDOM(currentTheme);
 };
 
@@ -274,19 +288,22 @@ function attachTooltips() {
         } else if (el.dataset.key === "rate") {
           controlValues.rate = val;
           $("#val-rate").textContent = val.toFixed(2);
-          controlsChanged();
+          if (isStretchOn) controlsChanged();
           saveSettings();
         } else if (el.dataset.key === "semitones") {
           controlValues.semitones = val;
           $("#val-pitch").textContent = val;
-          controlsChanged();
+          if (isStretchOn) controlsChanged();
           saveSettings();
         } else if (el.id === "main-reverb") {
           reverbGain.gain.value = val;
           $("#val-reverb").textContent = val.toFixed(2);
           saveSettings();
-        } else if (el.id === "playback" && stretch) {
-          stretch.schedule({ input: val, rate: 0 });
+        } else if (el.id === "playback") {
+          if (isStretchOn && stretch) {
+            stretch.schedule({ input: val, rate: 0 });
+          } else {
+          }
         }
       }
       const rect = el.getBoundingClientRect();
@@ -329,64 +346,25 @@ function createImpulseResponse(duration = 3.0, decay = 2.0, preDelay = 0.02) {
 
   for (let ch = 0; ch < 2; ch++) {
     const data = impulse.getChannelData(ch);
-
     let lastOut = 0;
     const alpha = 0.12;
-
     for (let i = 0; i < length; i++) {
       const white = Math.random() * 2 - 1;
-
       lastOut = lastOut + alpha * (white - lastOut);
       const noise = lastOut;
-
       if (i < preDelaySamples) {
         data[i] = 0;
       } else {
         const t = (i - preDelaySamples) / (length - preDelaySamples);
-
         const envelope = Math.exp(-decay * t);
-
         const wobble = 1 + 0.1 * Math.sin(t * 20);
-
         data[i] = noise * envelope * wobble;
       }
     }
-
-    const reflections = [
-      { delay: 0.01, gain: 0.6 },
-      { delay: 0.03, gain: 0.4 },
-      { delay: 0.07, gain: 0.2 },
-      { delay: 0.12, gain: 0.1 },
-    ];
-
-    for (const ref of reflections) {
-      const delSamples = Math.floor(ref.delay * sampleRate);
-      const spread = 40;
-
-      if (delSamples < length) {
-        for (let k = 0; k < spread; k++) {
-          if (delSamples + k < length) {
-            data[delSamples + k] +=
-              (Math.random() * 2 - 1) * ref.gain * 0.1 * (1 - k / spread);
-          }
-        }
-      }
-    }
   }
-
-  for (let ch = 0; ch < 2; ch++) {
-    const data = impulse.getChannelData(ch);
-    let maxPeak = 0;
-    for (let i = 0; i < length; i++)
-      maxPeak = Math.max(maxPeak, Math.abs(data[i]));
-    if (maxPeak > 0) {
-      for (let i = 0; i < length; i++) data[i] /= maxPeak;
-      for (let i = 0; i < length; i++) data[i] *= 0.8;
-    }
-  }
-
   return impulse;
 }
+
 reverbNode.buffer = createImpulseResponse();
 
 function updateReverbConnection() {
@@ -434,8 +412,8 @@ function saveSettings() {
     eqPreset: $("#eq-preset-select").value,
     isMono: isMono,
     theme: currentTheme,
-
     reverbGain: $("#main-reverb").value,
+    isStretchOn: isStretchOn,
   };
 
   savedSettings = settings;
@@ -447,6 +425,7 @@ function loadSettings() {
   if (!s) {
     applyThemeToDOM(defaultTheme);
     updateReverbConnection();
+    updateStretchUI();
     return;
   }
   if (s.vol) {
@@ -493,6 +472,11 @@ function loadSettings() {
     $("#val-reverb").textContent = parseFloat(s.reverbGain).toFixed(2);
   }
 
+  if (s.isStretchOn !== undefined) {
+    isStretchOn = s.isStretchOn;
+  }
+  updateStretchUI();
+
   window.savedEqGains = s.eqGains || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   if (s.eqPreset) {
     $("#eq-preset-select").value = s.eqPreset;
@@ -512,8 +496,7 @@ function loadSettings() {
 let isEngineHot = false;
 const audioStartup = $("#audio-startup"),
   audioLoop = $("#audio-loop");
-const loopSource = audioContext.createMediaElementSource(audioLoop);
-loopSource.connect(audioContext.destination);
+let loopSource = null;
 
 const initAudioEngine = async () => {
   if (isEngineHot) return;
@@ -522,8 +505,18 @@ const initAudioEngine = async () => {
     isEngineHot = true;
     audioStartup.volume = 0.5;
     audioLoop.volume = 0.05;
-    await audioStartup.play();
-    audioLoop.play().catch((e) => {});
+
+    try {
+      await audioStartup.play();
+
+      if (!loopSource) {
+        loopSource = audioContext.createMediaElementSource(audioLoop);
+        loopSource.connect(audioContext.destination);
+      }
+      audioLoop.play().catch((e) => {});
+    } catch (err) {
+      console.log("Auto-play prevented");
+    }
 
     $("#engine-status").style.backgroundColor = "#00ff00";
     $("#engine-status").style.boxShadow = "0 0 4px #0f0";
@@ -533,28 +526,26 @@ const initAudioEngine = async () => {
   }
 };
 
-document.addEventListener("click", initAudioEngine, { once: true });
-document.addEventListener("touchstart", initAudioEngine, { once: true });
+document.addEventListener("pointerdown", initAudioEngine, { once: true });
 
+let lastResumeCheck = 0;
 const checkAndResumeAudioContext = () => {
+  const now = Date.now();
+  if (now - lastResumeCheck < 1000) return;
+  lastResumeCheck = now;
+
   if (
     isEngineHot &&
     (audioContext.state === "suspended" || audioContext.state === "interrupted")
-  )
+  ) {
     audioContext.resume();
-  if (isEngineHot && audioLoop.paused) audioLoop.play().catch((e) => {});
-  if (stretch && controlValues.active && !isChangingTrack) {
-    const t = stretch.inputTime || 0;
-    if (t >= audioDuration - 0.5) {
-      console.log("Auto-Next (Background Check)");
-      handleNextTrack(true);
-    }
+  }
+
+  if (isEngineHot && audioLoop.paused && !document.hidden) {
+    audioLoop.play().catch((e) => {});
   }
 };
-setInterval(checkAndResumeAudioContext, 1000);
-["visibilitychange", "touchstart", "click"].forEach((evt) =>
-  document.addEventListener(evt, checkAndResumeAudioContext)
-);
+setInterval(checkAndResumeAudioContext, 2000);
 
 let stretch = null,
   eqNodes = [],
@@ -632,29 +623,21 @@ function initEQ() {
 
 async function loadAudioEngine(arrayBuffer, trackObj) {
   if (!isEngineHot) await initAudioEngine();
-  checkAndResumeAudioContext();
-  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-  audioDuration = audioBuffer.duration;
-  const channelBuffers = [];
-  for (let c = 0; c < audioBuffer.numberOfChannels; ++c)
-    channelBuffers.push(audioBuffer.getChannelData(c));
-  if (stretch) {
-    stretch.stop();
-    stretch.disconnect();
-  }
-  stretch = await SignalsmithStretch(audioContext);
-  const eqChain = initEQ();
-  stretch.connect(eqChain.input);
-  eqChain.output.connect(analyser);
 
-  updateReverbConnection();
+  if (currentAudioBuffer) currentAudioBuffer = null;
 
-  await stretch.addBuffers(channelBuffers);
+  currentAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  audioDuration = currentAudioBuffer.duration;
+
+  await initActiveEngine(0);
+
   controlValues.active = true;
   controlsChanged();
+
   isChangingTrack = false;
   updateMediaSession(trackObj.name);
-  $("#info-samplerate").textContent = audioBuffer.sampleRate / 1000 + " khz";
+  $("#info-samplerate").textContent =
+    currentAudioBuffer.sampleRate / 1000 + " khz";
   if (trackObj.blob && trackObj.blob.size) {
     const kbps = Math.round((trackObj.blob.size * 8) / audioDuration / 1000);
     $("#info-bitrate").textContent = kbps + " k";
@@ -665,16 +648,166 @@ async function loadAudioEngine(arrayBuffer, trackObj) {
   drawEQCurve();
 }
 
-function controlsChanged(scheduleAhead) {
-  $("#btn-play").classList.toggle("pressed", controlValues.active);
+async function initActiveEngine(startTime = 0) {
+  const eqChain = initEQ();
+  try {
+    eqChain.output.connect(analyser);
+  } catch (e) {}
+  updateReverbConnection();
+
   if (stretch) {
-    let obj = Object.assign(
-      { output: audioContext.currentTime + (scheduleAhead || 0) },
-      controlValues
-    );
-    stretch.schedule(obj);
+    try {
+      stretch.stop();
+    } catch (e) {}
+    try {
+      stretch.disconnect();
+    } catch (e) {}
+    stretch = null;
   }
-  updatePositionState();
+  if (simpleSource) {
+    try {
+      simpleSource.stop();
+    } catch (e) {}
+    try {
+      simpleSource.disconnect();
+    } catch (e) {}
+    simpleSource = null;
+  }
+
+  if (isStretchOn) {
+    stretch = await SignalsmithStretch(audioContext);
+    stretch.connect(eqChain.input);
+
+    const channelBuffers = [];
+    for (let c = 0; c < currentAudioBuffer.numberOfChannels; ++c)
+      channelBuffers.push(currentAudioBuffer.getChannelData(c));
+    await stretch.addBuffers(channelBuffers);
+
+    stretch.schedule({ input: startTime });
+  } else {
+    simpleState.startOffset = startTime;
+    simpleState.playing = false;
+  }
+}
+
+function getPlayerCurrentTime() {
+  if (isStretchOn) {
+    return stretch ? stretch.inputTime || 0 : 0;
+  } else {
+    if (!simpleState.playing) return simpleState.startOffset;
+    let t =
+      audioContext.currentTime -
+      simpleState.startTime +
+      simpleState.startOffset;
+    if (t > audioDuration) t = audioDuration;
+    return t;
+  }
+}
+
+function controlsChanged(scheduleAhead) {
+  const isPlaying = controlValues.active;
+  $("#btn-play").classList.toggle("pressed", isPlaying);
+
+  if (isStretchOn) {
+    if (stretch) {
+      let obj = Object.assign(
+        { output: audioContext.currentTime + (scheduleAhead || 0) },
+        controlValues
+      );
+      stretch.schedule(obj);
+    }
+  } else {
+    if (isPlaying) {
+      if (!simpleState.playing) startSimplePlayback();
+    } else {
+      if (simpleState.playing) stopSimplePlayback();
+    }
+  }
+}
+
+function startSimplePlayback() {
+  if (!currentAudioBuffer) return;
+  if (simpleSource) {
+    try {
+      simpleSource.stop();
+    } catch (e) {}
+    simpleSource.disconnect();
+  }
+
+  simpleSource = audioContext.createBufferSource();
+  simpleSource.buffer = currentAudioBuffer;
+
+  if (eqNodes.length > 0) simpleSource.connect(eqNodes[0]);
+  else simpleSource.connect(analyser);
+
+  simpleState.startTime = audioContext.currentTime;
+  if (simpleState.startOffset >= audioDuration) simpleState.startOffset = 0;
+
+  simpleSource.start(0, simpleState.startOffset);
+  simpleState.playing = true;
+
+  simpleSource.onended = () => {};
+}
+
+function stopSimplePlayback() {
+  if (simpleSource) {
+    try {
+      simpleSource.stop();
+    } catch (e) {}
+    simpleState.startOffset += audioContext.currentTime - simpleState.startTime;
+    simpleState.playing = false;
+  }
+}
+
+$("#btn-stretch-toggle").onclick = async () => {
+  if (!currentAudioBuffer && LIBRARY.length > 0 && currentTrackIndex === -1) {
+    isStretchOn = !isStretchOn;
+    updateStretchUI();
+    saveSettings();
+    return;
+  }
+  if (!currentAudioBuffer) return;
+
+  const wasPlaying = controlValues.active;
+  const currentTime = getPlayerCurrentTime();
+
+  isStretchOn = !isStretchOn;
+  updateStretchUI();
+  saveSettings();
+
+  $("#marquee").textContent = "Switching Engine...";
+  controlValues.active = false;
+  controlsChanged();
+
+  await initActiveEngine(currentTime);
+
+  if (wasPlaying) {
+    controlValues.active = true;
+    controlsChanged();
+  }
+
+  const list = getCurrentDisplayList();
+  if (list[currentTrackIndex])
+    $("#marquee").textContent = `${currentTrackIndex + 1}. ${
+      list[currentTrackIndex].name
+    }`;
+};
+
+function updateStretchUI() {
+  const btn = $("#btn-stretch-toggle");
+  const controls = $("#stretch-controls");
+
+  if (isStretchOn) {
+    btn.textContent = "ON";
+    btn.classList.add("theme-text-main", "border-white");
+    btn.classList.remove("text-gray-500", "border-gray-500");
+    controls.classList.remove("opacity-50", "pointer-events-none");
+  } else {
+    btn.textContent = "OFF";
+    btn.classList.remove("theme-text-main", "border-white");
+    btn.classList.add("text-gray-500", "border-gray-500");
+    controls.classList.add("opacity-50", "pointer-events-none");
+  }
 }
 
 function updateMediaSession(trackName) {
@@ -703,8 +836,16 @@ function updateMediaSession(trackName) {
       $("#btn-next").click()
     );
     navigator.mediaSession.setActionHandler("seekto", (details) => {
-      if (details.seekTime !== undefined && stretch) {
-        stretch.schedule({ input: details.seekTime });
+      if (details.seekTime !== undefined) {
+        if (isStretchOn && stretch) {
+          stretch.schedule({ input: details.seekTime });
+        } else if (!isStretchOn) {
+          const wasPlaying = simpleState.playing;
+          if (wasPlaying) stopSimplePlayback();
+          simpleState.startOffset = details.seekTime;
+          if (wasPlaying) startSimplePlayback();
+        }
+
         updatePositionState();
       }
     });
@@ -713,12 +854,17 @@ function updateMediaSession(trackName) {
 }
 
 function updatePositionState() {
-  if ("mediaSession" in navigator && stretch) {
+  if ("mediaSession" in navigator && !isNaN(audioDuration)) {
     try {
+      const t = getPlayerCurrentTime();
       navigator.mediaSession.setPositionState({
         duration: audioDuration || 0,
-        playbackRate: controlValues.active ? controlValues.rate : 0,
-        position: stretch.inputTime || 0,
+        playbackRate: controlValues.active
+          ? isStretchOn
+            ? controlValues.rate
+            : 1.0
+          : 0,
+        position: t || 0,
       });
     } catch (e) {}
   }
@@ -804,15 +950,12 @@ async function playTrack(idx) {
     return;
   }
   currentTrackIndex = idx;
-
   const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-
   if (isTouch && selectedIndices.size <= 1) {
     selectedIndices.clear();
     selectedIndices.add(idx);
     lastSelectedIndex = idx;
   }
-
   renderPlaylistUI();
   const t = list[idx];
   $("#marquee").textContent = `${idx + 1}. ${t.name} (Loading...)`;
@@ -826,7 +969,6 @@ async function playTrack(idx) {
       console.error("Play Error:", e);
       $("#marquee").textContent = "Error loading file.";
       isChangingTrack = false;
-
       t.hasError = true;
       await saveTrackToLib(t);
       renderPlaylistUI();
@@ -840,6 +982,12 @@ function handleNextTrack(auto = false) {
   let next;
   if (auto && repeatMode === 2) {
     next = currentTrackIndex;
+    if (!isStretchOn) {
+      stopSimplePlayback();
+      simpleState.startOffset = 0;
+      startSimplePlayback();
+      return;
+    }
   } else if (isShuffle) {
     if (list.length > 1) {
       do {
@@ -849,7 +997,10 @@ function handleNextTrack(auto = false) {
   } else {
     next = currentTrackIndex + 1;
   }
-  if (next < list.length) {
+
+  if (repeatMode === 2 && auto && isStretchOn) {
+    playTrack(next);
+  } else if (next < list.length) {
     playTrack(next);
   } else {
     if (repeatMode === 1 || !auto) {
@@ -859,7 +1010,6 @@ function handleNextTrack(auto = false) {
     }
   }
 }
-
 function handlePrevTrack() {
   let list = getCurrentDisplayList();
   if (list.length === 0) return;
@@ -874,21 +1024,22 @@ $("#btn-play").onclick = async () => {
   if (!isEngineHot) await initAudioEngine();
   checkAndResumeAudioContext();
   const list = getCurrentDisplayList();
-
   const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-
   if (isTouch && selectedIndices.size > 0) {
     const selIdx = Array.from(selectedIndices)[0];
-
     if (selIdx !== currentTrackIndex && list[selIdx]) {
       playTrack(selIdx);
       return;
     }
   }
-
-  if (!stretch && list.length > 0) playTrack(Math.max(0, currentTrackIndex));
-  else if (stretch) {
-    controlValues.active = !controlValues.active;
+  if (!controlValues.active && list.length > 0) {
+    if (currentAudioBuffer) {
+      controlValues.active = true;
+      controlsChanged();
+    } else {
+      playTrack(Math.max(0, currentTrackIndex));
+    }
+  } else if (controlValues.active) {
     controlsChanged(0.1);
   }
 };
@@ -898,9 +1049,12 @@ $("#btn-pause").onclick = () => {
 };
 $("#btn-stop").onclick = () => {
   controlValues.active = false;
-  if (stretch) {
+  if (isStretchOn && stretch) {
     stretch.stop();
     stretch.schedule({ input: 0 });
+  } else {
+    stopSimplePlayback();
+    simpleState.startOffset = 0;
   }
   $("#playback").value = 0;
   $("#time-display").textContent = "00:00";
@@ -915,7 +1069,6 @@ $("#btn-prev").onclick = () => handlePrevTrack();
 const eqContainer = $("#eq-container"),
   eqCanvas = $("#eq-graph"),
   eqCtx = eqCanvas.getContext("2d");
-
 $("#btn-eq-toggle").onclick = () => {
   isEqOn = !isEqOn;
   $("#txt-eq-status").textContent = isEqOn ? "ON" : "OFF";
@@ -923,13 +1076,10 @@ $("#btn-eq-toggle").onclick = () => {
   $$("input[data-idx]").forEach((inp, i) => updateEqBand(i, inp.value));
   saveSettings();
 };
-
 FREQUENCIES.forEach((f, i) => {
   const div = document.createElement("div");
-
   div.className =
     "flex flex-col items-center h-full flex-1 group relative py-3";
-
   div.innerHTML = `<div class="relative h-full w-full flex justify-center"><div class="eq-bar-bg ${
     isEqOn ? "eq-bar-active" : ""
   }" id="eq-bg-${i}"></div><div class="eq-thumb " style="top: 50%" id="thumb-${i}"></div><input type="range" class="vertical" style="height: 120%; top: -10%;" min="-12" max="12" step="0.5" value="0" data-idx="${i}" data-tooltip-type="db"></div><div class="absolute -bottom-1 text-[7px] theme-text-main font-pixel tracking-tighter pointer-events-none">${
@@ -941,7 +1091,6 @@ FREQUENCIES.forEach((f, i) => {
   };
   eqContainer.appendChild(div);
 });
-
 window.handleEqInput = (idx, val, el) => {
   if ($("#eq-preset-select").value !== "custom") {
     $("#eq-preset-select").value = "custom";
@@ -949,7 +1098,6 @@ window.handleEqInput = (idx, val, el) => {
   updateEqBand(idx, val);
   updateThumb(el, `thumb-${idx}`);
 };
-
 window.updateThumb = (input, thumbId) => {
   const min = parseFloat(input.min),
     max = parseFloat(input.max),
@@ -958,7 +1106,6 @@ window.updateThumb = (input, thumbId) => {
   const thumb = $(`#${thumbId}`);
   if (thumb) thumb.style.top = `${100 - percent}%`;
 };
-
 window.updateEqBand = (idx, val) => {
   if (eqNodes[idx]) eqNodes[idx].gain.value = isEqOn ? parseFloat(val) : 0;
   const bg = $(`#eq-bg-${idx}`);
@@ -969,7 +1116,6 @@ window.updateEqBand = (idx, val) => {
   drawEQCurve();
   saveSettings();
 };
-
 function drawEQCurve() {
   eqCtx.clearRect(0, 0, eqCanvas.width, eqCanvas.height);
   eqCtx.strokeStyle = "#333";
@@ -1007,7 +1153,6 @@ function drawEQCurve() {
   );
   eqCtx.stroke();
 }
-
 $("#eq-preset-select").onchange = (e) => {
   const val = e.target.value;
   if (PRESETS[val]) {
@@ -1025,7 +1170,7 @@ $("#eq-preset-select").onchange = (e) => {
 };
 
 const cvs = $("#visualizer"),
-  ctx = cvs.getContext("2d");
+  ctx = cvs.getContext("2d", { alpha: false });
 const visualModeNames = ["BAR", "LINE", "WAVE", "OFF"];
 let visualMode = 0;
 
@@ -1035,7 +1180,6 @@ $("#visualizer-container").onclick = () => {
   indicator.textContent = `${visualModeNames[visualMode]}`;
   indicator.style.opacity = visualMode === 3 ? "0.5" : "1";
 };
-
 function resizeCvs() {
   const r = cvs.parentElement.getBoundingClientRect();
   cvs.width = r.width;
@@ -1044,38 +1188,50 @@ function resizeCvs() {
 window.addEventListener("resize", resizeCvs);
 setTimeout(resizeCvs, 500);
 
-let lastUpdateTime = 0;
-let lastFrameTime = 0;
-const targetFPS = 60;
-
-function draw(time) {
-  requestAnimationFrame(draw);
-  if (time - lastFrameTime < 1000 / targetFPS) return;
-  lastFrameTime = time;
-  if (time - lastUpdateTime > 1000) {
-    updatePositionState();
-    lastUpdateTime = time;
-  }
-  if (stretch && !holding) {
+setInterval(() => {
+  if (!holding && audioDuration > 0) {
     const pb = $("#playback");
     pb.max = audioDuration;
-    const t = stretch.inputTime || 0;
+    const t = getPlayerCurrentTime();
     pb.value = t;
     $("#time-display").textContent = formatTime(t);
-    if (controlValues.active && t >= audioDuration - 0.2 && !isChangingTrack) {
-      handleNextTrack(true);
+
+    if (controlValues.active && !isChangingTrack && audioDuration > 1) {
+      if (t >= audioDuration - 0.2) {
+        console.log("Auto-Next");
+        handleNextTrack(true);
+      }
     }
   }
+
+  updatePositionState();
+}, 500);
+
+function draw() {
+  if (document.hidden || visualMode === 3) {
+    if (visualMode === 3) {
+      ctx.fillStyle = "#111";
+      ctx.fillRect(0, 0, cvs.width, cvs.height);
+    }
+
+    setTimeout(() => requestAnimationFrame(draw), 500);
+    return;
+  }
+
+  requestAnimationFrame(draw);
+
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, cvs.width, cvs.height);
-  if (visualMode === 3) return;
-  const bufferLength = analyser.frequencyBinCount,
-    dataArray = new Uint8Array(bufferLength);
+
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+
   if (visualMode === 0) {
     analyser.getByteFrequencyData(dataArray);
     const visualHeight = cvs.height * 0.7;
     const baseY = cvs.height;
     const barWidth = (cvs.width / bufferLength) * 2.5;
+
     const gradient = ctx.createLinearGradient(
       0,
       baseY,
@@ -1136,7 +1292,6 @@ $("#pl-box").onclick = (e) => {
     renderPlaylistUI();
   }
 };
-
 window.renderPlaylistUI = () => {
   const box = $("#pl-box");
   box.innerHTML = "";
@@ -1150,7 +1305,6 @@ window.renderPlaylistUI = () => {
   else {
     displayList.forEach((t, i) => {
       const d = document.createElement("div");
-
       if (selectedIndices.has(i)) {
         d.classList.add("theme-highlight-bg");
       } else {
@@ -1160,7 +1314,6 @@ window.renderPlaylistUI = () => {
           d.className += " theme-text-main hover:bg-[#222]";
         }
       }
-
       let textClass = i === currentTrackIndex ? "font-bold text-white" : "";
       d.className += ` cursor-pointer px-1 flex justify-between select-none ${textClass}`;
       d.draggable = true;
@@ -1242,7 +1395,6 @@ window.moveTrack = (dir) => {
   const idx = Array.from(selectedIndices)[0];
   handleDragDrop(idx, idx + dir);
 };
-
 window.handleDragDrop = async (srcIdx, targetIdx) => {
   let list = getCurrentDisplayList();
   if (targetIdx < 0 || targetIdx >= list.length || srcIdx === targetIdx) return;
@@ -1261,7 +1413,6 @@ window.handleDragDrop = async (srcIdx, targetIdx) => {
   selectedIndices.add(targetIdx);
   renderPlaylistUI();
 };
-
 window.handleDeleteTracks = async () => {
   if (selectedIndices.size === 0) return;
   customConfirm(
@@ -1284,7 +1435,6 @@ window.handleDeleteTracks = async () => {
     }
   );
 };
-
 window.handleDeletePlaylist = () => {
   if (currentPlaylistId === "main") return;
   customConfirm(
@@ -1301,16 +1451,13 @@ window.handleDeletePlaylist = () => {
 };
 
 const fileInput = $("#upload-file");
-
 $("#btn-pl-add").onclick = () => {
   $("#modal-add-method").classList.remove("hidden");
 };
-
 window.triggerLocalFile = () => {
   $("#modal-add-method").classList.add("hidden");
   $("#upload-file").click();
 };
-
 window.closeAddMethodModal = () =>
   $("#modal-add-method").classList.add("hidden");
 fileInput.onchange = (e) => handleFiles(e.target.files);
@@ -1319,7 +1466,6 @@ document.body.ondrop = (e) => {
   e.preventDefault();
   handleFiles(e.dataTransfer.files);
 };
-
 async function handleFiles(files) {
   if (!isEngineHot) await initAudioEngine();
   checkAndResumeAudioContext();
@@ -1379,7 +1525,6 @@ window.renderPlaylistSelect = () => {
   s.value = currentPlaylistId;
 };
 $("#playlist-select").onchange = (e) => switchPlaylist(e.target.value);
-
 window.openAddToModal = () => {
   if (!selectedIndices.size) return customAlert("Select tracks first");
   const d = $("#modal-list");
@@ -1430,7 +1575,6 @@ $("#tog-repeat").onclick = function () {
   updateRepeatBtn();
   saveSettings();
 };
-
 const updateMonoStereoState = () => {
   if (isMono) {
     stereoPath.gain.value = 0;
@@ -1446,14 +1590,12 @@ const updateMonoStereoState = () => {
     $("#btn-mono-stereo").classList.remove("theme-text-sec");
   }
 };
-
 $("#btn-mono-stereo").onclick = async () => {
   if (audioContext.state === "suspended") await audioContext.resume();
   isMono = !isMono;
   updateMonoStereoState();
   saveSettings();
 };
-
 $("#btn-reverb-toggle").onclick = () => {
   isReverbOn = !isReverbOn;
   updateReverbConnection();
@@ -1480,20 +1622,21 @@ let holding = false;
 pb.onmousedown = pb.ontouchstart = () => (holding = true);
 pb.onmouseup = pb.ontouchend = () => {
   holding = false;
-  if (stretch) {
+  const val = parseFloat(pb.value);
+  if (isStretchOn && stretch) {
     stretch.schedule({
-      input: parseFloat(pb.value),
+      input: val,
       rate: controlValues.rate,
       semitones: controlValues.semitones,
     });
-    updatePositionState();
+  } else {
+    const wasPlaying = simpleState.playing;
+    if (wasPlaying) stopSimplePlayback();
+    simpleState.startOffset = val;
+    if (wasPlaying) startSimplePlayback();
   }
+  updatePositionState();
 };
-pb.oninput = () => {
-  if (!stretch) return;
-  stretch.schedule({ input: parseFloat(pb.value), rate: 0 });
-};
-
 $("#main-vol").oninput = (e) => {
   masterGainNode.gain.value = parseFloat(e.target.value);
   $("#txt-vol").textContent = Math.round(e.target.value * 100) + "%";
@@ -1506,113 +1649,20 @@ $("#main-bal").oninput = (e) => {
 $('[data-key="rate"]').oninput = (e) => {
   controlValues.rate = parseFloat(e.target.value);
   $("#val-rate").textContent = controlValues.rate.toFixed(2);
-  controlsChanged();
+  if (isStretchOn) controlsChanged();
   saveSettings();
 };
 $('[data-key="semitones"]').oninput = (e) => {
   controlValues.semitones = parseFloat(e.target.value);
   $("#val-pitch").textContent = controlValues.semitones;
-  controlsChanged();
+  if (isStretchOn) controlsChanged();
   saveSettings();
 };
-
-function audioBufferToWav(buffer, opt) {
-  opt = opt || {};
-  var numChannels = buffer.numberOfChannels;
-  var sampleRate = buffer.sampleRate;
-  var format = opt.float32 ? 3 : 1;
-  var bitDepth = format === 3 ? 32 : 16;
-
-  var result;
-  if (numChannels === 2) {
-    result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
-  } else {
-    result = buffer.getChannelData(0);
-  }
-
-  return encodeWAV(result, format, sampleRate, numChannels, bitDepth);
-}
-
-function interleave(inputL, inputR) {
-  var length = inputL.length + inputR.length;
-  var result = new Float32Array(length);
-  var index = 0;
-  var inputIndex = 0;
-  while (index < length) {
-    result[index++] = inputL[inputIndex];
-    result[index++] = inputR[inputIndex];
-    inputIndex++;
-  }
-  return result;
-}
-
-function encodeWAV(samples, format, sampleRate, numChannels, bitDepth) {
-  var bytesPerSample = bitDepth / 8;
-  var blockAlign = numChannels * bytesPerSample;
-
-  var buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
-  var view = new DataView(buffer);
-
-  /* RIFF identifier */
-  writeString(view, 0, "RIFF");
-  /* RIFF chunk length */
-  view.setUint32(4, 36 + samples.length * bytesPerSample, true);
-  /* RIFF type */
-  writeString(view, 8, "WAVE");
-  /* format chunk identifier */
-  writeString(view, 12, "fmt ");
-  /* format chunk length */
-  view.setUint32(16, 16, true);
-  /* sample format (raw) */
-  view.setUint16(20, format, true);
-  /* channel count */
-  view.setUint16(22, numChannels, true);
-  /* sample rate */
-  view.setUint32(24, sampleRate, true);
-  /* byte rate (sample rate * block align) */
-  view.setUint32(28, sampleRate * blockAlign, true);
-  /* block align (channel count * bytes per sample) */
-  view.setUint16(32, blockAlign, true);
-  /* bits per sample */
-  view.setUint16(34, bitDepth, true);
-  /* data chunk identifier */
-  writeString(view, 36, "data");
-  /* data chunk length */
-  view.setUint32(40, samples.length * bytesPerSample, true);
-
-  if (format === 1) {
-    floatTo16BitPCM(view, 44, samples);
-  } else {
-    floatTo32BitPCM(view, 44, samples);
-  }
-
-  return new Blob([view], { type: "audio/wav" });
-}
-
-function floatTo16BitPCM(output, offset, input) {
-  for (var i = 0; i < input.length; i++, offset += 2) {
-    var s = Math.max(-1, Math.min(1, input[i]));
-    output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-  }
-}
-
-function floatTo32BitPCM(output, offset, input) {
-  for (var i = 0; i < input.length; i++, offset += 4) {
-    output.setFloat32(offset, input[i], true);
-  }
-}
-
-function writeString(view, offset, string) {
-  for (var i = 0; i < string.length; i++) {
-    view.setUint8(offset + i, string.charCodeAt(i));
-  }
-}
 
 function createOfflineImpulseResponse(ctx, duration = 3.0, decay = 2.0) {
   const sampleRate = ctx.sampleRate;
   const length = sampleRate * duration;
   const impulse = ctx.createBuffer(2, length, sampleRate);
-
   for (let ch = 0; ch < 2; ch++) {
     const data = impulse.getChannelData(ch);
     let lastOut = 0;
@@ -1626,24 +1676,18 @@ function createOfflineImpulseResponse(ctx, duration = 3.0, decay = 2.0) {
   }
   return impulse;
 }
-
 window.exportCurrentTrackWav = async () => {
   const list = getCurrentDisplayList();
   if (currentTrackIndex < 0 || !list[currentTrackIndex]) {
     customAlert("No track loaded to export.");
     return;
   }
-
   const track = list[currentTrackIndex];
   const originalRate = controlValues.rate || 1.0;
-
   $("#marquee").textContent = "Preparing Export...";
   const arrayBuffer = await track.blob.arrayBuffer();
-
   const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
   const newDuration = audioBuffer.duration / originalRate;
-
   const LIMIT_MINUTES = 10;
   if (newDuration > LIMIT_MINUTES * 60) {
     customConfirm(
@@ -1659,71 +1703,53 @@ window.exportCurrentTrackWav = async () => {
 function updateExportButtonState(isLoading) {
   const btn = $("#btn-export");
   if (!btn) return;
-
   if (isLoading) {
     btn.disabled = true;
     btn.classList.add("pressed");
-
     btn.innerHTML =
       '<i class="ph-bold ph-hourglass animate-hourglass text-sm"></i>';
-
     document.body.style.cursor = "wait";
   } else {
     btn.disabled = false;
     btn.classList.remove("pressed");
     btn.innerHTML = '<i class="ph-fill ph-floppy-disk text-sm"></i>';
-
     document.body.style.cursor = "default";
-
     btn.classList.remove("btn-working-analog");
     btn.classList.remove("text-win-green", "border-win-green");
     btn.classList.add("text-win-green");
   }
 }
-
 async function startRenderingProcess(sourceBuffer, duration, filename) {
   const btn = $("#btn-export");
   if (btn.disabled) return;
-
   updateExportButtonState(true);
   $("#marquee").textContent = "Processing Audio... 0%";
-
   let mp3Worker = null;
-
   try {
     const extraTail = isReverbOn ? 2 : 0;
-
     const targetRate = 44100;
-
     const offlineCtx = new OfflineAudioContext(
       2,
       (duration + extraTail) * targetRate,
       targetRate
     );
-
     const offStretch = await SignalsmithStretch(offlineCtx);
     const channelBuffers = [];
     for (let c = 0; c < sourceBuffer.numberOfChannels; c++) {
       channelBuffers.push(new Float32Array(sourceBuffer.getChannelData(c)));
     }
-
     await offStretch.addBuffers(channelBuffers);
-
     await new Promise((resolve) => setTimeout(resolve, 200));
-
     offStretch.schedule({
       active: true,
       input: 0,
       rate: controlValues.rate,
       semitones: controlValues.semitones,
     });
-
     let outputNode = offStretch;
-
     const currentEqGains = Array.from(
       document.querySelectorAll("input[data-idx]")
     ).map((inp) => parseFloat(inp.value));
-
     if (isEqOn) {
       let prev = offStretch;
       FREQUENCIES.forEach((freq, i) => {
@@ -1737,15 +1763,12 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
       });
       outputNode = prev;
     }
-
     const masterGain = offlineCtx.createGain();
     masterGain.gain.value = parseFloat($("#main-vol").value);
     outputNode.connect(masterGain);
     masterGain.connect(offlineCtx.destination);
-
     if (isReverbOn) {
       const revNode = offlineCtx.createConvolver();
-
       revNode.buffer = createOfflineImpulseResponse(offlineCtx);
       const revGain = offlineCtx.createGain();
       revGain.gain.value = parseFloat($("#main-reverb").value);
@@ -1753,24 +1776,17 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
       revNode.connect(revGain);
       revGain.connect(offlineCtx.destination);
     }
-
     $("#marquee").textContent = "Rendering Effects... (Please wait)";
-
     const renderedBuffer = await offlineCtx.startRendering();
-
     $("#marquee").textContent = "Encoding MP3... (0%)";
-
     return new Promise((resolve, reject) => {
       mp3Worker = new Worker("/assets/libs/worker/mp3-worker.js");
-
       const ch0 = new Float32Array(renderedBuffer.getChannelData(0));
       const ch1 =
         renderedBuffer.numberOfChannels > 1
           ? new Float32Array(renderedBuffer.getChannelData(1))
           : new Float32Array(renderedBuffer.getChannelData(0));
-
       const channelData = [ch0, ch1];
-
       mp3Worker.postMessage(
         {
           channelData: channelData,
@@ -1779,7 +1795,6 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
         },
         [ch0.buffer, ch1.buffer]
       );
-
       mp3Worker.onmessage = function (e) {
         if (e.data.type === "progress") {
           const percent = Math.round(e.data.value * 100);
@@ -1793,24 +1808,20 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
           a.download = `Remix_${cleanName}.mp3`;
           document.body.appendChild(a);
           a.click();
-
           setTimeout(() => {
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
             $("#marquee").textContent = "Export Complete.";
             updateExportButtonState(false);
-
             if (mp3Worker) mp3Worker.terminate();
             resolve();
           }, 100);
         }
       };
-
       mp3Worker.onerror = function (error) {
         console.error(error);
         customAlert("Worker Error: " + error.message);
         updateExportButtonState(false);
-
         if (mp3Worker) mp3Worker.terminate();
         reject(error);
       };
@@ -1820,7 +1831,6 @@ async function startRenderingProcess(sourceBuffer, duration, filename) {
     customAlert("Export Failed: " + e.message);
     $("#marquee").textContent = "Error.";
     updateExportButtonState(false);
-
     if (mp3Worker) mp3Worker.terminate();
   }
 }
@@ -1829,16 +1839,13 @@ document.addEventListener("keydown", (e) => {
   if (e.code === "Space" || e.key === " ") {
     const activeTag = document.activeElement.tagName.toLowerCase();
     const activeType = document.activeElement.type;
-
     if (
       activeTag === "textarea" ||
       (activeTag === "input" && activeType === "text")
     ) {
       return;
     }
-
     e.preventDefault();
-
     if (controlValues.active) {
       $("#btn-pause").click();
     } else {
@@ -1847,25 +1854,17 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-let peerHost = null;
-let currentConn = null;
-let incomingFile = {
-  buffer: [],
-  receivedSize: 0,
-  meta: null,
-};
-
+let peerHost = null,
+  currentConn = null;
+let incomingFile = { buffer: [], receivedSize: 0, meta: null };
 window.openPeerModal = () => {
   $("#modal-add-method").classList.add("hidden");
   $("#modal-peer-receive").classList.remove("hidden");
-
   if (!peerHost) {
     initPeerHost();
   } else if (peerHost.id) {
     const url = `${window.location.origin}/remote.html?host=${peerHost.id}`;
-
     $("#peer-link-text").textContent = url;
-
     $("#qrcode-container").innerHTML = "";
     new QRCode(document.getElementById("qrcode-container"), {
       text: url,
@@ -1874,7 +1873,6 @@ window.openPeerModal = () => {
     });
   }
 };
-
 window.closePeerModal = () => {
   $("#modal-peer-receive").classList.add("hidden");
   if (currentConn) {
@@ -1883,7 +1881,6 @@ window.closePeerModal = () => {
   }
   $("#qrcode-container").innerHTML = "";
 };
-
 function logPeer(msg) {
   const box = $("#peer-status");
   if (!box) return;
@@ -1892,38 +1889,29 @@ function logPeer(msg) {
   box.appendChild(d);
   box.scrollTop = box.scrollHeight;
 }
-
 function initPeerHost() {
   peerHost = new Peer();
-
   peerHost.on("open", (id) => {
     logPeer(`HOST ID: ${id}`);
-
     const url = `${window.location.origin}/remote.html?host=${id}`;
     $("#peer-link-text").textContent = url;
-
     $("#qrcode-container").innerHTML = "";
     new QRCode(document.getElementById("qrcode-container"), {
       text: url,
       width: 150,
       height: 150,
     });
-
     logPeer("Ready. Scan QR with your phone.");
   });
-
   peerHost.on("connection", (conn) => {
     if (currentConn) currentConn.close();
-
     currentConn = conn;
     logPeer("Client Connected!");
-
     conn.on("data", async (data) => {
       if (data.type === "meta") {
         incomingFile.meta = data;
         incomingFile.buffer = [];
         incomingFile.receivedSize = 0;
-
         $("#host-progress-wrap").classList.remove("hidden");
         $("#host-progress-bar").style.width = "0%";
         logPeer(`Receiving: ${data.name}...`);
@@ -1938,10 +1926,8 @@ function initPeerHost() {
           incomingFile.buffer = [];
           return;
         }
-
         logPeer(`Verifying & Saving...`);
         $("#host-progress-wrap").classList.add("hidden");
-
         try {
           const blob = new Blob(incomingFile.buffer, {
             type: incomingFile.meta.mime,
@@ -1949,9 +1935,7 @@ function initPeerHost() {
           const file = new File([blob], incomingFile.meta.name, {
             type: incomingFile.meta.mime,
           });
-
           await handleFiles([file]);
-
           logPeer(`Saved: ${incomingFile.meta.name} [OK]`);
           conn.send({ type: "file_received" });
         } catch (err) {
@@ -1962,22 +1946,18 @@ function initPeerHost() {
       } else if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
         incomingFile.buffer.push(data);
         incomingFile.receivedSize += data.byteLength || data.length;
-
         if (incomingFile.meta && incomingFile.meta.size > 0) {
           const p = (incomingFile.receivedSize / incomingFile.meta.size) * 100;
           $("#host-progress-bar").style.width = p + "%";
         }
       }
     });
-
     conn.on("close", () => {
       logPeer("Client Disconnected.");
       currentConn = null;
     });
-
     conn.on("error", (err) => logPeer("Conn Error: " + err));
   });
-
   peerHost.on("error", (err) => {
     logPeer("Peer Error: " + err.type);
   });

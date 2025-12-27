@@ -753,7 +753,7 @@
                     <option value="custom">Manual</option>
                   </select>
 
-                  <div class="flex justify-between items-center w-full">
+                  <!-- <div class="flex justify-between items-center w-full">
                     <a
                       href="https://github.com/signalsmith-audio/signalsmith-stretch"
                       target="_blank"
@@ -768,44 +768,65 @@
                         <div class="text-[7px] pb-0.5">Signalsmith</div>
                       </button>
                     </a>
-                  </div>
+                  </div> -->
                 </div>
-                <div class="flex flex-col pb-1 h-full justify-between">
-                  <div class="flex flex-col gap-1">
-                    <div class="flex flex-col gap-1">
-                      <div
-                        class="flex justify-between text-[8px] text-gray-400"
+                <div class="flex flex-col pb-1 h-full justify-between gap-2">
+                  <div
+                    class="flex flex-col gap-1 p-0.5 border border-gray-700 rounded bg-white/5 relative h-full"
+                  >
+                    <div class="flex justify-between items-center mb-1">
+                      <span class="text-[8px] font-bold text-gray-400"
+                        >STRETCH</span
                       >
-                        <span>PITCH</span
-                        ><span id="val-pitch" class="theme-text-sec">0</span>
+                      <button
+                        id="btn-stretch-toggle"
+                        class="font-pixel text-[8px] leading-none border border-gray-500 px-1 py-[1px] bg-black text-gray-500 cursor-pointer"
+                      >
+                        OFF
+                      </button>
+                    </div>
+
+                    <div
+                      id="stretch-controls"
+                      class="flex flex-col gap-3.5 h-full opacity-50 pointer-events-none transition-opacity duration-200"
+                    >
+                      <div class="flex flex-col gap-1">
+                        <div
+                          class="flex justify-between text-[8px] text-gray-400"
+                        >
+                          <span>PITCH</span
+                          ><span id="val-pitch" class="theme-text-sec">0</span>
+                        </div>
+                        <input
+                          type="range"
+                          data-key="semitones"
+                          min="-12"
+                          max="12"
+                          step="1"
+                          value="0"
+                          class="w-full h-1 bg-gray-600"
+                          data-tooltip-type="val"
+                        />
                       </div>
-                      <input
-                        type="range"
-                        data-key="semitones"
-                        min="-12"
-                        max="12"
-                        step="1"
-                        value="0"
-                        class="w-full h-1 bg-gray-600"
-                        data-tooltip-type="val"
-                      />
+                      <div class="flex flex-col gap-1">
+                        <div
+                          class="flex justify-between text-[8px] text-gray-400"
+                        >
+                          <span>SPEED</span
+                          ><span id="val-rate" class="theme-text-sec">1.0</span>
+                        </div>
+                        <input
+                          type="range"
+                          data-key="rate"
+                          min="0.5"
+                          max="2"
+                          step="0.05"
+                          value="1"
+                          class="w-full h-1 bg-gray-600"
+                          data-tooltip-type="x"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div class="flex flex-col gap-1">
-                    <div class="flex justify-between text-[8px] text-gray-400">
-                      <span>SPEED</span
-                      ><span id="val-rate" class="theme-text-sec">1.0</span>
-                    </div>
-                    <input
-                      type="range"
-                      data-key="rate"
-                      min="0.5"
-                      max="2"
-                      step="0.05"
-                      value="1"
-                      class="w-full h-1 bg-gray-600"
-                      data-tooltip-type="x"
-                    />
                   </div>
                   <div class="flex flex-col gap-1">
                     <div
@@ -1419,19 +1440,16 @@
         }
       });
 
-      // 2. ตรวจสอบการรองรับ Fullscreen (iPhone ปกติจะไม่รองรับ Document Fullscreen)
       function checkFullscreenSupport() {
         const btnFS = document.querySelector(
           'button[onclick="toggleFullscreen()"]'
         );
         if (!document.fullscreenEnabled && !document.webkitFullscreenEnabled) {
-          // ถ้าเครื่องไม่รองรับ Fullscreen API ให้ซ่อนปุ่ม (เช่น iPhone)
           if (btnFS) btnFS.style.display = "none";
         }
       }
       checkFullscreenSupport();
 
-      // แก้ไขฟังก์ชัน toggleFullscreen ให้รองรับ Webkit (สำหรับ iPad)
       function toggleFullscreen() {
         const docElm = document.documentElement;
         const requestFS =
@@ -1461,12 +1479,11 @@
         document.body.classList.add("popup-mode");
       }
 
-      // แก้ไขจุดนี้: ใช้ CSS class เพื่อซ่อนให้แน่นอน
       if (isMobile || isPopup) {
         const btnPopout = document.getElementById("btn-popout");
         if (btnPopout) {
-          btnPopout.classList.add("hidden"); // ใช้ class 'hidden' ของ tailwind
-          btnPopout.style.display = "none"; // fallback
+          btnPopout.classList.add("hidden");
+          btnPopout.style.display = "none";
         }
       }
 
@@ -1478,7 +1495,6 @@
         const left = (window.screen.width - width) / 2;
         const top = (window.screen.height - height) / 2;
 
-        // ลองเอาพารามิเตอร์ที่ไม่จำเป็นออกเพื่อให้ Browser ไม่มองว่าเป็นหน้าต่างอันตราย
         const features = `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=no`;
 
         const newWin = window.open(
