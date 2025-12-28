@@ -58,10 +58,14 @@ async function startAudio(streamId) {
 
     // โหลด Library Stretch
     try {
+      // --- เพิ่มบรรทัดนี้: บอก path ของไฟล์ SignalsmithStretch.mjs ให้ Library รู้ ---
+      SignalsmithStretch.moduleUrl = chrome.runtime.getURL(
+        "assets/libs/mjs/SignalsmithStretch.mjs"
+      );
+
       stretch = await SignalsmithStretch(audioCtx);
     } catch (err) {
       console.error("Failed to load SignalsmithStretch:", err);
-      // ถ้าโหลดไม่ผ่าน ให้เสียงผ่านไปเลยโดยไม่มี Stretch
     }
 
     // --- เชื่อมต่อสายสัญญาณ (Audio Routing) ---
