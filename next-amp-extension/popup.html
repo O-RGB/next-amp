@@ -2,211 +2,340 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nextamp Extension</title>
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;600&family=Sarabun:wght@300;400;600&display=swap"
+      rel="stylesheet"
+    />
+
     <script src="./assets/js/tailwindcss.js"></script>
     <script src="./assets/js/phosphor.js"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              "win-base": "#1a1a1a",
+              "win-gray": "#292929",
+              "btn-face": "#c0c0c0",
+              "win-green": "#00ff00",
+              "win-gold": "#ffcc00",
+            },
+            fontFamily: {
+              pixel: ['"Chakra Petch"', "sans-serif"],
+              ui: ['"Inter"', "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
 
     <style>
       :root {
         --theme-window: #000080;
         --theme-text: #00ff00;
         --theme-text-sec: #ffcc00;
+        --eq-col-1: #00ff00;
+        --eq-col-2: #ffff00;
+        --eq-col-3: #ff0000;
       }
 
-      body {
-        width: 360px;
-        height: 600px; /* เพิ่มความสูงเผื่อ Pan */
-        background: radial-gradient(circle at center, #003504 0%, #020617 90%);
-        color: #e5e5e5;
+      /* --- [CRITICAL FIX] บังคับขนาดหน้าต่างไม่ให้ Chrome บีบ --- */
+      html, body {
+        width: 320px !important;  /* กำหนดความกว้างที่ต้องการตรงนี้ */
+        height: 450px !important; /* กำหนดความสูง */
+        min-width: 320px;         /* กันเหนียว */
+        min-height: 450px;        /* กันเหนียว */
         margin: 0;
-        overflow: hidden;
-        font-family: "Segoe UI", Tahoma, sans-serif;
-        user-select: none;
-      }
-
-      /* Custom Range Slider */
-      input[type="range"] {
-        -webkit-appearance: none;
-        background: transparent;
-        cursor: pointer;
-      }
-      input[type="range"]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        height: 10px;
-        width: 10px;
-        background: #c0c0c0;
-        border: 1px solid #000;
-        box-shadow: inset 1px 1px #fff;
-        margin-top: -3px;
-        border-radius: 0; /* Square thumb like Win95 */
-      }
-      input[type="range"]::-webkit-slider-runnable-track {
-        width: 100%;
-        height: 4px;
-        background: #000;
-        border-bottom: 1px solid #333;
-      }
-
-      /* Vertical Sliders (EQ) - Fix Warning */
-      .eq-slider {
-        writing-mode: vertical-lr;
-        direction: rtl;
-        width: 20px;
-        height: 100px;
-        margin: 0 auto;
-        -webkit-appearance: none;
+        padding: 0;
+        overflow: hidden;         /* ห้ามมี Scrollbar ของตัวหน้าต่างหลัก */
+        font-family: "Sarabun", sans-serif;
         background: transparent;
       }
-      .eq-slider::-webkit-slider-runnable-track {
-        background: #222;
+
+      /* Main Container Gradient */
+      .app-bg {
+         background: radial-gradient(circle at center, #003504 0%, #020617 90%);
+         width: 100%;
+         height: 100%;
+         padding: 4px;
+         box-sizing: border-box; /* สำคัญ: ให้ padding รวมอยู่ใน width */
+      }
+
+      /* WinUI: Outer Window Border (นูนออก) */
+      .win-border-out {
+        background: #292929;
+        border-top: 2px solid #888;
+        border-left: 2px solid #888;
+        border-right: 2px solid #000;
+        border-bottom: 2px solid #000;
+        box-shadow: 0 0 15px rgba(0, 255, 0, 0.1);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* WinUI: Inner Section Border (จมเข้า) */
+      .win-border-in {
         border: 1px solid #444;
-        width: 6px;
-      }
-      .eq-slider::-webkit-slider-thumb {
-        margin-left: -3px; /* Center align */
-        width: 12px;
-        height: 6px;
+        border-right: 1px solid #fff;
+        border-bottom: 1px solid #fff;
+        box-shadow: inset 1px 1px 0 #000;
+        background: #151515;
       }
 
-      /* Glow Effect */
-      .glow-container {
-        box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 6px; background: #292929; }
+      ::-webkit-scrollbar-thumb {
+        background: #c0c0c0;
+        border: 1px solid #fff;
+        border-right: 1px solid #000;
+        border-bottom: 1px solid #000;
+      }
+
+      /* Button Style */
+      .win-btn {
+        background-color: #c0c0c0;
+        color: black;
+        border-top: 2px solid #fff;
+        border-left: 2px solid #fff;
+        border-right: 2px solid #000;
+        border-bottom: 2px solid #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-family: "Chakra Petch", sans-serif;
+        font-weight: bold;
+        font-size: 10px;
+        line-height: 1;
+      }
+      .win-btn:active, .win-btn.pressed {
+        border-top: 2px solid #000;
+        border-left: 2px solid #000;
+        border-right: 2px solid #fff;
+        border-bottom: 2px solid #fff;
+        background-color: #a0a0a0;
       }
 
       .theme-bar {
-        background: var(--theme-window);
+        background-color: var(--theme-window);
         color: white;
-        padding: 2px 4px;
-        font-weight: bold;
-        font-size: 11px;
+        padding: 4px 6px; /* เพิ่ม padding ให้หัวบาร์ดูสมส่วน */
+        font-family: "Chakra Petch", sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #000;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
       }
-      .win-border {
-        border: 2px solid;
-        border-color: gray #000 #000 gray;
-        box-shadow: 1px 1px 0 #000;
+
+      .theme-text-main { color: var(--theme-text); text-shadow: 0 0 2px rgba(0,255,0,0.5); }
+      .theme-text-sec { color: var(--theme-text-sec); }
+
+      /* Horizontal Slider */
+      input[type="range"].h-slider {
+        -webkit-appearance: none;
+        background: transparent;
+        height: 14px; /* เพิ่มความสูงเพื่อให้กดง่ายขึ้น */
+        width: 100%;
+        margin: 2px 0;
+      }
+      input[type="range"].h-slider:focus { outline: none; }
+      
+      input[type="range"].h-slider::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 4px;
+        background: #000;
+        border-bottom: 1px solid #444;
+        margin-top: 5px; /* จัดกึ่งกลางแนวตั้ง */
+      }
+      
+      input[type="range"].h-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 10px;
+        width: 18px;
+        background: #c0c0c0;
+        border: 1px solid #000;
+        border-top: 1px solid #fff;
+        border-left: 1px solid #fff;
+        cursor: pointer;
+        margin-top: -3px; /* ดึงขึ้นให้ตรงกับ Track */
+        box-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+      }
+
+      /* --- EQ Styles --- */
+      #eq-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding: 4px 4px 8px 4px;
+        /* สำคัญ: กำหนด flex-grow เพื่อให้ยืดเต็มพื้นที่ที่เหลือ */
+        flex: 1; 
+        min-height: 120px; /* กันเหนียวถ้าย่อจอ */
+        background: #050505;
+        border: 1px solid #000;
+        border-right: 1px solid #444;
+        border-bottom: 1px solid #444;
+        box-shadow: inset 2px 2px 5px rgba(0,0,0,0.8);
+      }
+
+      .eq-col {
+        position: relative;
+        height: 100%;
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        margin: 0 1px;
+      }
+      
+      .eq-bar-bg {
+        background: linear-gradient(to top, #222 0%, #222 100%);
+        width: 5px; /* เพิ่มความกว้างเส้น EQ ให้ดูเต็มขึ้น */
+        height: 100%;
+        margin: 0 auto;
+        border-left: 1px solid #000;
+        border-right: 1px solid #444;
+      }
+
+      .eq-bar-active {
+        position: absolute;
+        bottom: 0;
+        width: 5px;
+        background: linear-gradient(to top, var(--eq-col-1) 0%, var(--eq-col-2) 70%, var(--eq-col-3) 100%);
+        box-shadow: 0 0 4px var(--eq-col-1);
+        pointer-events: none;
+        transition: height 0.05s linear;
+        margin-left: 1px;
+      }
+
+      .eq-thumb {
+        height: 9px;
+        width: 18px;
+        background: #c0c0c0;
+        border: 1px solid #000;
+        border-top: 1px solid #fff;
+        border-left: 1px solid #fff;
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        pointer-events: none;
+        z-index: 10;
+        margin-bottom: -4px;
+        box-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+      }
+
+      input[type="range"].v-input {
+        -webkit-appearance: none;
+        writing-mode: vertical-lr; 
+        direction: rtl; 
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        margin: 0;
+        z-index: 20;
+        cursor: pointer;
       }
     </style>
   </head>
-  <body class="flex flex-col p-3 gap-3">
-    <div
-      class="bg-[#292929] border border-gray-600 glow-container relative z-20 shadow-lg"
-    >
-      <div class="theme-bar flex justify-between items-center">
+  <body class="app-bg">
+    <div class="win-border-out">
+      
+      <div class="theme-bar flex-none cursor-default select-none">
+        <div class="flex items-center gap-2">
+          <i class="ph-bold ph-music-note"></i> 
+          <span>NEXTAMP EXTENSION</span>
+        </div>
+        
         <div class="flex items-center gap-1">
-          <i class="ph-bold ph-music-note"></i> MASTER
+           <button id="btn-reset" class="win-btn px-2 h-4 text-[9px]" title="Reset">R</button>
+           <button onclick="window.close()" class="win-btn px-2 h-4 text-[9px] text-red-900 font-bold bg-[#e0e0e0]" title="Close">X</button>
         </div>
       </div>
 
-      <div
-        class="p-2 grid grid-cols-5 gap-2 bg-[#111] border-t border-gray-500"
-      >
-        <div class="col-span-3 bg-black border border-gray-700 relative h-20">
-          <canvas id="visualizer" class="w-full h-full block"></canvas>
-          <div
-            class="absolute top-0.5 left-1 text-[8px] text-[#00ff00] opacity-50"
-          >
-            VISUALIZER
-          </div>
+      <div class="p-3 flex flex-col gap-3 h-full min-h-0">
+        
+        <div class="win-border-in p-1 flex gap-1 h-[90px] bg-[#1a1a1a] shadow-inner flex-none">
+           <div class="flex-1 border border-gray-700 bg-black relative group cursor-pointer overflow-hidden">
+              <canvas id="visualizer" class="w-full h-full block opacity-90"></canvas>
+              <div class="absolute top-1 right-1.5 font-pixel theme-text-main text-2xl leading-none tracking-widest z-10 drop-shadow-md">
+                 00:00
+              </div>
+              <div class="absolute top-1 left-1.5 text-[8px] font-pixel theme-text-main opacity-70 z-10">
+                 VISUALIZER
+              </div>
+              <div class="absolute bottom-1 right-1.5 flex items-center gap-1 opacity-80">
+                  <div class="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse shadow-[0_0_5px_red]"></div>
+                  <span class="font-pixel text-[9px] text-red-500 font-bold">LIVE</span>
+              </div>
+           </div>
+           
+           <div class="w-[100px] flex flex-col justify-between py-1 px-1.5 bg-[#222] border-l border-gray-700">
+              <div class="flex flex-col gap-0.5">
+                 <div class="flex justify-between text-[9px] font-pixel theme-text-main font-bold">
+                    <span>VOL</span><span id="txt-vol">100%</span>
+                 </div>
+                 <input type="range" id="main-vol" min="0" max="1" step="0.05" value="1.0" class="h-slider">
+              </div>
+              <div class="flex flex-col gap-0.5">
+                 <div class="flex justify-between text-[9px] font-pixel theme-text-sec font-bold">
+                    <span>BAL</span><span>C</span>
+                 </div>
+                 <input type="range" id="main-pan" min="-1" max="1" step="0.1" value="0" class="h-slider">
+              </div>
+           </div>
         </div>
 
-        <div class="col-span-2 flex flex-col justify-between">
-          <div class="flex flex-col gap-1">
-            <div class="flex justify-between text-[9px] text-[#00ff00]">
-              <span>VOL</span><span id="txt-vol">100%</span>
-            </div>
-            <input
-              type="range"
-              id="main-vol"
-              min="0"
-              max="1"
-              step="0.05"
-              value="1.0"
-              class="w-full"
-            />
-          </div>
-
-          <div class="flex flex-col gap-1">
-            <div class="flex justify-between text-[9px] text-[#ffcc00]">
-              <span>L</span><span>PAN</span><span>R</span>
-            </div>
-            <input
-              type="range"
-              id="main-pan"
-              min="-1"
-              max="1"
-              step="0.1"
-              value="0"
-              class="w-full"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div
-      class="bg-[#292929] border border-gray-600 shadow-lg flex-1 flex flex-col"
-    >
-      <div class="theme-bar flex justify-between items-center">
-        <span>FX RACK</span>
-        <button
-          id="btn-reset"
-          class="bg-[#c0c0c0] text-black px-1 text-[9px] border border-white"
-        >
-          RESET
-        </button>
-      </div>
-
-      <div class="p-3 flex flex-col gap-3 h-full">
-        <div class="grid grid-cols-2 gap-3">
-          <div class="bg-black/30 p-2 border border-gray-700 rounded">
-            <div class="flex justify-between text-[9px] text-gray-400 mb-1">
-              <span>PITCH</span
-              ><span id="txt-pitch" class="text-[#ffcc00]">0</span>
-            </div>
-            <input
-              type="range"
-              id="main-pitch"
-              min="-12"
-              max="12"
-              step="1"
-              value="0"
-              class="w-full"
-            />
-          </div>
-          <div class="bg-black/30 p-2 border border-gray-700 rounded">
-            <div class="flex justify-between text-[9px] text-gray-400 mb-1">
-              <span>REVERB</span
-              ><span id="txt-verb" class="text-[#00ff00]">0.0</span>
-            </div>
-            <input
-              type="range"
-              id="main-verb"
-              min="0"
-              max="2"
-              step="0.1"
-              value="0"
-              class="w-full"
-            />
-          </div>
+        <div class="grid grid-cols-2 gap-3 flex-none">
+             <div class="win-border-in bg-[#1a1a1a] p-2 relative">
+                 <div class="flex justify-between text-[9px] text-gray-400 mb-1 font-pixel uppercase font-bold">
+                     <span>Pitch</span><span id="txt-pitch" class="theme-text-sec text-[10px]">0</span>
+                 </div>
+                 <input type="range" id="main-pitch" min="-12" max="12" step="1" value="0" class="h-slider w-full">
+             </div>
+             
+             <div class="win-border-in bg-[#1a1a1a] p-2 relative">
+                 <div class="flex justify-between text-[9px] text-gray-400 mb-1 font-pixel uppercase font-bold">
+                     <span>Reverb</span><span id="txt-verb" class="theme-text-main text-[10px]">0.0</span>
+                 </div>
+                 <input type="range" id="main-verb" min="0" max="2" step="0.1" value="0" class="h-slider w-full">
+             </div>
         </div>
 
-        <div>
-          <select
-            id="eq-preset"
-            class="w-full bg-black text-[#00ff00] text-[10px] border border-gray-600 p-1 outline-none font-mono"
-          >
-            <option value="flat">PRESET: FLAT</option>
-            <option value="bass">PRESET: BASS BOOST</option>
-            <option value="rock">PRESET: ROCK</option>
-            <option value="pop">PRESET: POP</option>
-            <option value="voice">PRESET: VOICE</option>
-          </select>
+        <div class="flex-1 flex flex-col gap-1 min-h-0 border-t-2 border-[#111] pt-2">
+            <div class="flex justify-between items-end mb-1 px-1">
+               <div class="font-pixel text-[11px] theme-text-main flex gap-2 font-bold">
+                  EQUALIZER
+               </div>
+               <select id="eq-preset" class="bg-black text-[10px] text-gray-300 border border-gray-600 outline-none px-1 py-0 font-pixel h-5 w-24 focus:border-green-500">
+                    <option value="flat">Flat</option>
+                    <option value="bass">Bass Boost</option>
+                    <option value="rock">Rock</option>
+                    <option value="pop">Pop</option>
+                    <option value="voice">Voice</option>
+                    <option value="custom">Manual</option>
+               </select>
+            </div>
+
+            <div class="flex items-center h-[36px] border border-gray-700 bg-black p-[1px] mb-2 flex-none shadow-md">
+                <canvas id="eq-graph" class="flex-1 h-full bg-[#080808]" width="280" height="36"></canvas>
+                <button id="btn-eq-toggle" class="win-btn h-full w-9 text-[9px] flex flex-col gap-0 leading-none ml-[1px] border-l border-gray-600">
+                   <span>EQ</span><span class="text-[8px] theme-text-main font-bold">ON</span>
+                </button>
+            </div>
+
+            <div id="eq-container">
+               </div>
         </div>
 
-        <div
-          class="flex-1 bg-black border border-gray-700 p-2 flex justify-between items-end"
-          id="eq-container"
-        ></div>
-        <div class="text-[8px] text-center text-gray-500 -mt-1">10-BAND EQ</div>
       </div>
     </div>
 
