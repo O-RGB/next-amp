@@ -1,27 +1,77 @@
 // offscreen.js
-// ตรวจสอบ Path นี้ให้ดี! ต้องตรงกับโครงสร้างโฟลเดอร์จริง
 import SignalsmithStretch from "./assets/libs/mjs/SignalsmithStretch.mjs";
 
 let audioCtx, source, stretch;
 let reverbNode, reverbGain, panNode, masterGain;
 let eqNodes = [];
 let analyser;
+let globalStream = null;
 
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
-let params = { pitch: 0, reverb: 0, pan: 0, volume: 1.0 };
+let params = {
+  pitch: 0,
+  reverb: 0,
+  pan: 0,
+  volume: 1.0,
+  visualMode: 0,
+  isEqOn: true,
+};
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "START_CAPTURE") {
-    console.log("Offscreen received START_CAPTURE", msg.streamId);
     startAudio(msg.streamId);
   } else if (msg.type === "SET_PARAM") {
-    updateParams(msg);
+    if (msg.key === "reset") {
+      resetParams();
+    } else {
+      updateParams(msg);
+    }
+  } else if (msg.type === "GET_STATE") {
+    const currentEq = eqNodes.length ? eqNodes.map((n) => n.gain.value) : [];
+    const isActive = audioCtx && audioCtx.state === "running";
+    sendResponse({
+      ...params,
+      eqGains: currentEq,
+      isAudioActive: isActive, // บอก Popup ว่า Audio ทำงานอยู่หรือไม่
+    });
+  } else if (msg.type === "STOP_CAPTURE") {
+    stopAudio();
   }
+  return true;
 });
+
+function resetParams() {
+  params = {
+    pitch: 0,
+    reverb: 0,
+    pan: 0,
+    volume: 1.0,
+    visualMode: 0,
+    isEqOn: true,
+  };
+  updateParams({ key: "pitch", value: 0 });
+  updateParams({ key: "reverb", value: 0 });
+  updateParams({ key: "pan", value: 0 });
+  updateParams({ key: "volume", value: 1.0 });
+  eqNodes.forEach((n) => (n.gain.value = 0));
+}
+
+function stopAudio() {
+  if (globalStream) {
+    globalStream.getTracks().forEach((track) => track.stop()); // หยุด Stream จริงๆ
+    globalStream = null;
+  }
+  if (audioCtx) {
+    try {
+      audioCtx.close();
+    } catch (e) {}
+    audioCtx = null;
+  }
+  params.visualMode = 3; // Off logic
+}
 
 async function startAudio(streamId) {
   try {
-    // ใช้ getUserMedia ดึงเสียงจาก Tab ผ่าน streamId
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         mandatory: {
@@ -31,18 +81,19 @@ async function startAudio(streamId) {
       },
     });
 
-    if (audioCtx) audioCtx.close();
+    if (audioCtx) await audioCtx.close();
+
+    globalStream = stream;
     audioCtx = new AudioContext();
     source = audioCtx.createMediaStreamSource(stream);
 
-    // สร้าง Nodes
     masterGain = audioCtx.createGain();
     reverbGain = audioCtx.createGain();
     panNode = audioCtx.createStereoPanner();
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 64;
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.8;
 
-    // EQ Nodes
     eqNodes = FREQUENCIES.map((f) => {
       const n = audioCtx.createBiquadFilter();
       n.type = "peaking";
@@ -51,64 +102,72 @@ async function startAudio(streamId) {
       return n;
     });
 
-    // Reverb & Stretch
     reverbNode = audioCtx.createConvolver();
-    reverbNode.buffer = createImpulse();
+    reverbNode.buffer = createImpulseResponse(3.0, 2.0);
     reverbGain.gain.value = 0;
 
-    // โหลด Library Stretch
     try {
-      // --- เพิ่มบรรทัดนี้: บอก path ของไฟล์ SignalsmithStretch.mjs ให้ Library รู้ ---
-      SignalsmithStretch.moduleUrl = chrome.runtime.getURL(
-        "assets/libs/mjs/SignalsmithStretch.mjs"
-      );
-
+      if (!SignalsmithStretch.wasLoaded) {
+        SignalsmithStretch.moduleUrl = chrome.runtime.getURL(
+          "assets/libs/mjs/SignalsmithStretch.mjs"
+        );
+        SignalsmithStretch.wasLoaded = true;
+      }
       stretch = await SignalsmithStretch(audioCtx);
     } catch (err) {
-      console.error("Failed to load SignalsmithStretch:", err);
+      console.error("Stretch Load Error:", err);
     }
 
-    // --- เชื่อมต่อสายสัญญาณ (Audio Routing) ---
     let lastNode = source;
-
     if (stretch) {
       source.connect(stretch);
       lastNode = stretch;
     }
-
-    // EQ Chain
     eqNodes.forEach((n) => {
       lastNode.connect(n);
       lastNode = n;
     });
 
-    // Pan & Reverb
     lastNode.connect(panNode);
     panNode.connect(masterGain);
 
-    // Aux Send to Reverb
-    panNode.connect(reverbNode);
+    eqNodes[eqNodes.length - 1].connect(reverbNode);
     reverbNode.connect(reverbGain);
     reverbGain.connect(masterGain);
 
     masterGain.connect(analyser);
-    masterGain.connect(audioCtx.destination); // ออกลำโพง
+    masterGain.connect(audioCtx.destination);
 
     if (stretch) updateStretch();
 
-    // Loop ส่งค่า Visualizer กลับไป Popup
-    setInterval(() => {
-      if (!analyser) return;
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      analyser.getByteFrequencyData(data);
-      // ส่งข้อมูลกลับไปหา Popup (ถ้า Popup ปิดอยู่ จะ error ก็ช่างมัน)
-      chrome.runtime
-        .sendMessage({ type: "VISUALIZER_DATA", data: Array.from(data) })
-        .catch(() => {});
-    }, 50);
+    // บังคับเปิด Visualizer กลับมา
+    params.visualMode = 0;
+    requestAnimationFrame(loopVisualizer);
   } catch (e) {
     console.error("Audio Engine Error:", e);
   }
+}
+
+function loopVisualizer() {
+  if (!audioCtx || !analyser) return;
+
+  const data = new Uint8Array(analyser.frequencyBinCount);
+
+  if (params.visualMode === 2) {
+    analyser.getByteTimeDomainData(data);
+  } else {
+    analyser.getByteFrequencyData(data);
+  }
+
+  chrome.runtime
+    .sendMessage({
+      type: "VISUALIZER_DATA",
+      data: Array.from(data),
+      mode: params.visualMode,
+    })
+    .catch(() => {});
+
+  setTimeout(() => requestAnimationFrame(loopVisualizer), 40);
 }
 
 function updateParams({ key, value, index }) {
@@ -118,10 +177,27 @@ function updateParams({ key, value, index }) {
     params.pitch = value;
     updateStretch();
   }
-  if (key === "reverb") reverbGain.gain.value = value;
-  if (key === "pan") panNode.pan.value = value;
-  if (key === "volume") masterGain.gain.value = value;
-  if (key === "eq" && eqNodes[index]) eqNodes[index].gain.value = value;
+  if (key === "reverb") {
+    params.reverb = value;
+    reverbGain.gain.value = value;
+  }
+  if (key === "pan") {
+    params.pan = value;
+    panNode.pan.value = value;
+  }
+  if (key === "volume") {
+    params.volume = value;
+    masterGain.gain.value = value;
+  }
+  if (key === "visualMode") {
+    params.visualMode = value;
+  }
+  if (key === "isEqOn") {
+    params.isEqOn = value;
+  }
+  if (key === "eq") {
+    if (eqNodes[index]) eqNodes[index].gain.value = value;
+  }
 }
 
 function updateStretch() {
@@ -130,13 +206,18 @@ function updateStretch() {
   }
 }
 
-function createImpulse() {
-  const len = audioCtx.sampleRate * 2;
-  const buf = audioCtx.createBuffer(2, len, audioCtx.sampleRate);
-  for (let c = 0; c < 2; c++) {
-    const d = buf.getChannelData(c);
-    for (let i = 0; i < len; i++)
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+function createImpulseResponse(duration, decay) {
+  const sampleRate = audioCtx.sampleRate;
+  const length = sampleRate * duration;
+  const impulse = audioCtx.createBuffer(2, length, sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = impulse.getChannelData(ch);
+    let lastOut = 0;
+    for (let i = 0; i < length; i++) {
+      const white = Math.random() * 2 - 1;
+      lastOut = lastOut + 0.12 * (white - lastOut);
+      data[i] = lastOut * Math.exp(-decay * (i / length) * (duration / 2));
+    }
   }
-  return buf;
+  return impulse;
 }
