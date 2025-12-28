@@ -2,42 +2,95 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nextamp Extension</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;600&display=swap"
+      rel="stylesheet"
+    />
     <script src="./assets/js/tailwindcss.js"></script>
-    <script src="./assets/js/phosphor.js"></script>
 
     <style>
       :root {
         --theme-window: #000080;
         --theme-text: #00ff00;
         --theme-text-sec: #ffcc00;
+
+        /* เพิ่มสีแดงเหมือนต้นฉบับ */
+        --eq-col-1: #00ff00; /* เขียว */
+        --eq-col-2: #ffff00; /* เหลือง */
+        --eq-col-3: #ff0000; /* แดง */
       }
 
       body {
-        width: 360px;
-        height: 600px; /* เพิ่มความสูงเผื่อ Pan */
-        background: radial-gradient(circle at center, #003504 0%, #020617 90%);
+        width: 350px;
+        height: 400px; /* เพิ่มความสูงตามที่ขอครับ */
+        background: radial-gradient(circle at center, #003504 0%, #020617 80%);
         color: #e5e5e5;
-        margin: 0;
         overflow: hidden;
-        font-family: "Segoe UI", Tahoma, sans-serif;
+        font-family: "Sarabun", "Inter", sans-serif;
         user-select: none;
+        margin: 0;
+        border: 1px solid #333;
       }
 
-      /* Custom Range Slider */
+      .font-pixel {
+        font-family: "Chakra Petch", sans-serif;
+      }
+      .theme-bar {
+        background-color: var(--theme-window);
+        color: white;
+      }
+      .theme-text-main {
+        color: var(--theme-text);
+      }
+      .theme-text-sec {
+        color: var(--theme-text-sec);
+      }
+
+      /* WinUI Button */
+      .win-btn {
+        background-color: #c0c0c0;
+        color: black;
+        border-top: 2px solid #fff;
+        border-left: 2px solid #fff;
+        border-right: 2px solid #000;
+        border-bottom: 2px solid #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 10px;
+        font-weight: bold;
+      }
+      .win-btn:active,
+      .win-btn.pressed {
+        border-top: 2px solid #000;
+        border-left: 2px solid #000;
+        border-right: 2px solid #fff;
+        border-bottom: 2px solid #fff;
+        background-color: #a0a0a0;
+      }
+
+      /* Sliders */
       input[type="range"] {
         -webkit-appearance: none;
         background: transparent;
-        cursor: pointer;
       }
+      input[type="range"]:focus {
+        outline: none;
+      }
+
       input[type="range"]::-webkit-slider-thumb {
         -webkit-appearance: none;
         height: 10px;
-        width: 10px;
+        width: 20px;
         background: #c0c0c0;
         border: 1px solid #000;
         box-shadow: inset 1px 1px #fff;
+        cursor: pointer;
         margin-top: -3px;
-        border-radius: 0; /* Square thumb like Win95 */
+        border-radius: 0;
       }
       input[type="range"]::-webkit-slider-runnable-track {
         width: 100%;
@@ -46,121 +99,131 @@
         border-bottom: 1px solid #333;
       }
 
-      /* Vertical Sliders (EQ) - Fix Warning */
-      .eq-slider {
+      /* Vertical EQ Slider */
+      input[type="range"].vertical {
         writing-mode: vertical-lr;
         direction: rtl;
-        width: 20px;
-        height: 100px;
-        margin: 0 auto;
         -webkit-appearance: none;
+        width: 24px;
+        height: 85px;
         background: transparent;
+        margin: 0 auto;
+        cursor: pointer;
       }
-      .eq-slider::-webkit-slider-runnable-track {
-        background: #222;
-        border: 1px solid #444;
+      input[type="range"].vertical::-webkit-slider-runnable-track {
         width: 6px;
+        height: 100%;
+        background: #111;
+        border: 1px solid #444;
+        box-shadow: inset 1px 1px #000;
       }
-      .eq-slider::-webkit-slider-thumb {
-        margin-left: -3px; /* Center align */
-        width: 12px;
-        height: 6px;
+      input[type="range"].vertical::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 18px;
+        height: 10px;
+        background: #c0c0c0;
+        border: 1px solid #000;
+        border-top: 1px solid #fff;
+        border-left: 1px solid #fff;
+        margin-left: -7px;
+        margin-top: 0;
+        border-radius: 0;
       }
 
-      /* Glow Effect */
-      .glow-container {
-        box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
+      /* Effect เมื่อ EQ Active (แก้สีแดงตรงนี้) */
+      .eq-bar-active::-webkit-slider-runnable-track {
+        background: linear-gradient(
+          to top,
+          var(--eq-col-1) 0%,
+          var(--eq-col-2) 60%,
+          var(--eq-col-3) 100%
+        ) !important;
       }
 
-      .theme-bar {
-        background: var(--theme-window);
-        color: white;
-        padding: 2px 4px;
-        font-weight: bold;
-        font-size: 11px;
-      }
-      .win-border {
-        border: 2px solid;
-        border-color: gray #000 #000 gray;
-        box-shadow: 1px 1px 0 #000;
+      .retro-border {
+        border-top: 2px solid #888;
+        border-left: 2px solid #888;
+        border-right: 2px solid #000;
+        border-bottom: 2px solid #000;
+        background: #292929;
       }
     </style>
   </head>
-  <body class="flex flex-col p-3 gap-3">
-    <div
-      class="bg-[#292929] border border-gray-600 glow-container relative z-20 shadow-lg"
-    >
-      <div class="theme-bar flex justify-between items-center">
-        <div class="flex items-center gap-1">
-          <i class="ph-bold ph-music-note"></i> MASTER
-        </div>
-      </div>
-
+  <body class="flex flex-col p-2 gap-2">
+    <div class="retro-border relative z-20 shadow-lg">
       <div
-        class="p-2 grid grid-cols-5 gap-2 bg-[#111] border-t border-gray-500"
+        class="theme-bar h-5 flex justify-between items-center px-1 text-[10px] font-bold"
       >
-        <div class="col-span-3 bg-black border border-gray-700 relative h-20">
-          <canvas id="visualizer" class="w-full h-full block"></canvas>
-          <div
-            class="absolute top-0.5 left-1 text-[8px] text-[#00ff00] opacity-50"
-          >
-            VISUALIZER
-          </div>
+        <div class="flex items-center gap-1">
+          <span>NEXTAMP EXTENSION</span>
         </div>
-
-        <div class="col-span-2 flex flex-col justify-between">
-          <div class="flex flex-col gap-1">
-            <div class="flex justify-between text-[9px] text-[#00ff00]">
-              <span>VOL</span><span id="txt-vol">100%</span>
-            </div>
-            <input
-              type="range"
-              id="main-vol"
-              min="0"
-              max="1"
-              step="0.05"
-              value="1.0"
-              class="w-full"
-            />
-          </div>
-
-          <div class="flex flex-col gap-1">
-            <div class="flex justify-between text-[9px] text-[#ffcc00]">
-              <span>L</span><span>PAN</span><span>R</span>
-            </div>
-            <input
-              type="range"
-              id="main-pan"
-              min="-1"
-              max="1"
-              step="0.1"
-              value="0"
-              class="w-full"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div
-      class="bg-[#292929] border border-gray-600 shadow-lg flex-1 flex flex-col"
-    >
-      <div class="theme-bar flex justify-between items-center">
-        <span>FX RACK</span>
         <button
           id="btn-reset"
-          class="bg-[#c0c0c0] text-black px-1 text-[9px] border border-white"
+          class="px-1 bg-[#c0c0c0] text-black text-[8px] border border-white hover:bg-white leading-none h-3"
         >
           RESET
         </button>
       </div>
 
-      <div class="p-3 flex flex-col gap-3 h-full">
-        <div class="grid grid-cols-2 gap-3">
-          <div class="bg-black/30 p-2 border border-gray-700 rounded">
-            <div class="flex justify-between text-[9px] text-gray-400 mb-1">
-              <span>PITCH</span
-              ><span id="txt-pitch" class="text-[#ffcc00]">0</span>
+      <div class="p-2">
+        <div
+          class="grid grid-cols-5 border border-gray-600 border-r-white/50 border-b-white/50 p-1 mb-2 flex gap-2 h-[80px] shadow-inner relative overflow-hidden bg-[#222]"
+        >
+          <div
+            class="col-span-3 bg-black border border-gray-700 relative overflow-hidden"
+          >
+            <canvas id="visualizer" class="w-full h-full block"></canvas>
+            <div
+              class="absolute top-0.5 left-1 font-pixel theme-text-main text-[8px] opacity-70"
+            >
+              VISUALIZER
+            </div>
+          </div>
+          <div class="col-span-2 flex flex-col justify-between pl-1">
+            <div class="flex flex-col gap-0.5">
+              <div
+                class="flex justify-between text-[8px] theme-text-main font-pixel"
+              >
+                <span>VOL</span><span id="txt-vol">100%</span>
+              </div>
+              <input
+                type="range"
+                id="main-vol"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1.0"
+                class="w-full h-2 bg-black"
+              />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <div
+                class="flex justify-between text-[8px] theme-text-sec font-pixel"
+              >
+                <span>L</span><span>BAL</span><span>R</span>
+              </div>
+              <input
+                type="range"
+                id="main-pan"
+                min="-1"
+                max="1"
+                step="0.1"
+                value="0"
+                class="w-full h-2 bg-black"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 mb-0">
+          <div
+            class="flex flex-col gap-1 p-1 border border-gray-600 bg-black/20 opacity-50 pointer-events-none"
+            title="N/A"
+          >
+            <div
+              class="flex justify-between text-[9px] text-gray-500 font-bold"
+            >
+              <span>PITCH</span><span id="txt-pitch" class="font-pixel">0</span>
             </div>
             <input
               type="range"
@@ -169,45 +232,72 @@
               max="12"
               step="1"
               value="0"
-              class="w-full"
+              class="w-full h-1"
             />
           </div>
-          <div class="bg-black/30 p-2 border border-gray-700 rounded">
-            <div class="flex justify-between text-[9px] text-gray-400 mb-1">
+          <div
+            class="flex flex-col gap-1 p-1 border border-gray-600 bg-black/20"
+          >
+            <div
+              class="flex justify-between text-[9px] text-gray-400 font-bold"
+            >
               <span>REVERB</span
-              ><span id="txt-verb" class="text-[#00ff00]">0.0</span>
+              ><span id="txt-verb" class="theme-text-main font-pixel"
+                >0.00</span
+              >
             </div>
             <input
               type="range"
               id="main-verb"
               min="0"
-              max="2"
-              step="0.1"
+              max="1"
+              step="0.05"
               value="0"
-              class="w-full"
+              class="w-full h-1"
             />
           </div>
         </div>
-
-        <div>
-          <select
-            id="eq-preset"
-            class="w-full bg-black text-[#00ff00] text-[10px] border border-gray-600 p-1 outline-none font-mono"
-          >
-            <option value="flat">PRESET: FLAT</option>
-            <option value="bass">PRESET: BASS BOOST</option>
-            <option value="rock">PRESET: ROCK</option>
-            <option value="pop">PRESET: POP</option>
-            <option value="voice">PRESET: VOICE</option>
-          </select>
-        </div>
-
-        <div
-          class="flex-1 bg-black border border-gray-700 p-2 flex justify-between items-end"
-          id="eq-container"
-        ></div>
-        <div class="text-[8px] text-center text-gray-500 -mt-1">10-BAND EQ</div>
       </div>
+    </div>
+
+    <div class="retro-border flex-1 flex flex-col min-h-0 pb-1">
+      <div
+        class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold"
+      >
+        <span>EQUALIZER</span>
+        <select
+          id="eq-preset"
+          class="bg-black theme-text-main border border-gray-500 text-[9px] h-3 leading-none outline-none"
+        >
+          <option value="flat">Flat</option>
+          <option value="rock">Rock</option>
+          <option value="pop">Pop</option>
+          <option value="jazz">Jazz</option>
+          <option value="fullbass">Bass</option>
+        </select>
+      </div>
+
+      <div
+        class="flex items-center h-[35px] border-b border-gray-600 bg-black p-[2px] mx-1 mt-1"
+      >
+        <canvas
+          id="eq-graph"
+          class="flex-1 h-full bg-[#111] border border-gray-800"
+          width="280"
+          height="35"
+        ></canvas>
+        <button
+          id="btn-eq-toggle"
+          class="win-btn h-full w-10 text-[9px] flex flex-col gap-0 leading-none ml-1 pressed"
+        >
+          <span>EQ</span><span id="txt-eq-status" class="text-[7px]">ON</span>
+        </button>
+      </div>
+
+      <div
+        class="flex-1 bg-black p-1 flex justify-between gap-1 h-full items-center overflow-hidden"
+        id="eq-container"
+      ></div>
     </div>
 
     <script src="popup.js"></script>

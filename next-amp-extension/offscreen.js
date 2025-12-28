@@ -1,18 +1,25 @@
-// offscreen.js
-// ตรวจสอบ Path นี้ให้ดี! ต้องตรงกับโครงสร้างโฟลเดอร์จริง
-import SignalsmithStretch from "./assets/libs/mjs/SignalsmithStretch.mjs";
+import SignalsmithStretch from "./assets/libs/mjs/signalsmith-stretch.mjs";
 
 let audioCtx, source, stretch;
 let reverbNode, reverbGain, panNode, masterGain;
 let eqNodes = [];
 let analyser;
 
+// ความถี่สำหรับ EQ 10 แบนด์
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
-let params = { pitch: 0, reverb: 0, pan: 0, volume: 1.0 };
 
+// ตัวแปรเก็บค่าพารามิเตอร์ปัจจุบัน
+let params = {
+  pitch: 0,
+  reverb: 0,
+  pan: 0,
+  volume: 1.0,
+  eq: Array(10).fill(0),
+};
+
+// รับข้อความจาก Background หรือ Popup
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "START_CAPTURE") {
-    console.log("Offscreen received START_CAPTURE", msg.streamId);
     startAudio(msg.streamId);
   } else if (msg.type === "SET_PARAM") {
     updateParams(msg);
@@ -21,7 +28,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 async function startAudio(streamId) {
   try {
-    // ใช้ getUserMedia ดึงเสียงจาก Tab ผ่าน streamId
+    // 1. ขอ Stream เสียงจาก Tab
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         mandatory: {
@@ -31,76 +38,97 @@ async function startAudio(streamId) {
       },
     });
 
-    if (audioCtx) audioCtx.close();
+    // ปิด Context เก่าถ้ามี
+    if (audioCtx) await audioCtx.close();
+
+    // 2. สร้าง AudioContext
     audioCtx = new AudioContext();
     source = audioCtx.createMediaStreamSource(stream);
 
-    // สร้าง Nodes
+    // 3. เตรียม Node พื้นฐาน
     masterGain = audioCtx.createGain();
+    masterGain.gain.value = params.volume;
+
     reverbGain = audioCtx.createGain();
+    reverbGain.gain.value = params.reverb;
+
     panNode = audioCtx.createStereoPanner();
+    panNode.pan.value = params.pan;
+
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
 
-    // EQ Nodes
-    eqNodes = FREQUENCIES.map((f) => {
+    // สร้าง EQ
+    eqNodes = FREQUENCIES.map((f, i) => {
       const n = audioCtx.createBiquadFilter();
       n.type = "peaking";
       n.frequency.value = f;
-      n.gain.value = 0;
+      n.Q.value = 1.4;
+      n.gain.value = params.eq[i] || 0;
       return n;
     });
 
-    // Reverb & Stretch
     reverbNode = audioCtx.createConvolver();
-    reverbNode.buffer = createImpulse();
-    reverbGain.gain.value = 0;
+    reverbNode.buffer = createImpulseResponse(3.0, 2.0);
 
-    // โหลด Library Stretch
+    // 4. ตั้งค่า Signalsmith Stretch (Pitch Shifter)
     try {
+      // --- จุดสำคัญ: แก้ไข Path ให้ตรงกับไฟล์ที่คุณระบุ ---
+      // ระบุตำแหน่งของไฟล์ .mjs ให้ชัดเจน เพื่อให้มันหา .wasm ที่อยู่คู่กันเจอ
+      SignalsmithStretch.moduleUrl = chrome.runtime.getURL(
+        "./assets/libs/mjs/signalsmith-stretch.mjs"
+      );
+
+      // สร้าง Instance ของ Stretch
       stretch = await SignalsmithStretch(audioCtx);
+
+      // ตั้งค่าเริ่มต้น: Rate 1.0 (ปกติ) แต่เปลี่ยน Semitones ตามค่า Pitch
+      stretch.schedule({
+        active: true,
+        rate: 1.0,
+        semitones: params.pitch,
+      });
     } catch (err) {
-      console.error("Failed to load SignalsmithStretch:", err);
-      // ถ้าโหลดไม่ผ่าน ให้เสียงผ่านไปเลยโดยไม่มี Stretch
+      console.error("Stretch Engine Load Failed:", err);
     }
 
-    // --- เชื่อมต่อสายสัญญาณ (Audio Routing) ---
+    // 5. เชื่อมต่อระบบเสียง (Audio Graph)
+    // ลำดับ: Source -> [Stretch] -> [EQs] -> Pan -> Master
+
     let lastNode = source;
 
     if (stretch) {
-      source.connect(stretch);
+      lastNode.connect(stretch);
       lastNode = stretch;
     }
 
-    // EQ Chain
+    // ต่อ EQ
     eqNodes.forEach((n) => {
       lastNode.connect(n);
       lastNode = n;
     });
 
-    // Pan & Reverb
-    lastNode.connect(panNode);
-    panNode.connect(masterGain);
-
-    // Aux Send to Reverb
-    panNode.connect(reverbNode);
+    // ต่อ Reverb (Send Effect)
+    lastNode.connect(reverbNode);
     reverbNode.connect(reverbGain);
     reverbGain.connect(masterGain);
 
+    // ต่อสัญญาณหลัก (Dry)
+    lastNode.connect(panNode);
+    panNode.connect(masterGain);
+
+    // Output
     masterGain.connect(analyser);
-    masterGain.connect(audioCtx.destination); // ออกลำโพง
+    masterGain.connect(audioCtx.destination);
 
-    if (stretch) updateStretch();
-
-    // Loop ส่งค่า Visualizer กลับไป Popup
+    // 6. ลูปส่งข้อมูล Visualizer
     setInterval(() => {
-      if (!analyser) return;
+      if (!analyser || audioCtx.state === "suspended") return;
       const data = new Uint8Array(analyser.frequencyBinCount);
       analyser.getByteFrequencyData(data);
-      // ส่งข้อมูลกลับไปหา Popup (ถ้า Popup ปิดอยู่ จะ error ก็ช่างมัน)
       chrome.runtime
         .sendMessage({ type: "VISUALIZER_DATA", data: Array.from(data) })
-        .catch(() => {});
+        .catch(() => {}); // ป้องกัน error ถ้า popup ปิดอยู่
     }, 50);
   } catch (e) {
     console.error("Audio Engine Error:", e);
@@ -108,31 +136,60 @@ async function startAudio(streamId) {
 }
 
 function updateParams({ key, value, index }) {
+  // อัปเดตค่าในตัวแปร
+  if (key === "eq") params.eq[index] = value;
+  else params[key] = value;
+
   if (!audioCtx) return;
 
+  // อัปเดต Pitch
   if (key === "pitch" && stretch) {
-    params.pitch = value;
-    updateStretch();
+    stretch.schedule({
+      active: true,
+      rate: 1.0, // ย้ำว่า Rate ต้องเป็น 1.0 เสมอสำหรับ Live Stream
+      semitones: value, // เปลี่ยนระดับเสียง
+    });
   }
-  if (key === "reverb") reverbGain.gain.value = value;
-  if (key === "pan") panNode.pan.value = value;
-  if (key === "volume") masterGain.gain.value = value;
-  if (key === "eq" && eqNodes[index]) eqNodes[index].gain.value = value;
+
+  // อัปเดต Effect อื่นๆ
+  if (key === "reverb" && reverbGain) {
+    reverbGain.gain.setTargetAtTime(value, audioCtx.currentTime, 0.1);
+  }
+  if (key === "pan" && panNode) {
+    panNode.pan.setTargetAtTime(value, audioCtx.currentTime, 0.1);
+  }
+  if (key === "volume" && masterGain) {
+    masterGain.gain.setTargetAtTime(value, audioCtx.currentTime, 0.1);
+  }
+  if (key === "eq" && eqNodes[index]) {
+    eqNodes[index].gain.setTargetAtTime(value, audioCtx.currentTime, 0.1);
+  }
 }
 
-function updateStretch() {
-  if (stretch) {
-    stretch.schedule({ active: true, rate: 1.0, semitones: params.pitch });
-  }
-}
+// ฟังก์ชันสร้างเสียงก้อง (Reverb Impulse)
+function createImpulseResponse(duration = 3.0, decay = 2.0, preDelay = 0.02) {
+  const sampleRate = audioCtx.sampleRate;
+  const length = sampleRate * duration;
+  const impulse = audioCtx.createBuffer(2, length, sampleRate);
+  const preDelaySamples = Math.floor(preDelay * sampleRate);
 
-function createImpulse() {
-  const len = audioCtx.sampleRate * 2;
-  const buf = audioCtx.createBuffer(2, len, audioCtx.sampleRate);
-  for (let c = 0; c < 2; c++) {
-    const d = buf.getChannelData(c);
-    for (let i = 0; i < len; i++)
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = impulse.getChannelData(ch);
+    let lastOut = 0;
+    const alpha = 0.12;
+    for (let i = 0; i < length; i++) {
+      const white = Math.random() * 2 - 1;
+      lastOut = lastOut + alpha * (white - lastOut);
+      const noise = lastOut;
+      if (i < preDelaySamples) {
+        data[i] = 0;
+      } else {
+        const t = (i - preDelaySamples) / (length - preDelaySamples);
+        const envelope = Math.exp(-decay * t);
+        const wobble = 1 + 0.1 * Math.sin(t * 20);
+        data[i] = noise * envelope * wobble;
+      }
+    }
   }
-  return buf;
+  return impulse;
 }
