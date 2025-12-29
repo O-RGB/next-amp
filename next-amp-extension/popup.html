@@ -10,36 +10,17 @@
       rel="stylesheet"
     />
     <script src="./assets/js/tailwindcss.js"></script>
+    <script src="./assets/js/config.js"></script>
     <script src="./assets/js/phosphor.js"></script>
-
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              "win-base": "#1a1a1a",
-              "win-gray": "#292929",
-              "btn-face": "#c0c0c0",
-              "win-green": "#00ff00",
-              "win-gold": "#ffcc00",
-            },
-            fontFamily: {
-              pixel: ['"Chakra Petch"', "sans-serif"],
-              ui: ['"Inter"', "sans-serif"],
-            },
-          },
-        },
-      };
-    </script>
 
     <style>
       :root {
         --theme-window: #000080;
         --theme-text: #00ff00;
         --theme-text-sec: #ffcc00;
-        --eq-col-1: #00ff00;
-        --eq-col-2: #ffff00;
-        --eq-col-3: #ff0000;
+        --eq-col-1: #00ff00; /* เขียว */
+        --eq-col-2: #ffff00; /* เหลือง */
+        --eq-col-3: #ff0000; /* แดง */
       }
 
       html,
@@ -140,7 +121,7 @@
       #visualizer {
         width: 100%;
         height: 100%;
-        display: block;
+        z-index: 9999;
       }
 
       /* EQ Container */
@@ -149,11 +130,13 @@
         justify-content: space-between;
         align-items: flex-end;
         padding: 4px;
+        padding-top: 8px;
         flex: 1;
         background: #050505;
         border: 1px solid #000;
         border-right: 1px solid #444;
         border-bottom: 1px solid #444;
+        overflow: hidden;
       }
 
       .eq-col {
@@ -161,43 +144,55 @@
         height: 100%;
         flex: 1;
         display: flex;
-        justify-content: center;
+        flex-direction: column;
+        align-items: center;
         margin: 0 1px;
       }
 
-      /* เส้น EQ 3px ตามที่ขอ */
+      /* Logic ใหม่:
+         - Wrapper เป็นพื้นหลัง Gradient (แดง-เหลือง-เขียว) คงที่
+         - Mask เป็นสีเทา (#333) ที่เลื่อนปิดจากด้านบน
+      */
       .eq-bar-wrapper {
-        width: 3px;
-        height: 100%;
-        background: #111;
+        width: 4px;
+        flex: 1;
         position: relative;
         margin: 0 auto;
-      }
-
-      .eq-bar-active {
-        position: absolute;
-        bottom: 0;
-        width: 100%;
-        height: 100%;
+        border-radius: 2px;
+        /* Gradient คงที่: เขียวล่าง -> เหลืองกลาง -> แดงบน */
         background: linear-gradient(
           to top,
           var(--eq-col-1) 0%,
-          var(--eq-col-2) 60%,
+          var(--eq-col-2) 50%,
           var(--eq-col-3) 100%
         );
-        opacity: 1;
+      }
+
+      /* ม่านสีเทา (Mask) */
+      .eq-bar-mask {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 50%; /* JS จะคอยปรับค่านี้ */
+        background: #333; /* สีเทาตามที่ต้องการ */
         pointer-events: none;
+        transition: height 0.05s linear;
+        border-top-left-radius: 2px;
+        border-top-right-radius: 2px;
+        z-index: 10;
       }
 
-      .eq-off .eq-bar-active {
-        background: #333;
+      /* เวลาปิด EQ ให้คลุมด้วยสีเทาโปร่งแสงทับอีกที หรือปรับ opacity */
+      .eq-off .eq-bar-wrapper {
         opacity: 0.5;
+        filter: grayscale(100%);
       }
 
-      /* ตัวปรับ EQ ให้ใหญ่ขึ้น */
+      /* ตัวปรับ EQ (Thumb) */
       .eq-thumb {
-        height: 13px;
-        width: 20px;
+        height: 10px;
+        width: 18px;
         background: #c0c0c0;
         border: 1px solid #000;
         border-top: 1px solid #fff;
@@ -206,9 +201,22 @@
         left: 50%;
         transform: translateX(-50%);
         pointer-events: none;
-        z-index: 10;
-        margin-bottom: -4px;
+        z-index: 40; /* อยู่เหนือ Mask */
+        margin-bottom: -5px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+      }
+
+      .eq-label {
+        font-family: "Chakra Petch", sans-serif;
+        font-size: 8px;
+        color: #888;
+        text-align: center;
+        width: 100%;
+        margin-top: 4px;
+        height: 10px;
+        line-height: 1;
+        cursor: default;
+        user-select: none;
       }
 
       input[type="range"].v-input {
@@ -216,17 +224,16 @@
         writing-mode: vertical-lr;
         direction: rtl;
         position: absolute;
-        top: 0;
+        top: -15px;
         left: 0;
         width: 100%;
-        height: 100%;
+        height: calc(100% + 15px);
         opacity: 0;
         margin: 0;
-        z-index: 20;
+        z-index: 50;
         cursor: pointer;
       }
 
-      /* Slider แนวนอน ให้ใหญ่ขึ้น */
       input[type="range"].h-slider {
         -webkit-appearance: none;
         background: transparent;
@@ -279,14 +286,21 @@
 
       <div class="p-2 flex flex-col gap-2 bg-[#222]">
         <div class="win-border-in p-1 flex gap-1 h-[80px] bg-[#1a1a1a]">
-          <div
-            class="flex-1 border border-gray-700 bg-black relative group cursor-pointer"
-          >
-            <canvas id="visualizer" class="w-full h-full"></canvas>
-            <!-- <div class="absolute bottom-0.5 right-1 flex items-center gap-1 opacity-80">
-               <div class="w-1 h-1 rounded-full bg-red-600 animate-pulse"></div>
-               <span class="font-pixel text-[8px] text-red-500 font-bold">LIVE</span>
-            </div> -->
+          <div class="col-span-3 bg-black border border-gray-700 relative cursor-pointer">
+            <canvas id="visualizer" class=""></canvas>
+            <div
+              class="absolute top-0.5 left-1 text-[8px] text-[#00ff00] opacity-50"
+            >
+              VISUALIZER
+            </div>
+            <div
+              class="absolute bottom-0.5 right-1 flex items-center gap-1 opacity-80"
+            >
+              <div class="w-1 h-1 rounded-full bg-red-600 animate-pulse"></div>
+              <span class="font-pixel text-[8px] text-red-500 font-bold"
+                >LIVE</span
+              >
+            </div>
           </div>
 
           <div
@@ -399,8 +413,7 @@
             id="btn-eq-toggle"
             class="win-btn h-full w-8 text-[8px] flex flex-col gap-0 leading-none ml-[1px] border-l border-gray-600 absolute right-0 top-0 z-20 opacity-90"
           >
-            <span>EQ</span
-            ><span class="text-[8px] theme-text-main font-bold">ON</span>
+            <span>EQ</span><span class="text-[8px] font-bold">ON</span>
           </button>
         </div>
 

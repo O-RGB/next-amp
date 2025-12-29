@@ -1,6 +1,19 @@
 // popup.js
 const $ = (s) => document.querySelector(s);
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
+const LABELS = [
+  "60",
+  "170",
+  "310",
+  "600",
+  "1k",
+  "3k",
+  "6k",
+  "12k",
+  "14k",
+  "16k",
+];
+
 const PRESETS = {
   flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   bass: [5, 4, 3, 2, 0, 0, 0, 0, 0, 0],
@@ -79,8 +92,19 @@ async function initCapture() {
     }
 
     chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (streamId) => {
-      if (chrome.runtime.lastError || !streamId) return;
-      chrome.runtime.sendMessage({ type: "START_CAPTURE", streamId: streamId });
+      if (chrome.runtime.lastError) {
+        console.error("Capture Error:", chrome.runtime.lastError.message);
+        return;
+      }
+      if (!streamId) {
+        console.error("No stream ID found");
+        return;
+      }
+      chrome.runtime
+        .sendMessage({ type: "START_CAPTURE", streamId: streamId })
+        .catch((e) => {
+          console.warn("Start capture response error:", e);
+        });
     });
   } catch (e) {
     console.error("Init Error:", e);
@@ -161,7 +185,7 @@ function setupListeners() {
   });
 
   $("#visualizer").parentElement.addEventListener("click", () => {
-    visualMode = (visualMode + 1) % 3; // 0, 1, 2
+    visualMode = (visualMode + 1) % 3;
     sendParam("visualMode", visualMode);
   });
 }
@@ -173,13 +197,13 @@ function updateEqToggleButton() {
 
   if (isEqOn) {
     span.textContent = "ON";
-    span.classList.add("theme-text-main");
-    span.classList.remove("text-gray-500");
+    span.classList.add("text-white");
+    span.classList.remove("text-gray-500", "theme-text-main");
     btn.classList.add("pressed");
     eqContainer.classList.remove("eq-off");
   } else {
     span.textContent = "OFF";
-    span.classList.remove("theme-text-main");
+    span.classList.remove("text-white", "theme-text-main");
     span.classList.add("text-gray-500");
     btn.classList.remove("pressed");
     eqContainer.classList.add("eq-off");
@@ -195,11 +219,13 @@ function renderNewEQSystem() {
   FREQUENCIES.forEach((f, i) => {
     const col = document.createElement("div");
     col.className = "eq-col";
+    // เปลี่ยนโครงสร้าง: ใช้ mask แทน active bar
     col.innerHTML = `
       <div class="eq-bar-wrapper">
-          <div class="eq-bar-active" id="bar-visual-${i}"></div>
+          <div class="eq-bar-mask" id="mask-visual-${i}"></div>
           <div class="eq-thumb" id="thumb-visual-${i}" style="bottom: 50%"></div>
       </div>
+      <div class="eq-label">${LABELS[i]}</div>
       <input type="range" class="v-input eq-slider" min="-12" max="12" step="1" value="0" data-idx="${i}">
     `;
     container.appendChild(col);
@@ -226,9 +252,19 @@ function updateEQVisuals() {
   sliders.forEach((slider, idx) => {
     const val = parseFloat(slider.value);
     const percent = ((val + 12) / 24) * 100;
+
+    // อัปเดตตำแหน่ง Thumb (เหมือนเดิม)
     const thumb = document.getElementById(`thumb-visual-${idx}`);
     if (thumb) {
       thumb.style.bottom = `${percent}%`;
+    }
+
+    // อัปเดต Mask สีเทา (Height คือส่วนที่เหลือจากด้านบน)
+    const mask = document.getElementById(`mask-visual-${idx}`);
+    if (mask) {
+      // ถ้าค่าเต็ม (100%) -> mask สูง 0%
+      // ถ้าค่าน้อยสุด (0%) -> mask สูง 100%
+      mask.style.height = `${100 - percent}%`;
     }
   });
   drawEQGraph(currentEqValues);
@@ -288,14 +324,11 @@ const ctx = cvs ? cvs.getContext("2d") : null;
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "VISUALIZER_DATA" && ctx && cvs) {
-    // 1. ตรวจสอบขนาดพื้นที่แสดงผลจริง
     const dpr = window.devicePixelRatio || 1;
     const rect = cvs.getBoundingClientRect();
     const neededWidth = Math.floor(rect.width * dpr);
     const neededHeight = Math.floor(rect.height * dpr);
 
-    // 2. ถ้าขนาด Canvas ไม่ตรงกับขนาดที่ควรจะเป็น ให้ปรับใหม่ทันที (Auto Resize)
-    // เงื่อนไข neededWidth > 0 เพื่อป้องกันกรณีปิดหน้าจอแล้วได้ค่า 0
     if (
       neededWidth > 0 &&
       neededHeight > 0 &&
@@ -303,16 +336,13 @@ chrome.runtime.onMessage.addListener((msg) => {
     ) {
       cvs.width = neededWidth;
       cvs.height = neededHeight;
-      // Reset Transform และ Scale ให้ตรงกับ dpr
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(dpr, dpr);
     }
 
-    // 3. ใช้ขนาด Logical ในการวาด (เพราะเรา scale ctx ไว้แล้ว)
     const w = cvs.width / dpr;
     const h = cvs.height / dpr;
 
-    // ถ้าขนาดยังไม่ถูกต้อง (เช่น เป็น 0) ให้ข้ามการวาดไปก่อน
     if (w === 0 || h === 0) return;
 
     const data = msg.data;
@@ -321,7 +351,6 @@ chrome.runtime.onMessage.addListener((msg) => {
     ctx.clearRect(0, 0, w, h);
 
     if (mode === 0) {
-      // BAR
       const barW = w / data.length;
       let x = 0;
       for (let i = 0; i < data.length; i++) {
@@ -334,7 +363,6 @@ chrome.runtime.onMessage.addListener((msg) => {
         x += barW;
       }
     } else if (mode === 1) {
-      // LINE
       ctx.beginPath();
       ctx.strokeStyle = "#00ff00";
       ctx.lineWidth = 2;
@@ -348,7 +376,6 @@ chrome.runtime.onMessage.addListener((msg) => {
       }
       ctx.stroke();
     } else if (mode === 2) {
-      // WAVE (Visualizer ที่คุณต้องการ)
       ctx.beginPath();
       ctx.strokeStyle = "#00ffff";
       ctx.lineWidth = 2;

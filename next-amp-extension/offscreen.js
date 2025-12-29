@@ -1,4 +1,3 @@
-// offscreen.js
 import SignalsmithStretch from "./assets/libs/mjs/SignalsmithStretch.mjs";
 
 let audioCtx, source, stretch;
@@ -32,7 +31,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({
       ...params,
       eqGains: currentEq,
-      isAudioActive: isActive, // บอก Popup ว่า Audio ทำงานอยู่หรือไม่
+      isAudioActive: isActive,
     });
   } else if (msg.type === "STOP_CAPTURE") {
     stopAudio();
@@ -58,7 +57,7 @@ function resetParams() {
 
 function stopAudio() {
   if (globalStream) {
-    globalStream.getTracks().forEach((track) => track.stop()); // หยุด Stream จริงๆ
+    globalStream.getTracks().forEach((track) => track.stop());
     globalStream = null;
   }
   if (audioCtx) {
@@ -67,7 +66,7 @@ function stopAudio() {
     } catch (e) {}
     audioCtx = null;
   }
-  params.visualMode = 3; // Off logic
+  params.visualMode = 3;
 }
 
 async function startAudio(streamId) {
@@ -91,7 +90,7 @@ async function startAudio(streamId) {
     reverbGain = audioCtx.createGain();
     panNode = audioCtx.createStereoPanner();
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
+    analyser.fftSize = 64;
     analyser.smoothingTimeConstant = 0.8;
 
     eqNodes = FREQUENCIES.map((f) => {
@@ -140,16 +139,16 @@ async function startAudio(streamId) {
 
     if (stretch) updateStretch();
 
-    // บังคับเปิด Visualizer กลับมา
     params.visualMode = 0;
-    requestAnimationFrame(loopVisualizer);
+    setTimeout(loopVisualizer, 30);
   } catch (e) {
     console.error("Audio Engine Error:", e);
   }
 }
-
 function loopVisualizer() {
   if (!audioCtx || !analyser) return;
+
+  if (params.visualMode === 3) return;
 
   const data = new Uint8Array(analyser.frequencyBinCount);
 
@@ -167,7 +166,7 @@ function loopVisualizer() {
     })
     .catch(() => {});
 
-  setTimeout(() => requestAnimationFrame(loopVisualizer), 40);
+  setTimeout(loopVisualizer, 30);
 }
 
 function updateParams({ key, value, index }) {
