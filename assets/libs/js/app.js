@@ -3,7 +3,7 @@
    Date: 2025-12-27
 */
 
-import SignalsmithStretch from "../mjs/_SignalsmithStretch.mjs";
+import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 
 (function () {
   const allowedDomains = [

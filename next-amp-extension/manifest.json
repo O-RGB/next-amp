@@ -2,13 +2,7 @@
   "manifest_version": 3,
   "name": "Nextamp Extension",
   "version": "4.2",
-  "permissions": [
-    "storage",
-    "tabCapture",
-    "offscreen",
-    "activeTab",
-    "scripting"
-  ],
+  "permissions": ["tabCapture", "offscreen", "activeTab", "scripting"],
   "background": {
     "service_worker": "background.js"
   },
@@ -22,9 +16,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "assets/signalsmith-stretch.mjs",
-        "assets/signalsmith-stretch.wasm",
-        "assets/libs/js/tailwindcss.js"
+        "assets/libs/mjs/SignalsmithStretch.mjs",
+        "assets/libs/js/tailwindcss.js",
+        "assets/libs/js/phosphor.js"
       ],
       "matches": ["<all_urls>"]
     }

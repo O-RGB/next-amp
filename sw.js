@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v2025-12-28-1426";
+const CACHE_VERSION = "v2025-12-27-1242";
 const CACHE_NAME = `nextamp-${CACHE_VERSION}`;
 
 const ASSETS_TO_CACHE = [
@@ -6,8 +6,7 @@ const ASSETS_TO_CACHE = [
   "./index.html",
   "./app.html",
   "./manifest.json",
-  "./assets/libs/mjs/signalsmith-stretch.mjs",
-  "./assets/libs/mjs/signalsmith-stretch.wasm",
+  "./assets/libs/mjs/SignalsmithStretch.mjs",
   "./assets/libs/js/obfuscator.js",
   "./assets/libs/js/lame.min.js",
   "./assets/libs/worker/mp3-worker.js",
