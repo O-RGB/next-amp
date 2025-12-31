@@ -273,6 +273,13 @@
           <span>NEXTAMP</span>
         </div>
         <div class="flex items-center gap-1">
+          <button
+            id="btn-copy-id"
+            class="win-btn text-blue-900 font-bold bg-[#e0e0e0] mr-1"
+            title="Copy Extension ID"
+          >
+            ID
+          </button>
           <button id="btn-reset" class="win-btn" title="Reset">R</button>
           <button
             id="btn-close"
@@ -286,7 +293,9 @@
 
       <div class="p-2 flex flex-col gap-2 bg-[#222]">
         <div class="win-border-in p-1 flex gap-1 h-[80px] bg-[#1a1a1a]">
-          <div class="col-span-3 bg-black border border-gray-700 relative cursor-pointer">
+          <div
+            class="col-span-3 bg-black border border-gray-700 relative cursor-pointer"
+          >
             <canvas id="visualizer" class=""></canvas>
             <div
               class="absolute top-0.5 left-1 text-[8px] text-[#00ff00] opacity-50"

@@ -1,3 +1,5 @@
+// offscreen.js
+
 import SignalsmithStretch from "./assets/libs/mjs/SignalsmithStretch.mjs";
 
 let audioCtx, source, stretch;
@@ -5,8 +7,10 @@ let reverbNode, reverbGain, panNode, masterGain;
 let eqNodes = [];
 let analyser;
 let globalStream = null;
+let currentTabId = null; // [เพิ่ม] ตัวแปรเก็บ Tab ID ปัจจุบัน
 
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
+// ค่าเริ่มต้น
 let params = {
   pitch: 0,
   reverb: 0,
@@ -18,7 +22,8 @@ let params = {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "START_CAPTURE") {
-    startAudio(msg.streamId);
+    // [แก้ไข] รับ tabId มาด้วยเพื่อบันทึกว่ากำลังเล่น Tab ไหน
+    startAudio(msg.streamId, msg.tabId);
   } else if (msg.type === "SET_PARAM") {
     if (msg.key === "reset") {
       resetParams();
@@ -32,6 +37,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       ...params,
       eqGains: currentEq,
       isAudioActive: isActive,
+      activeTabId: currentTabId, // [เพิ่ม] ส่ง Tab ID กลับไปเช็ค
     });
   } else if (msg.type === "STOP_CAPTURE") {
     stopAudio();
@@ -48,11 +54,12 @@ function resetParams() {
     visualMode: 0,
     isEqOn: true,
   };
+  // เรียก update เพื่อรีเซ็ตค่าใน Audio Node ด้วย
   updateParams({ key: "pitch", value: 0 });
   updateParams({ key: "reverb", value: 0 });
   updateParams({ key: "pan", value: 0 });
   updateParams({ key: "volume", value: 1.0 });
-  eqNodes.forEach((n) => (n.gain.value = 0));
+  if (eqNodes.length) eqNodes.forEach((n) => (n.gain.value = 0));
 }
 
 function stopAudio() {
@@ -66,10 +73,18 @@ function stopAudio() {
     } catch (e) {}
     audioCtx = null;
   }
-  params.visualMode = 3;
+  // ไม่ reset params.visualMode เพื่อให้ UI คงสถานะเดิม
+  currentTabId = null;
 }
 
-async function startAudio(streamId) {
+async function startAudio(streamId, tabId) {
+  // [เพิ่ม] ปิดของเก่าให้หมดก่อนเริ่มใหม่เสมอ (Force Switch)
+  if (audioCtx || globalStream) {
+    stopAudio();
+  }
+
+  currentTabId = tabId; // [เพิ่ม] จำ Tab ID
+
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -79,8 +94,6 @@ async function startAudio(streamId) {
         },
       },
     });
-
-    if (audioCtx) await audioCtx.close();
 
     globalStream = stream;
     audioCtx = new AudioContext();
@@ -97,13 +110,17 @@ async function startAudio(streamId) {
       const n = audioCtx.createBiquadFilter();
       n.type = "peaking";
       n.frequency.value = f;
-      n.gain.value = 0;
+      n.gain.value = 0; // เดี๋ยวจะถูก set ใหม่ตาม params ด้านล่าง
       return n;
     });
 
     reverbNode = audioCtx.createConvolver();
     reverbNode.buffer = createImpulseResponse(3.0, 2.0);
-    reverbGain.gain.value = 0;
+
+    // [สำคัญ] ตั้งค่าเริ่มต้นจาก params ที่จำไว้ (Persistence)
+    masterGain.gain.value = params.volume;
+    reverbGain.gain.value = params.reverb;
+    panNode.pan.value = params.pan;
 
     try {
       if (!SignalsmithStretch.wasLoaded) {
@@ -113,16 +130,23 @@ async function startAudio(streamId) {
         SignalsmithStretch.wasLoaded = true;
       }
       stretch = await SignalsmithStretch(audioCtx);
+      // ตั้งค่า Pitch จากที่จำไว้ทันที
+      stretch.schedule({ active: true, rate: 1.0, semitones: params.pitch });
     } catch (err) {
       console.error("Stretch Load Error:", err);
     }
 
+    // เชื่อมต่อ Nodes
     let lastNode = source;
     if (stretch) {
       source.connect(stretch);
       lastNode = stretch;
     }
-    eqNodes.forEach((n) => {
+    eqNodes.forEach((n, i) => {
+      // Apply EQ จากที่จำไว้
+      if (params.eq && params.eq[i] !== undefined) {
+        n.gain.value = params.eq[i];
+      }
       lastNode.connect(n);
       lastNode = n;
     });
@@ -137,21 +161,19 @@ async function startAudio(streamId) {
     masterGain.connect(analyser);
     masterGain.connect(audioCtx.destination);
 
-    if (stretch) updateStretch();
-
-    params.visualMode = 0;
+    // ถ้ามีการเซ็ต Visual mode ไว้ ให้เริ่ม loop
     setTimeout(loopVisualizer, 30);
   } catch (e) {
     console.error("Audio Engine Error:", e);
+    currentTabId = null;
   }
 }
+
 function loopVisualizer() {
   if (!audioCtx || !analyser) return;
-
-  if (params.visualMode === 3) return;
+  if (params.visualMode === 3) return; // 3 = closed/stop
 
   const data = new Uint8Array(analyser.frequencyBinCount);
-
   if (params.visualMode === 2) {
     analyser.getByteTimeDomainData(data);
   } else {
@@ -170,29 +192,32 @@ function loopVisualizer() {
 }
 
 function updateParams({ key, value, index }) {
+  // [สำคัญ] บันทึกค่าลง params เสมอ ไม่ว่า audioCtx จะมีหรือไม่
+  if (key === "pitch") params.pitch = value;
+  if (key === "reverb") params.reverb = value;
+  if (key === "pan") params.pan = value;
+  if (key === "volume") params.volume = value;
+  if (key === "visualMode") params.visualMode = value;
+  if (key === "isEqOn") params.isEqOn = value;
+  if (key === "eq") {
+    if (!params.eq) params.eq = new Array(10).fill(0);
+    params.eq[index] = value;
+  }
+
+  // ถ้า Audio Engine ทำงานอยู่ ก็ให้ปรับค่า Node ด้วย
   if (!audioCtx) return;
 
   if (key === "pitch" && stretch) {
-    params.pitch = value;
     updateStretch();
   }
   if (key === "reverb") {
-    params.reverb = value;
     reverbGain.gain.value = value;
   }
   if (key === "pan") {
-    params.pan = value;
     panNode.pan.value = value;
   }
   if (key === "volume") {
-    params.volume = value;
     masterGain.gain.value = value;
-  }
-  if (key === "visualMode") {
-    params.visualMode = value;
-  }
-  if (key === "isEqOn") {
-    params.isEqOn = value;
   }
   if (key === "eq") {
     if (eqNodes[index]) eqNodes[index].gain.value = value;
@@ -206,6 +231,7 @@ function updateStretch() {
 }
 
 function createImpulseResponse(duration, decay) {
+  if (!audioCtx) return null; // Safety check
   const sampleRate = audioCtx.sampleRate;
   const length = sampleRate * duration;
   const impulse = audioCtx.createBuffer(2, length, sampleRate);

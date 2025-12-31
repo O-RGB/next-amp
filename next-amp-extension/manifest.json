@@ -13,6 +13,13 @@
   "icons": {
     "128": "assets/logo.png"
   },
+  "externally_connectable": {
+    "matches": [
+      "https://localhost:8448/*",
+      "http://localhost:8448/*",
+      "https://next-cast.vercel.app/*"
+    ]
+  },
   "web_accessible_resources": [
     {
       "resources": [
