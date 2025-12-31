@@ -80,7 +80,7 @@
       href="https://next-amp-player.vercel.app/assets/logo/logo.png"
     />
     <meta name="theme-color" content="#000000" />
-
+    <link rel="manifest" href="/manifest.json" />
     <script src="/assets/libs/js/tailwindcss.js"></script>
     <link
       href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;600&family=Sarabun:wght@300;400;600&display=swap"
@@ -93,7 +93,6 @@
         --secondary-glow: #0080ff;
       }
 
-      /* เพิ่ม background-color ให้ html เพื่อป้องกันขอบขาวเวลา Overscroll บน iPhone */
       html {
         background-color: #000000;
       }
@@ -109,7 +108,6 @@
         font-family: "Chakra Petch", sans-serif;
       }
 
-      /* ปุ่ม Start สไตล์ Neon */
       .btn-glow {
         position: relative;
         background: linear-gradient(90deg, #00b300, #00ff00);
@@ -153,16 +151,14 @@
         }
       }
 
-      /* ลบ .ad-slot ที่มีเส้นประออก หรือเปลี่ยนเป็น class ว่างๆ */
       .ad-container {
         display: flex;
         align-items: center;
         justify-content: center;
         margin: 2rem 0;
-        min-height: 90px; /* จองพื้นที่ไว้กัน layout ขยับ แต่ไม่แสดงขอบ */
+        min-height: 90px;
       }
 
-      /* Card ดีไซน์ทั่วไป */
       .feature-card {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.05);
@@ -174,7 +170,6 @@
         transform: translateY(-5px);
       }
 
-      /* Card สำหรับ Highlight Tech */
       .tech-card {
         background: linear-gradient(
           145deg,
@@ -190,7 +185,6 @@
         transform: translateY(-5px);
       }
 
-      /* Article Content Styles */
       .content-article h3 {
         font-family: "Chakra Petch", sans-serif;
         font-weight: 600;
@@ -206,21 +200,13 @@
         color: #d1d5db;
       }
       nav {
-        padding-top: calc(
-          1rem + env(safe-area-inset-top)
-        ); /* เพิ่ม padding ด้านบนให้พ้นติ่ง */
-        background-color: rgba(
-          0,
-          0,
-          0,
-          0.8
-        ); /* เพิ่มความเข้มเพื่อให้มองเห็นเนื้อหาชัดเจน */
+        padding-top: calc(1rem + env(safe-area-inset-top));
+        background-color: rgba(0, 0, 0, 0.8);
       }
       header {
         padding-top: calc(5rem + env(safe-area-inset-top));
       }
 
-      /* หากมีปุ่มหรือเนื้อหาด้านล่างสุด ให้รองรับพื้นที่ด้านล่าง (Home Indicator) */
       footer {
         padding-bottom: calc(3rem + env(safe-area-inset-bottom));
       }
@@ -338,67 +324,117 @@
           </div>
         </section>
 
-        <section id="features" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <section class="relative mt-20 mb-20">
           <div
-            class="tech-card p-6 rounded-xl md:col-span-2 relative overflow-hidden group"
+            class="tech-card rounded-2xl p-8 md:p-12 relative overflow-hidden group border border-green-500/20"
           >
             <div
-              class="absolute top-0 right-0 bg-green-900 text-green-400 text-[10px] font-bold px-3 py-1 rounded-bl-lg border-l border-b border-green-700/50 shadow-lg"
-            >
-              CORE TECHNOLOGY
-            </div>
+              class="absolute -right-20 -top-20 w-64 h-64 bg-green-500/20 rounded-full blur-[80px] group-hover:bg-green-500/30 transition duration-1000"
+            ></div>
 
             <div
-              class="flex flex-col md:flex-row gap-5 items-start md:items-center"
+              class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 items-center"
             >
-              <div
-                class="bg-black/50 p-4 rounded-full border border-green-500/30 text-green-400"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="w-8 h-8"
-                  fill="currentColor"
-                  viewBox="0 0 256 256"
-                >
-                  <path
-                    d="M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM128,152a24,24,0,0,1-24,24H72a8,8,0,0,1,0-16h32a8,8,0,0,0,0-16H72a8,8,0,0,1,0-16h32a24,24,0,0,1,24,24Zm80-24H176a8,8,0,0,1,0-16h32a8,8,0,0,0,0-16H176a8,8,0,0,1,0-16h32a24,24,0,0,1,24,24v32a24,24,0,0,1-24,24H176a8,8,0,0,1,0-16h32a8,8,0,0,0,0-16Z"
-                  ></path>
-                </svg>
-              </div>
               <div>
-                <h3
-                  class="font-display font-bold text-xl text-white mb-2 flex items-center gap-2"
+                <div
+                  class="inline-block px-3 py-1 mb-4 rounded-full border border-green-500/30 bg-black text-green-400 text-[10px] font-bold tracking-widest font-display"
                 >
-                  High-Quality Pitch & Speed Control
-                </h3>
-                <p class="text-sm text-gray-300">
-                  ปรับคีย์เพลงได้ +/- 12 semitones และเร่งความเร็วได้ตั้งแต่
-                  0.5x ถึง 2.0x โดยที่เสียงยังคงความเป็นธรรมชาติ
-                  ไม่เพี้ยนหรือกลายเป็นเสียงหุ่นยนต์
+                  NEW AVAILABLE
+                </div>
+                <h2
+                  class="text-3xl md:text-4xl font-display font-bold text-white mb-4"
+                >
+                  NEXTAMP
+                  <span
+                    class="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600"
+                    >EXTENSION</span
+                  >
+                </h2>
+                <p class="text-gray-300 mb-6 leading-relaxed">
+                  ทางเลือกใหม่! ใช้งานฟีเจอร์ของ Nextamp บนทุกเว็บไซต์
+                  ไม่ว่าจะเป็น
+                  <strong class="text-white"
+                    >YouTube, Spotify, Soundcloud</strong
+                  >
+                  ปรับ Pitch, Speed และ EQ ได้โดยตรงจากเบราว์เซอร์ของคุณ
                 </p>
+
+                <div
+                  class="bg-black/40 border border-white/10 rounded-lg p-4 mb-6 backdrop-blur-sm"
+                >
+                  <h4
+                    class="text-green-400 font-bold text-sm mb-2 font-display flex items-center gap-2"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="w-4 h-4"
+                      fill="currentColor"
+                      viewBox="0 0 256 256"
+                    >
+                      <path
+                        d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"
+                      ></path>
+                    </svg>
+                    วิธีติดตั้งด่วน (Dev Mode Only)
+                  </h4>
+                  <ol class="text-xs text-gray-400 space-y-1 ml-4 list-decimal">
+                    <li>ดาวน์โหลดไฟล์ Extension และแตกไฟล์</li>
+                    <li>
+                      เปิด Chrome ไปที่
+
+                      <code class="text-gray-300 bg-white/5 px-1 rounded"
+                        >chrome://extensions</code
+                      >
+                    </li>
+                    <li>
+                      เปิดสวิตช์ <strong>Developer mode</strong> (มุมขวาบน)
+                    </li>
+                    <li>
+                      กด
+                      <strong>Load unpacked</strong> เลือกโฟลเดอร์ที่แตกไฟล์ไว้
+                    </li>
+                  </ol>
+                </div>
+
+                <div class="flex flex-wrap gap-4">
+                  <button
+                    class="px-6 py-3 rounded bg-green-600 hover:bg-green-500 text-black font-bold font-display shadow-[0_0_15px_rgba(0,255,0,0.3)] transition transform hover:-translate-y-1"
+                  >
+                    ดาวน์โหลด .ZIP
+                  </button>
+                  <a
+                    href="install-extension.html"
+                    class="px-6 py-3 rounded border border-gray-600 hover:border-white text-white font-bold font-display transition hover:bg-white/5 flex items-center gap-2"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="w-4 h-4"
+                      fill="currentColor"
+                      viewBox="0 0 256 256"
+                    >
+                      <path
+                        d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,160H40V56H216V200ZM184,96a8,8,0,0,1-8,8H144v32h16a8,8,0,0,1,0,16H144v16a8,8,0,0,1-16,0V152H112a8,8,0,0,1,0-16h16V104H112a8,8,0,0,1,0-16h64A8,8,0,0,1,184,96Z"
+                      ></path>
+                    </svg>
+                    วิธีติดตั้งพร้อมรูปภาพ
+                  </a>
+                </div>
+              </div>
+
+              <div
+                class="relative h-full min-h-[250px] flex items-center justify-center"
+              >
+                <div
+                  class="absolute h-fit inset-0 bg-gradient-to-tr from-green-500/10 to-transparent rounded-xl border border-white/5 p-4 flex flex-col gap-2 transform rotate-2 hover:rotate-0 transition duration-500"
+                >
+                  <div
+                    class="flex-1 rounded-b flex items-center justify-center text-gray-600 font-display text-sm"
+                  >
+                    <img src="/assets/extension/next-amp.png" alt="" />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-
-          <div class="feature-card p-5 rounded-xl">
-            <h3 class="font-display font-bold text-lg text-white mb-2">
-              🎛️ EQ & Reverb
-            </h3>
-            <p class="text-sm text-gray-400">
-              ปรับย่านเสียงด้วย 10-Band Equalizer และจำลองบรรยากาศห้องด้วย
-              <strong>Reverb Effect</strong>
-              ให้เสียงร้องของคุณดูมีมิติและกังวานสมจริง
-            </p>
-          </div>
-          <div class="feature-card p-5 rounded-xl">
-            <h3 class="font-display font-bold text-lg text-white mb-2">
-              📱 Remote Upload
-            </h3>
-            <p class="text-sm text-gray-400">
-              ฟีเจอร์ใหม่! อัปโหลดไฟล์จากมือถือเข้า PC ได้ทันทีผ่าน
-              <strong>QR Code</strong> ไม่ต้องเสียบสาย
-              สะดวกสบายสำหรับการซ้อมดนตรี
-            </p>
           </div>
         </section>
 

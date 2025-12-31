@@ -1,4 +1,3 @@
-// popup.js
 const $ = (s) => document.querySelector(s);
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 const LABELS = [
@@ -43,12 +42,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const state = await sendMessageWithRetry({ type: "GET_STATE" });
 
-  // [แก้ไข 1] โหลดค่า UI เสมอ ไม่ว่า Audio จะ Active หรือไม่ เพื่อให้ UI ไม่ Reset เป็น 0
   if (state) {
     loadState(state);
   }
 
-  // ตรวจสอบ Tab ปัจจุบัน
   const [currentTab] = await chrome.tabs.query({
     active: true,
     currentWindow: true,
@@ -57,8 +54,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const isAudioActive = state && state.isAudioActive;
   const activeTabId = state ? state.activeTabId : null;
 
-  // [แก้ไข 2] Logic การแย่ง Tab (Force Switch)
-  // ถ้าไม่มีเสียงเล่น หรือ มีเสียงเล่นอยู่แต่เป็นคนละ Tab กับที่เราเปิดอยู่ -> เริ่มใหม่ที่นี่เลย
   if (!isAudioActive || (currentTab && activeTabId !== currentTab.id)) {
     console.log("Starting capture on new tab or restarting...");
     initCapture();
@@ -68,29 +63,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 function loadState(state) {
-  // Volume
   $("#main-vol").value = state.volume;
   $("#txt-vol").textContent = Math.round(state.volume * 100) + "%";
 
-  // Pan
   $("#main-pan").value = state.pan;
   updatePanText(state.pan);
 
-  // Pitch
   $("#main-pitch").value = state.pitch;
   $("#txt-pitch").textContent = (state.pitch > 0 ? "+" : "") + state.pitch;
 
-  // Reverb
   $("#main-verb").value = state.reverb;
   $("#txt-verb").textContent = parseFloat(state.reverb).toFixed(1);
 
-  // EQ / Visuals
   isEqOn = state.isEqOn;
   updateEqToggleButton();
   visualMode = state.visualMode;
 
-  // EQ Gains (เช็คทั้ง eqGains จาก Node และ params.eq ที่จำไว้)
-  // ใช้ params.eq เป็นหลักถ้ามี เพราะมันคือค่าที่ User ตั้งไว้
   const savedEq = state.eq || state.eqGains;
   if (savedEq && savedEq.length > 0) {
     currentEqValues = savedEq;
@@ -117,7 +105,6 @@ async function initCapture() {
 
     chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (streamId) => {
       if (chrome.runtime.lastError) {
-        // บางที error เพราะสิทธิ์ Tab เก่ายังไม่หลุด ให้ลองอีกครั้งหรือแจ้งเตือน
         console.error("Capture Error:", chrome.runtime.lastError.message);
         return;
       }
@@ -125,7 +112,7 @@ async function initCapture() {
         console.error("No stream ID found");
         return;
       }
-      // ส่ง tabId ไปด้วย เพื่อบอก Offscreen ว่านี่คือ Tab ใหม่
+
       chrome.runtime
         .sendMessage({
           type: "START_CAPTURE",
@@ -141,16 +128,12 @@ async function initCapture() {
   }
 }
 
-// ... (ส่วนที่เหลือของ popup.js เหมือนเดิม) ...
 function updatePanText(v) {
   const t = $("#txt-pan");
   if (t) t.textContent = v > 0 ? "R " + v : v < 0 ? "L " + Math.abs(v) : "C";
 }
 
 function setupListeners() {
-  // ... (Listeners เดิมทั้งหมด) ...
-  // ใส่โค้ดส่วน setupListeners เดิมของคุณลงที่นี่
-  // (โค้ดส่วนนี้ไม่ได้เปลี่ยนแปลง Logic แต่ต้องมีเพื่อให้ทำงานได้)
   $("#main-vol").addEventListener("input", (e) => {
     const v = parseFloat(e.target.value);
     $("#txt-vol").textContent = Math.round(v * 100) + "%";
@@ -243,8 +226,6 @@ function setupListeners() {
   }
 }
 
-// ... (ฟังก์ชันอื่น ๆ เช่น updateEqToggleButton, renderNewEQSystem, updateEQVisuals, drawEQGraph, sendParam, Visualizer Code คงเดิม) ...
-// Copy ฟังก์ชันที่เหลือจาก popup.js เดิมของคุณมาใส่ต่อท้ายได้เลยครับ
 function updateEqToggleButton() {
   const span = $("#btn-eq-toggle span:last-child");
   const btn = $("#btn-eq-toggle");
@@ -274,7 +255,7 @@ function renderNewEQSystem() {
   FREQUENCIES.forEach((f, i) => {
     const col = document.createElement("div");
     col.className = "eq-col";
-    // เปลี่ยนโครงสร้าง: ใช้ mask แทน active bar
+
     col.innerHTML = `
         <div class="eq-bar-wrapper">
             <div class="eq-bar-mask" id="mask-visual-${i}"></div>
@@ -308,17 +289,13 @@ function updateEQVisuals() {
     const val = parseFloat(slider.value);
     const percent = ((val + 12) / 24) * 100;
 
-    // อัปเดตตำแหน่ง Thumb (เหมือนเดิม)
     const thumb = document.getElementById(`thumb-visual-${idx}`);
     if (thumb) {
       thumb.style.bottom = `${percent}%`;
     }
 
-    // อัปเดต Mask สีเทา (Height คือส่วนที่เหลือจากด้านบน)
     const mask = document.getElementById(`mask-visual-${idx}`);
     if (mask) {
-      // ถ้าค่าเต็ม (100%) -> mask สูง 0%
-      // ถ้าค่าน้อยสุด (0%) -> mask สูง 100%
       mask.style.height = `${100 - percent}%`;
     }
   });
@@ -373,7 +350,6 @@ function sendParam(key, value, index = null) {
     .catch(() => {});
 }
 
-// ---------------- VISUALIZER SYSTEM ---------------- //
 const cvs = $("#visualizer");
 const ctx = cvs ? cvs.getContext("2d") : null;
 

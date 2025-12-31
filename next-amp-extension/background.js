@@ -1,4 +1,3 @@
-// background.js
 let creating;
 
 async function setupOffscreen() {
@@ -18,7 +17,6 @@ async function setupOffscreen() {
   }
 }
 
-// รับ Message จากภายใน Extension (Popup -> Background)
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "CHECK_OFFSCREEN") {
     chrome.offscreen.hasDocument().then((has) => sendResponse(has));
@@ -30,9 +28,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-// *** ส่วนที่เพิ่ม: รับ Message จากหน้าเว็บ (Host.js) ***
 chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
-  // ส่งต่อไปให้ Offscreen ประมวลผล
   if (
     msg.type === "SET_PARAM" ||
     msg.type === "START_CAPTURE" ||
@@ -40,12 +36,10 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
   ) {
     chrome.runtime.sendMessage(msg);
     sendResponse({ success: true });
-  }
-  // ดึงค่าปัจจุบันส่งคืน Host
-  else if (msg.type === "GET_STATE") {
+  } else if (msg.type === "GET_STATE") {
     chrome.runtime.sendMessage({ type: "GET_STATE" }, (response) => {
       sendResponse(response);
     });
-    return true; // บอก Chrome ว่าจะ sendResponse แบบ async
+    return true;
   }
 });

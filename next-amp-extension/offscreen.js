@@ -1,5 +1,3 @@
-// offscreen.js
-
 import SignalsmithStretch from "./assets/libs/mjs/SignalsmithStretch.mjs";
 
 let audioCtx, source, stretch;
@@ -7,10 +5,10 @@ let reverbNode, reverbGain, panNode, masterGain;
 let eqNodes = [];
 let analyser;
 let globalStream = null;
-let currentTabId = null; // [เพิ่ม] ตัวแปรเก็บ Tab ID ปัจจุบัน
+let currentTabId = null;
 
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
-// ค่าเริ่มต้น
+
 let params = {
   pitch: 0,
   reverb: 0,
@@ -22,7 +20,6 @@ let params = {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "START_CAPTURE") {
-    // [แก้ไข] รับ tabId มาด้วยเพื่อบันทึกว่ากำลังเล่น Tab ไหน
     startAudio(msg.streamId, msg.tabId);
   } else if (msg.type === "SET_PARAM") {
     if (msg.key === "reset") {
@@ -37,7 +34,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       ...params,
       eqGains: currentEq,
       isAudioActive: isActive,
-      activeTabId: currentTabId, // [เพิ่ม] ส่ง Tab ID กลับไปเช็ค
+      activeTabId: currentTabId,
     });
   } else if (msg.type === "STOP_CAPTURE") {
     stopAudio();
@@ -54,7 +51,7 @@ function resetParams() {
     visualMode: 0,
     isEqOn: true,
   };
-  // เรียก update เพื่อรีเซ็ตค่าใน Audio Node ด้วย
+
   updateParams({ key: "pitch", value: 0 });
   updateParams({ key: "reverb", value: 0 });
   updateParams({ key: "pan", value: 0 });
@@ -73,17 +70,16 @@ function stopAudio() {
     } catch (e) {}
     audioCtx = null;
   }
-  // ไม่ reset params.visualMode เพื่อให้ UI คงสถานะเดิม
+
   currentTabId = null;
 }
 
 async function startAudio(streamId, tabId) {
-  // [เพิ่ม] ปิดของเก่าให้หมดก่อนเริ่มใหม่เสมอ (Force Switch)
   if (audioCtx || globalStream) {
     stopAudio();
   }
 
-  currentTabId = tabId; // [เพิ่ม] จำ Tab ID
+  currentTabId = tabId;
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -110,14 +106,13 @@ async function startAudio(streamId, tabId) {
       const n = audioCtx.createBiquadFilter();
       n.type = "peaking";
       n.frequency.value = f;
-      n.gain.value = 0; // เดี๋ยวจะถูก set ใหม่ตาม params ด้านล่าง
+      n.gain.value = 0;
       return n;
     });
 
     reverbNode = audioCtx.createConvolver();
     reverbNode.buffer = createImpulseResponse(3.0, 2.0);
 
-    // [สำคัญ] ตั้งค่าเริ่มต้นจาก params ที่จำไว้ (Persistence)
     masterGain.gain.value = params.volume;
     reverbGain.gain.value = params.reverb;
     panNode.pan.value = params.pan;
@@ -130,20 +125,18 @@ async function startAudio(streamId, tabId) {
         SignalsmithStretch.wasLoaded = true;
       }
       stretch = await SignalsmithStretch(audioCtx);
-      // ตั้งค่า Pitch จากที่จำไว้ทันที
+
       stretch.schedule({ active: true, rate: 1.0, semitones: params.pitch });
     } catch (err) {
       console.error("Stretch Load Error:", err);
     }
 
-    // เชื่อมต่อ Nodes
     let lastNode = source;
     if (stretch) {
       source.connect(stretch);
       lastNode = stretch;
     }
     eqNodes.forEach((n, i) => {
-      // Apply EQ จากที่จำไว้
       if (params.eq && params.eq[i] !== undefined) {
         n.gain.value = params.eq[i];
       }
@@ -161,7 +154,6 @@ async function startAudio(streamId, tabId) {
     masterGain.connect(analyser);
     masterGain.connect(audioCtx.destination);
 
-    // ถ้ามีการเซ็ต Visual mode ไว้ ให้เริ่ม loop
     setTimeout(loopVisualizer, 30);
   } catch (e) {
     console.error("Audio Engine Error:", e);
@@ -171,7 +163,7 @@ async function startAudio(streamId, tabId) {
 
 function loopVisualizer() {
   if (!audioCtx || !analyser) return;
-  if (params.visualMode === 3) return; // 3 = closed/stop
+  if (params.visualMode === 3) return;
 
   const data = new Uint8Array(analyser.frequencyBinCount);
   if (params.visualMode === 2) {
@@ -192,7 +184,6 @@ function loopVisualizer() {
 }
 
 function updateParams({ key, value, index }) {
-  // [สำคัญ] บันทึกค่าลง params เสมอ ไม่ว่า audioCtx จะมีหรือไม่
   if (key === "pitch") params.pitch = value;
   if (key === "reverb") params.reverb = value;
   if (key === "pan") params.pan = value;
@@ -204,7 +195,6 @@ function updateParams({ key, value, index }) {
     params.eq[index] = value;
   }
 
-  // ถ้า Audio Engine ทำงานอยู่ ก็ให้ปรับค่า Node ด้วย
   if (!audioCtx) return;
 
   if (key === "pitch" && stretch) {
@@ -231,7 +221,7 @@ function updateStretch() {
 }
 
 function createImpulseResponse(duration, decay) {
-  if (!audioCtx) return null; // Safety check
+  if (!audioCtx) return null;
   const sampleRate = audioCtx.sampleRate;
   const length = sampleRate * duration;
   const impulse = audioCtx.createBuffer(2, length, sampleRate);

@@ -139,7 +139,6 @@
         position: relative;
       }
 
-      /* Styles from Index.html */
       .font-display {
         font-family: "Chakra Petch", sans-serif;
       }
@@ -158,11 +157,8 @@
         border: 1px solid rgba(255, 255, 255, 0.05);
       }
 
-      /* Navigation Scroll Animation */
       #main-nav {
-        padding-top: calc(
-          0.75rem + env(safe-area-inset-top)
-        ); /* เพิ่ม padding ด้านบน */
+        padding-top: calc(0.75rem + env(safe-area-inset-top));
         transition: transform 0.3s ease-in-out, background-color 0.3s;
         transform: translateY(-100%);
       }
@@ -170,7 +166,6 @@
         transform: translateY(0);
       }
 
-      /* App Viewport Container */
       .app-viewport {
         position: relative;
         width: 100%;
@@ -180,7 +175,6 @@
         background: radial-gradient(circle at center, #003504 0%, #020617 80%);
       }
 
-      /* Content Section (Info below player) */
       .content-section {
         position: relative;
         z-index: 5;
@@ -192,7 +186,6 @@
         width: 100%;
       }
 
-      /* WinUI Styles */
       .win-btn {
         background-color: #c0c0c0;
         color: black;
@@ -415,11 +408,6 @@
         display: inline-block;
       }
 
-      /* ========================================================================= */
-      /* [CRITICAL FIX] Modal Positioning & Popup/Fullscreen Logic */
-      /* ========================================================================= */
-
-      /* Force Modals to stay FIXED on screen (Viewport) regardless of page length */
       .app-modal {
         position: fixed !important;
         top: 0;
@@ -429,7 +417,6 @@
         z-index: 9999;
       }
 
-      /* ซ่อน Content และ Navbar เมื่ออยู่ในโหมด Popup หรือ Fullscreen */
       body.popup-mode #main-nav,
       body.fullscreen-mode #main-nav,
       body.popup-mode .content-section,
@@ -445,14 +432,12 @@
         display: none !important;
       }
 
-      /* ปรับ Body ให้ไม่มี Scroll */
       body.popup-mode,
       body.fullscreen-mode {
         background: #000;
         overflow: hidden;
       }
 
-      /* ขยาย Viewport ให้เต็ม 100% ของหน้าจอ */
       body.popup-mode .app-viewport,
       body.fullscreen-mode .app-viewport {
         height: 100vh;
@@ -462,7 +447,6 @@
         background: radial-gradient(circle at center, #003504 0%, #000000 90%);
       }
 
-      /* เอาเงาออกเพื่อให้เนียนไปกับขอบจอ */
       body.popup-mode .sci-fi-container-glow,
       body.fullscreen-mode .sci-fi-container-glow {
         box-shadow: none;
@@ -1508,6 +1492,141 @@
             "กรุณาอนุญาตให้เปิด Pop-up ในการตั้งค่าเบราว์เซอร์ของคุณ เพื่อใช้งานโหมดหน้าต่างแยก"
           );
         }
+      }
+    </script>
+
+    <div
+      id="desktop-install-controls"
+      class="fixed bottom-4 right-4 flex flex-col items-end gap-3 z-[9999] pointer-events-none"
+    >
+      <button
+        id="btn-pwa-install"
+        class="hidden pointer-events-auto group flex items-center gap-3 bg-black/80 backdrop-blur border border-green-500/50 text-green-400 pl-4 pr-1 py-1 rounded-full shadow-[0_0_10px_rgba(0,255,0,0.2)] hover:bg-green-900/40 hover:border-green-400 transition-all duration-300 translate-x-32 opacity-0 animate-slide-in"
+      >
+        <span class="text-[10px] font-bold font-display tracking-wider"
+          >INSTALL APP</span
+        >
+        <div
+          class="w-8 h-8 rounded-full bg-green-500 text-black flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform"
+        >
+          <i class="ph-bold ph-download-simple"></i>
+        </div>
+      </button>
+
+      <a
+        href="install-extension.html"
+        target="_blank"
+        id="btn-ext-install"
+        class="hidden pointer-events-auto group flex items-center gap-3 bg-black/80 backdrop-blur border border-blue-500/50 text-blue-400 pl-4 pr-1 py-1 rounded-full shadow-[0_0_10px_rgba(0,100,255,0.2)] hover:bg-blue-900/40 hover:border-blue-400 transition-all duration-300 translate-x-32 opacity-0 animate-slide-in"
+        style="animation-delay: 0.1s"
+        onclick="openExtensionGuide(event)"
+      >
+        <div class="text-right">
+          <div
+            class="text-[10px] font-bold font-display tracking-wider leading-tight"
+          >
+            EXTENSION
+          </div>
+          <div class="text-[8px] text-gray-400 leading-tight">DEV MODE</div>
+        </div>
+        <div
+          class="w-8 h-8 rounded-full bg-blue-500 text-black flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform"
+        >
+          <i class="ph-bold ph-puzzle-piece"></i>
+        </div>
+      </a>
+    </div>
+
+    <script>
+      (function () {
+        const pwaBtn = document.getElementById("btn-pwa-install");
+        const extBtn = document.getElementById("btn-ext-install");
+        const controlsContainer = document.getElementById(
+          "desktop-install-controls"
+        );
+
+        // 1. Mobile Check (ถ้าเป็นมือถือ ซ่อนถาวรและจบฟังก์ชันทันที)
+        const isMobile =
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+            navigator.userAgent
+          ) || window.innerWidth < 768;
+
+        if (isMobile) {
+          controlsContainer.style.display = "none";
+          return;
+        }
+
+        // Helper: ฟังก์ชันแสดงปุ่ม (Slide in)
+        function showButton(btn) {
+          btn.classList.remove("hidden");
+          // ใช้ Timeout เล็กน้อยเพื่อให้ Animation ทำงานหลังจาก remove hidden
+          setTimeout(() => {
+            btn.classList.remove("translate-x-32", "opacity-0");
+          }, 100);
+        }
+
+        // ==========================================
+        // LOGIC 1: PWA Install Button
+        // ==========================================
+        let deferredPrompt;
+
+        // เช็คว่าเคยติดตั้งไปแล้วหรือยัง (Standalone Mode)
+        const isStandalone = window.matchMedia(
+          "(display-mode: standalone)"
+        ).matches;
+
+        if (!isStandalone) {
+          window.addEventListener("beforeinstallprompt", (e) => {
+            // ป้องกัน Chrome โชว์แถบติดตั้งเอง
+            e.preventDefault();
+            deferredPrompt = e;
+
+            // แสดงปุ่ม PWA
+            showButton(pwaBtn);
+          });
+
+          pwaBtn.addEventListener("click", async () => {
+            if (!deferredPrompt) return;
+
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`User response: ${outcome}`);
+            deferredPrompt = null;
+
+            // ถ้ากดติดตั้งแล้ว ให้ซ่อนปุ่ม
+            if (outcome === "accepted") {
+              pwaBtn.classList.add("translate-x-32", "opacity-0");
+              setTimeout(() => pwaBtn.classList.add("hidden"), 300);
+            }
+          });
+        }
+
+        // ==========================================
+        // LOGIC 2: Extension Install Button
+        // ==========================================
+        // แสดงเฉพาะบน Chrome/Edge Desktop ที่น่าจะลง Extension ได้
+        const isChromium = !!window.chrome;
+
+        // เงื่อนไข: เป็น Chromium Desktop และยังไม่ได้อยู่ในโหมด PWA (หรือจะให้แสดงใน PWA ด้วยก็ได้ถ้าต้องการ)
+        // แต่ปกติ Extension มักใช้กับ Browser Tab ปกติ
+        if (isChromium) {
+          showButton(extBtn);
+        }
+      })();
+
+      // ฟังก์ชันเปิดหน้าคู่มือ Extension แบบ Popup (ถ้าต้องการ)
+      function openExtensionGuide(e) {
+        e.preventDefault();
+        const width = 900;
+        const height = 800;
+        const left = (window.screen.width - width) / 2;
+        const top = (window.screen.height - height) / 2;
+
+        window.open(
+          "install-extension.html",
+          "NextampExtensionGuide",
+          `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
+        );
       }
     </script>
   </body>
