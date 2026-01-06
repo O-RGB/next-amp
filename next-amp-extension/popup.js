@@ -98,9 +98,10 @@ async function initCapture() {
     if (!tab) return;
 
     let hasOffscreen = await sendMessageWithRetry({ type: "CHECK_OFFSCREEN" });
+    // ใน popup.js
     if (!hasOffscreen) {
       await sendMessageWithRetry({ type: "INIT_OFFSCREEN" });
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 1000)); // เพิ่มเป็น 1000 หรือ 1500
     }
 
     chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (streamId) => {
@@ -158,6 +159,31 @@ function setupListeners() {
     sendParam("reverb", v);
   });
 
+  // --- VIDEO DELAY LISTENER (NEW) ---
+  const videoDelayInput = $("#video-delay");
+  if (videoDelayInput) {
+    videoDelayInput.addEventListener("input", async (e) => {
+      const v = parseFloat(e.target.value);
+      const label = $("#txt-video-delay");
+      if (label) label.textContent = v.toFixed(1) + "s";
+
+      // ส่งค่า Delay ไปยัง Content Script ใน Tab ปัจจุบัน
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (tab) {
+        chrome.tabs
+          .sendMessage(tab.id, { type: "SET_VIDEO_DELAY", value: v })
+          .catch(() => {
+            // กรณีส่งไม่สำเร็จ (เช่น หน้าเว็บยังโหลดไม่เสร็จ หรือเป็นหน้า chrome://)
+            console.log("Video Delay message failed to send.");
+          });
+      }
+    });
+  }
+  // ----------------------------------
+
   $("#eq-preset").addEventListener("change", (e) => {
     const values = PRESETS[e.target.value] || PRESETS.flat;
     currentEqValues = [...values];
@@ -168,7 +194,8 @@ function setupListeners() {
     updateEQVisuals();
   });
 
-  $("#btn-reset").addEventListener("click", () => {
+  $("#btn-reset").addEventListener("click", async () => {
+    // Reset Audio Params
     $("#main-pitch").value = 0;
     $("#txt-pitch").textContent = "0";
     $("#main-verb").value = 0;
@@ -182,6 +209,23 @@ function setupListeners() {
     document.querySelectorAll(".eq-slider").forEach((inp) => (inp.value = 0));
 
     sendParam("reset", true);
+
+    // Reset Video Delay (NEW)
+    if (videoDelayInput) {
+      videoDelayInput.value = 0;
+      const label = $("#txt-video-delay");
+      if (label) label.textContent = "0s";
+
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (tab) {
+        chrome.tabs
+          .sendMessage(tab.id, { type: "SET_VIDEO_DELAY", value: 0 })
+          .catch(() => {});
+      }
+    }
 
     isEqOn = true;
     updateEqToggleButton();

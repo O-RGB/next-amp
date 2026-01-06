@@ -26,9 +26,9 @@
       html,
       body {
         width: 320px !important;
-        height: 400px !important;
+        height: 450px !important;
         min-width: 320px;
-        min-height: 400px;
+        min-height: 450px;
         margin: 0;
         padding: 0;
         overflow: hidden;
@@ -370,6 +370,27 @@
               id="main-verb"
               min="0"
               max="2"
+              step="0.1"
+              value="0"
+              class="h-slider w-full"
+            />
+          </div>
+        </div>
+        <div>
+          <div class="win-border-in bg-[#1a1a1a] p-1.5 relative mt-2">
+            <div
+              class="flex justify-between text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
+            >
+              <span>Video Delay</span>
+              <span id="txt-video-delay" class="theme-text-sec text-[9px]"
+                >0s</span
+              >
+            </div>
+            <input
+              type="range"
+              id="video-delay"
+              min="0"
+              max="5"
               step="0.1"
               value="0"
               class="h-slider w-full"

@@ -20,7 +20,9 @@ let params = {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "START_CAPTURE") {
-    startAudio(msg.streamId, msg.tabId);
+    // ส่ง sendResponse เข้าไปเพื่อให้ฟังก์ชันเรียกใช้เมื่อทำงานเสร็จ
+    startAudio(msg.streamId, msg.tabId, sendResponse);
+    return true; // บอก Chrome ว่าจะมีการตอบกลับแบบ Asynchronous
   } else if (msg.type === "SET_PARAM") {
     if (msg.key === "reset") {
       resetParams();
@@ -38,8 +40,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
   } else if (msg.type === "STOP_CAPTURE") {
     stopAudio();
+    sendResponse({ success: true });
   }
-  return true;
+  // return true เฉพาะกรณี START_CAPTURE ที่เป็น Async
 });
 
 function resetParams() {
@@ -74,7 +77,8 @@ function stopAudio() {
   currentTabId = null;
 }
 
-async function startAudio(streamId, tabId) {
+// เพิ่ม parameter sendResponse
+async function startAudio(streamId, tabId, sendResponse) {
   if (audioCtx || globalStream) {
     stopAudio();
   }
@@ -155,9 +159,19 @@ async function startAudio(streamId, tabId) {
     masterGain.connect(audioCtx.destination);
 
     setTimeout(loopVisualizer, 30);
+
+    // แจ้งกลับว่าทำงานสำเร็จ
+    if (sendResponse) {
+      sendResponse({ success: true });
+    }
   } catch (e) {
     console.error("Audio Engine Error:", e);
     currentTabId = null;
+
+    // แจ้งกลับว่าเกิดข้อผิดพลาด
+    if (sendResponse) {
+      sendResponse({ success: false, error: e.message });
+    }
   }
 }
 
