@@ -6,35 +6,49 @@ class Monitor {
     this.enabled = true;
     this.startMonitor();
   }
-
   startMonitor() {
-    // ฟัง Message จาก Popup
-    chrome.runtime.onMessage.addListener((message) => {
+    // 1. ถามค่า Global Delay ทันทีที่โหลดหน้าเว็บ
+    chrome.runtime.sendMessage({ type: "GET_STATE" }, (response) => {
+      if (response && response.videoDelay) {
+        const globalDelay = parseFloat(response.videoDelay) * 1000;
+        console.log("Monitor: Syncing global delay ->", globalDelay);
+
+        if (globalDelay > 0) {
+          this.delay = globalDelay;
+          this.setupVideoListeners();
+          document.querySelectorAll("video").forEach((v) => {
+            this.waitForVideoFrameRefresh(v);
+          });
+        }
+      }
+    });
+
+    // 2. Listener เดิม (สำหรับการเปลี่ยนค่าผ่าน Popup)
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === "SET_VIDEO_DELAY") {
         const newDelay = parseFloat(message.value) * 1000;
-        const wasDisabled = this.delay <= 0;
+        console.log("Monitor: Setting delay to", newDelay);
 
+        const wasDisabled = this.delay <= 0;
         this.delay = newDelay;
 
         if (this.delay > 0) {
           if (wasDisabled) {
-            // กรณีที่ 1: เปิดใช้งานครั้งแรก (จาก 0 -> มีค่า)
-            // ต้องสั่ง setup ใหม่เพื่อให้เริ่มจับ Video ในหน้านั้น
             this.setupVideoListeners();
-            // และสั่ง scan หา video ทันทีเผื่อ observer ยังไม่ทำงาน
             document.querySelectorAll("video").forEach((v) => {
               this.waitForVideoFrameRefresh(v);
             });
           } else {
-            // กรณีที่ 2: เปลี่ยนค่า Delay (มีค่า -> มีค่าใหม่)
-            // อัปเดต Video ตัวเดิมที่จับไว้อยู่แล้ว
             this.updateDelays();
           }
         } else {
-          // กรณีที่ 3: ปิดการใช้งาน (มีค่า -> 0)
-          this.updateDelays(); // ฟังก์ชันนี้มี logic เคลียร์ค่าอยู่แล้ว
+          this.updateDelays();
         }
+      } else if (message.type === "GET_VIDEO_DELAY") {
+        const currentVal = this.delay / 1000;
+        sendResponse({ value: currentVal });
       }
+      return true;
     });
 
     this.setupVideoListeners();

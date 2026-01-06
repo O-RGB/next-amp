@@ -16,13 +16,13 @@ let params = {
   volume: 1.0,
   visualMode: 0,
   isEqOn: true,
+  videoDelay: 0,
 };
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "START_CAPTURE") {
-    // ส่ง sendResponse เข้าไปเพื่อให้ฟังก์ชันเรียกใช้เมื่อทำงานเสร็จ
     startAudio(msg.streamId, msg.tabId, sendResponse);
-    return true; // บอก Chrome ว่าจะมีการตอบกลับแบบ Asynchronous
+    return true;
   } else if (msg.type === "SET_PARAM") {
     if (msg.key === "reset") {
       resetParams();
@@ -42,7 +42,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     stopAudio();
     sendResponse({ success: true });
   }
-  // return true เฉพาะกรณี START_CAPTURE ที่เป็น Async
 });
 
 function resetParams() {
@@ -53,12 +52,14 @@ function resetParams() {
     volume: 1.0,
     visualMode: 0,
     isEqOn: true,
+    videoDelay: 0,
   };
 
   updateParams({ key: "pitch", value: 0 });
   updateParams({ key: "reverb", value: 0 });
   updateParams({ key: "pan", value: 0 });
   updateParams({ key: "volume", value: 1.0 });
+  updateParams({ key: "videoDelay", value: 0 });
   if (eqNodes.length) eqNodes.forEach((n) => (n.gain.value = 0));
 }
 
@@ -77,7 +78,6 @@ function stopAudio() {
   currentTabId = null;
 }
 
-// เพิ่ม parameter sendResponse
 async function startAudio(streamId, tabId, sendResponse) {
   if (audioCtx || globalStream) {
     stopAudio();
@@ -160,7 +160,6 @@ async function startAudio(streamId, tabId, sendResponse) {
 
     setTimeout(loopVisualizer, 30);
 
-    // แจ้งกลับว่าทำงานสำเร็จ
     if (sendResponse) {
       sendResponse({ success: true });
     }
@@ -168,7 +167,6 @@ async function startAudio(streamId, tabId, sendResponse) {
     console.error("Audio Engine Error:", e);
     currentTabId = null;
 
-    // แจ้งกลับว่าเกิดข้อผิดพลาด
     if (sendResponse) {
       sendResponse({ success: false, error: e.message });
     }
@@ -204,6 +202,7 @@ function updateParams({ key, value, index }) {
   if (key === "volume") params.volume = value;
   if (key === "visualMode") params.visualMode = value;
   if (key === "isEqOn") params.isEqOn = value;
+  if (key === "videoDelay") params.videoDelay = value;
   if (key === "eq") {
     if (!params.eq) params.eq = new Array(10).fill(0);
     params.eq[index] = value;

@@ -41,22 +41,56 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupListeners();
 
   const state = await sendMessageWithRetry({ type: "GET_STATE" });
-
   if (state) {
     loadState(state);
   }
 
-  const [currentTab] = await chrome.tabs.query({
-    active: true,
-    currentWindow: true,
-  });
+  try {
+    const [currentTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
 
-  const isAudioActive = state && state.isAudioActive;
-  const activeTabId = state ? state.activeTabId : null;
+    if (currentTab) {
+      console.log("Popup: Asking for video delay...");
+      chrome.tabs.sendMessage(
+        currentTab.id,
+        { type: "GET_VIDEO_DELAY" },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            console.log(
+              "Popup Error/No Script:",
+              chrome.runtime.lastError.message
+            );
+            return;
+          }
 
-  if (!isAudioActive || (currentTab && activeTabId !== currentTab.id)) {
-    console.log("Starting capture on new tab or restarting...");
-    initCapture();
+          console.log("Popup: Received response ->", response);
+
+          if (response && typeof response.value === "number") {
+            const delayVal = response.value;
+
+            const videoDelayInput = $("#video-delay");
+            if (videoDelayInput) {
+              videoDelayInput.value = delayVal;
+            }
+
+            const label = $("#txt-video-delay");
+            if (label) {
+              label.textContent = delayVal.toFixed(1) + "s";
+            }
+          }
+        }
+      );
+    }
+
+    const isAudioActive = state && state.isAudioActive;
+    const activeTabId = state ? state.activeTabId : null;
+    if (!isAudioActive || (currentTab && activeTabId !== currentTab.id)) {
+      initCapture();
+    }
+  } catch (e) {
+    console.error("Popup Init Error:", e);
   }
 
   setTimeout(() => drawEQGraph(currentEqValues), 50);
@@ -75,6 +109,29 @@ function loadState(state) {
   $("#main-verb").value = state.reverb;
   $("#txt-verb").textContent = parseFloat(state.reverb).toFixed(1);
 
+  const savedDelay = state.videoDelay || 0;
+
+  const videoDelayInput = $("#video-delay");
+  if (videoDelayInput) {
+    videoDelayInput.value = savedDelay;
+  }
+
+  const numDelayInput = $("#num-video-delay");
+  if (numDelayInput) {
+    numDelayInput.value = parseFloat(savedDelay).toFixed(2);
+  }
+
+  chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+    if (tab) {
+      chrome.tabs
+        .sendMessage(tab.id, {
+          type: "SET_VIDEO_DELAY",
+          value: savedDelay,
+        })
+        .catch(() => {});
+    }
+  });
+
   isEqOn = state.isEqOn;
   updateEqToggleButton();
   visualMode = state.visualMode;
@@ -86,6 +143,7 @@ function loadState(state) {
       inp.value = currentEqValues[i] || 0;
     });
   }
+
   updateEQVisuals();
 }
 
@@ -98,10 +156,10 @@ async function initCapture() {
     if (!tab) return;
 
     let hasOffscreen = await sendMessageWithRetry({ type: "CHECK_OFFSCREEN" });
-    // ใน popup.js
+
     if (!hasOffscreen) {
       await sendMessageWithRetry({ type: "INIT_OFFSCREEN" });
-      await new Promise((r) => setTimeout(r, 1000)); // เพิ่มเป็น 1000 หรือ 1500
+      await new Promise((r) => setTimeout(r, 1000));
     }
 
     chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (streamId) => {
@@ -159,30 +217,62 @@ function setupListeners() {
     sendParam("reverb", v);
   });
 
-  // --- VIDEO DELAY LISTENER (NEW) ---
-  const videoDelayInput = $("#video-delay");
-  if (videoDelayInput) {
-    videoDelayInput.addEventListener("input", async (e) => {
-      const v = parseFloat(e.target.value);
-      const label = $("#txt-video-delay");
-      if (label) label.textContent = v.toFixed(1) + "s";
+  const slider = $("#video-delay");
+  const numberInput = $("#num-video-delay");
+  const btnMinus = $("#btn-delay-minus");
+  const btnPlus = $("#btn-delay-plus");
 
-      // ส่งค่า Delay ไปยัง Content Script ใน Tab ปัจจุบัน
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-      if (tab) {
-        chrome.tabs
-          .sendMessage(tab.id, { type: "SET_VIDEO_DELAY", value: v })
-          .catch(() => {
-            // กรณีส่งไม่สำเร็จ (เช่น หน้าเว็บยังโหลดไม่เสร็จ หรือเป็นหน้า chrome://)
-            console.log("Video Delay message failed to send.");
-          });
-      }
+  async function syncDelay(val) {
+    let v = parseFloat(val);
+    if (isNaN(v)) v = 0;
+    if (v < 0) v = 0;
+    if (v > 9.99) v = 9.99;
+
+    if (slider) slider.value = v;
+    if (numberInput) numberInput.value = v.toFixed(2);
+
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (tab) {
+      chrome.tabs
+        .sendMessage(tab.id, { type: "SET_VIDEO_DELAY", value: v })
+        .catch(() => {});
+    }
+
+    sendParam("videoDelay", v);
+  }
+
+  if (slider) {
+    slider.addEventListener("input", (e) => {
+      syncDelay(e.target.value);
     });
   }
-  // ----------------------------------
+
+  if (numberInput) {
+    numberInput.addEventListener("change", (e) => {
+      syncDelay(e.target.value);
+    });
+
+    numberInput.addEventListener("input", (e) => {
+      slider.value = e.target.value;
+    });
+  }
+
+  if (btnMinus) {
+    btnMinus.addEventListener("click", () => {
+      let current = parseFloat(numberInput.value) || 0;
+      syncDelay(current - 0.1);
+    });
+  }
+
+  if (btnPlus) {
+    btnPlus.addEventListener("click", () => {
+      let current = parseFloat(numberInput.value) || 0;
+      syncDelay(current + 0.1);
+    });
+  }
 
   $("#eq-preset").addEventListener("change", (e) => {
     const values = PRESETS[e.target.value] || PRESETS.flat;
@@ -195,7 +285,6 @@ function setupListeners() {
   });
 
   $("#btn-reset").addEventListener("click", async () => {
-    // Reset Audio Params
     $("#main-pitch").value = 0;
     $("#txt-pitch").textContent = "0";
     $("#main-verb").value = 0;
@@ -210,7 +299,6 @@ function setupListeners() {
 
     sendParam("reset", true);
 
-    // Reset Video Delay (NEW)
     if (videoDelayInput) {
       videoDelayInput.value = 0;
       const label = $("#txt-video-delay");
