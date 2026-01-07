@@ -1,13 +1,14 @@
-import SignalsmithStretch from "./assets/libs/mjs/SignalsmithStretch.mjs";
+import { PitchProcessor } from "./pitch-processor.js";
+import { AudioEffects } from "./audio-effects.js";
 
-let audioCtx, source, stretch;
-let reverbNode, reverbGain, panNode, masterGain;
-let eqNodes = [];
-let analyser;
+let audioCtx;
 let globalStream = null;
 let currentTabId = null;
 
-const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
+// Modules
+let pitchProc = null;
+let effects = null;
+let analyser = null;
 
 let params = {
   pitch: 0,
@@ -17,6 +18,9 @@ let params = {
   visualMode: 0,
   isEqOn: true,
   videoDelay: 0,
+  videoQuality: "max",
+  normalize: false,
+  eq: new Array(10).fill(0),
 };
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -30,7 +34,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       updateParams(msg);
     }
   } else if (msg.type === "GET_STATE") {
-    const currentEq = eqNodes.length ? eqNodes.map((n) => n.gain.value) : [];
+    const currentEq = effects
+      ? effects.getEQNodes().map((n) => n.gain.value)
+      : params.eq;
     const isActive = audioCtx && audioCtx.state === "running";
     sendResponse({
       ...params,
@@ -44,45 +50,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-function resetParams() {
-  params = {
-    pitch: 0,
-    reverb: 0,
-    pan: 0,
-    volume: 1.0,
-    visualMode: 0,
-    isEqOn: true,
-    videoDelay: 0,
-  };
-
-  updateParams({ key: "pitch", value: 0 });
-  updateParams({ key: "reverb", value: 0 });
-  updateParams({ key: "pan", value: 0 });
-  updateParams({ key: "volume", value: 1.0 });
-  updateParams({ key: "videoDelay", value: 0 });
-  if (eqNodes.length) eqNodes.forEach((n) => (n.gain.value = 0));
-}
-
-function stopAudio() {
-  if (globalStream) {
-    globalStream.getTracks().forEach((track) => track.stop());
-    globalStream = null;
-  }
-  if (audioCtx) {
-    try {
-      audioCtx.close();
-    } catch (e) {}
-    audioCtx = null;
-  }
-
-  currentTabId = null;
-}
-
 async function startAudio(streamId, tabId, sendResponse) {
-  if (audioCtx || globalStream) {
-    stopAudio();
-  }
-
+  if (audioCtx || globalStream) stopAudio();
   currentTabId = tabId;
 
   try {
@@ -97,85 +66,131 @@ async function startAudio(streamId, tabId, sendResponse) {
 
     globalStream = stream;
     audioCtx = new AudioContext();
-    source = audioCtx.createMediaStreamSource(stream);
+    const source = audioCtx.createMediaStreamSource(stream);
 
-    masterGain = audioCtx.createGain();
-    reverbGain = audioCtx.createGain();
-    panNode = audioCtx.createStereoPanner();
+    // 1. Init Modules
+    pitchProc = new PitchProcessor(audioCtx);
+    await pitchProc.init();
+
+    effects = new AudioEffects(audioCtx);
+
+    // 2. Connect Graph: Source -> Stretch -> Effects -> Dest
+    let head = source;
+
+    // ต่อ Pitch Shift (ถ้าโหลดผ่าน)
+    if (pitchProc.getNode()) {
+      source.connect(pitchProc.getNode());
+      head = pitchProc.getNode(); // เปลี่ยนหัวขบวนเป็น Stretch Node
+    }
+
+    // ต่อเข้า Effects Chain
+    effects.setInput(head);
+
+    // ต่อ Analyzer (สำหรับ Visualizer)
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
     analyser.smoothingTimeConstant = 0.8;
 
-    eqNodes = FREQUENCIES.map((f) => {
-      const n = audioCtx.createBiquadFilter();
-      n.type = "peaking";
-      n.frequency.value = f;
-      n.gain.value = 0;
-      return n;
-    });
+    // Master -> Analyzer -> Destination
+    const master = effects.getMasterNode();
+    master.connect(analyser);
+    master.connect(audioCtx.destination);
 
-    reverbNode = audioCtx.createConvolver();
-    reverbNode.buffer = createImpulseResponse(3.0, 2.0);
+    // 3. Apply Initial Params
+    applyAllParams();
 
-    masterGain.gain.value = params.volume;
-    reverbGain.gain.value = params.reverb;
-    panNode.pan.value = params.pan;
-
-    try {
-      if (!SignalsmithStretch.wasLoaded) {
-        SignalsmithStretch.moduleUrl = chrome.runtime.getURL(
-          "assets/libs/mjs/SignalsmithStretch.mjs"
-        );
-        SignalsmithStretch.wasLoaded = true;
-      }
-      stretch = await SignalsmithStretch(audioCtx);
-
-      stretch.schedule({ active: true, rate: 1.0, semitones: params.pitch });
-    } catch (err) {
-      console.error("Stretch Load Error:", err);
-    }
-
-    let lastNode = source;
-    if (stretch) {
-      source.connect(stretch);
-      lastNode = stretch;
-    }
-    eqNodes.forEach((n, i) => {
-      if (params.eq && params.eq[i] !== undefined) {
-        n.gain.value = params.eq[i];
-      }
-      lastNode.connect(n);
-      lastNode = n;
-    });
-
-    lastNode.connect(panNode);
-    panNode.connect(masterGain);
-
-    eqNodes[eqNodes.length - 1].connect(reverbNode);
-    reverbNode.connect(reverbGain);
-    reverbGain.connect(masterGain);
-
-    masterGain.connect(analyser);
-    masterGain.connect(audioCtx.destination);
-
+    // Start Loops
+    if (pitchProc) pitchProc.setPitch(params.pitch);
     setTimeout(loopVisualizer, 30);
 
-    if (sendResponse) {
-      sendResponse({ success: true });
-    }
+    sendResponse({ success: true });
   } catch (e) {
     console.error("Audio Engine Error:", e);
     currentTabId = null;
-
-    if (sendResponse) {
-      sendResponse({ success: false, error: e.message });
-    }
+    sendResponse({ success: false, error: e.message });
   }
+}
+
+function stopAudio() {
+  if (globalStream) {
+    globalStream.getTracks().forEach((track) => track.stop());
+    globalStream = null;
+  }
+  if (audioCtx) {
+    try {
+      audioCtx.close();
+    } catch (e) {}
+    audioCtx = null;
+  }
+  pitchProc = null;
+  effects = null;
+  currentTabId = null;
+}
+// ในฟังก์ชัน updateParams ของ offscreen.js
+
+function updateParams({ key, value, index }) {
+  // Update local state
+  if (key === "eq" && index !== null) params.eq[index] = value;
+  else if (key in params) params[key] = value;
+
+  if (!audioCtx || !effects) return;
+
+  // Delegate to modules
+  switch (key) {
+    case "pitch":
+      if (pitchProc) pitchProc.setPitch(value);
+      break;
+    case "volume":
+      effects.setVolume(value);
+      break;
+    case "pan":
+      effects.setPan(value);
+      break;
+    case "reverb":
+      effects.setReverb(value);
+      break;
+    case "normalize":
+      effects.updateNormalize(value);
+      break;
+    case "eq":
+      effects.setEQ(index, value);
+      break;
+    case "isEqOn":
+      effects.setEQEnabled(value);
+      break;
+  }
+}
+
+function applyAllParams() {
+  if (!effects) return;
+  effects.setVolume(params.volume);
+  effects.setPan(params.pan);
+  effects.setReverb(params.reverb);
+  effects.updateNormalize(params.normalize);
+  params.eq.forEach((val, i) => effects.setEQ(i, val));
+}
+
+function resetParams() {
+  // Reset state object
+  params = {
+    pitch: 0,
+    reverb: 0,
+    pan: 0,
+    volume: 1.0,
+    visualMode: 0,
+    isEqOn: true,
+    videoDelay: 0,
+    videoQuality: "max",
+    normalize: false,
+    eq: new Array(10).fill(0),
+  };
+  applyAllParams();
+  if (pitchProc) pitchProc.setPitch(0);
 }
 
 function loopVisualizer() {
   if (!audioCtx || !analyser) return;
-  if (params.visualMode === 3) return;
+  if (params.visualMode === 3) return; // Mode ปิด
 
   const data = new Uint8Array(analyser.frequencyBinCount);
   if (params.visualMode === 2) {
@@ -193,59 +208,4 @@ function loopVisualizer() {
     .catch(() => {});
 
   setTimeout(loopVisualizer, 30);
-}
-
-function updateParams({ key, value, index }) {
-  if (key === "pitch") params.pitch = value;
-  if (key === "reverb") params.reverb = value;
-  if (key === "pan") params.pan = value;
-  if (key === "volume") params.volume = value;
-  if (key === "visualMode") params.visualMode = value;
-  if (key === "isEqOn") params.isEqOn = value;
-  if (key === "videoDelay") params.videoDelay = value;
-  if (key === "eq") {
-    if (!params.eq) params.eq = new Array(10).fill(0);
-    params.eq[index] = value;
-  }
-
-  if (!audioCtx) return;
-
-  if (key === "pitch" && stretch) {
-    updateStretch();
-  }
-  if (key === "reverb") {
-    reverbGain.gain.value = value;
-  }
-  if (key === "pan") {
-    panNode.pan.value = value;
-  }
-  if (key === "volume") {
-    masterGain.gain.value = value;
-  }
-  if (key === "eq") {
-    if (eqNodes[index]) eqNodes[index].gain.value = value;
-  }
-}
-
-function updateStretch() {
-  if (stretch) {
-    stretch.schedule({ active: true, rate: 1.0, semitones: params.pitch });
-  }
-}
-
-function createImpulseResponse(duration, decay) {
-  if (!audioCtx) return null;
-  const sampleRate = audioCtx.sampleRate;
-  const length = sampleRate * duration;
-  const impulse = audioCtx.createBuffer(2, length, sampleRate);
-  for (let ch = 0; ch < 2; ch++) {
-    const data = impulse.getChannelData(ch);
-    let lastOut = 0;
-    for (let i = 0; i < length; i++) {
-      const white = Math.random() * 2 - 1;
-      lastOut = lastOut + 0.12 * (white - lastOut);
-      data[i] = lastOut * Math.exp(-decay * (i / length) * (duration / 2));
-    }
-  }
-  return impulse;
 }

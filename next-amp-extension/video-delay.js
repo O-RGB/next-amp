@@ -3,41 +3,43 @@ class Monitor {
     this.videoCallbacks = new Map();
     this.delayedVideos = new Map();
     this.delay = 0;
+    this.quality = "max";
     this.enabled = true;
     this.startMonitor();
   }
-  startMonitor() {
-    // 1. ถามค่า Global Delay ทันทีที่โหลดหน้าเว็บ
-    chrome.runtime.sendMessage({ type: "GET_STATE" }, (response) => {
-      if (response && response.videoDelay) {
-        const globalDelay = parseFloat(response.videoDelay) * 1000;
-        console.log("Monitor: Syncing global delay ->", globalDelay);
 
-        if (globalDelay > 0) {
-          this.delay = globalDelay;
-          this.setupVideoListeners();
-          document.querySelectorAll("video").forEach((v) => {
-            this.waitForVideoFrameRefresh(v);
-          });
+  startMonitor() {
+    chrome.runtime.sendMessage({ type: "GET_STATE" }, (response) => {
+      if (response) {
+        if (response.videoQuality) {
+          this.quality = response.videoQuality;
+        }
+
+        if (response.videoDelay) {
+          const globalDelay = parseFloat(response.videoDelay) * 1000;
+          if (globalDelay > 0) {
+            this.delay = globalDelay;
+            this.setupVideoListeners();
+            document
+              .querySelectorAll("video")
+              .forEach((v) => this.waitForVideoFrameRefresh(v));
+          }
         }
       }
     });
 
-    // 2. Listener เดิม (สำหรับการเปลี่ยนค่าผ่าน Popup)
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === "SET_VIDEO_DELAY") {
         const newDelay = parseFloat(message.value) * 1000;
-        console.log("Monitor: Setting delay to", newDelay);
-
         const wasDisabled = this.delay <= 0;
         this.delay = newDelay;
 
         if (this.delay > 0) {
           if (wasDisabled) {
             this.setupVideoListeners();
-            document.querySelectorAll("video").forEach((v) => {
-              this.waitForVideoFrameRefresh(v);
-            });
+            document
+              .querySelectorAll("video")
+              .forEach((v) => this.waitForVideoFrameRefresh(v));
           } else {
             this.updateDelays();
           }
@@ -45,8 +47,12 @@ class Monitor {
           this.updateDelays();
         }
       } else if (message.type === "GET_VIDEO_DELAY") {
-        const currentVal = this.delay / 1000;
-        sendResponse({ value: currentVal });
+        sendResponse({ value: this.delay / 1000 });
+      } else if (message.type === "SET_VIDEO_QUALITY") {
+        this.quality = message.value;
+        this.delayedVideos.forEach((delayedVideo) =>
+          delayedVideo.updateQuality(this.quality)
+        );
       }
       return true;
     });
@@ -55,19 +61,12 @@ class Monitor {
   }
 
   updateDelays() {
-    // อัปเดต Video ที่กำลัง Delay อยู่
-    this.delayedVideos.forEach((delayedVideo) => {
-      delayedVideo.updateDelayedVideo(this.delay);
-    });
-
-    // ถ้า Delay เป็น 0 ให้หยุดการทำงานและ Reset ระบบ
+    this.delayedVideos.forEach((delayedVideo) =>
+      delayedVideo.updateDelay(this.delay)
+    );
     if (this.delay <= 0) {
-      this.delayedVideos.forEach((delayedVideo) => {
-        delayedVideo.cleanupTextures();
-        delayedVideo.stopDelayedVideo();
-      });
+      this.delayedVideos.forEach((delayedVideo) => delayedVideo.destroy());
       this.delayedVideos.clear();
-      // ไม่ต้อง setupVideoListeners() ซ้ำที่นี่ รอให้เปิดใช้ใหม่ค่อย setup
     }
   }
 
@@ -78,19 +77,11 @@ class Monitor {
     }
     this.clearVideoCallbacks();
 
-    const checkAndAttach = (video) => {
-      // เอาเงื่อนไข delay > 0 ออก หรือย้ายไปเช็คข้างใน waitForVideoFrameRefresh แทนก็ได้
-      // แต่เพื่อให้ชัวร์ ให้เรียก waitForVideoFrameRefresh เลย แล้วให้ฟังก์ชันนั้นตัดสินใจเอง
-      this.waitForVideoFrameRefresh(video);
-    };
-
-    // ค้นหา Video ที่มีอยู่แล้วทันที
+    const checkAndAttach = (video) => this.waitForVideoFrameRefresh(video);
     document.querySelectorAll("video").forEach(checkAndAttach);
 
     this.observer = new MutationObserver((mutations) => {
-      // ถ้า Delay เป็น 0 ไม่ต้องเสียเวลา monitor DOM
       if (this.delay <= 0) return;
-
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
           if (node.tagName === "VIDEO") checkAndAttach(node);
@@ -99,7 +90,6 @@ class Monitor {
         });
       });
     });
-
     this.observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
@@ -108,18 +98,17 @@ class Monitor {
 
   clearVideoCallbacks() {
     this.videoCallbacks.forEach((callbackId, video) => {
-      if ("cancelVideoFrameCallback" in HTMLVideoElement.prototype)
+      if ("cancelVideoFrameCallback" in HTMLVideoElement.prototype) {
         try {
           video.cancelVideoFrameCallback(callbackId);
         } catch {}
+      }
     });
     this.videoCallbacks.clear();
   }
 
   waitForVideoFrameRefresh(video) {
-    // หัวใจสำคัญ: ถ้า Delay เป็น 0 ให้จบการทำงานทันที ไม่ต้องไปยุ่งกับ Video
     if (this.delay <= 0) return;
-
     if (
       video.closest(".video-delay-container") ||
       this.videoCallbacks.has(video) ||
@@ -137,7 +126,6 @@ class Monitor {
         this.videoCallbacks.set(video, callbackId);
       }
     };
-
     requestFrameCallback();
     const onPlay = () => {
       if (
@@ -145,251 +133,67 @@ class Monitor {
         !this.videoCallbacks.has(video) &&
         !this.delayedVideos.has(video) &&
         this.delay > 0
-      )
+      ) {
         requestFrameCallback();
+      }
     };
     video.addEventListener("play", onPlay);
-    video.addEventListener("loadstart", onPlay);
   }
 
   delayVideo(video) {
     if (this.delay <= 0) return;
-    const delayedVideo = new DelayedVideo(video, this.delay);
+
+    const delayedVideo = new DelayedVideo(video, this.delay, this.quality);
     this.delayedVideos.set(video, delayedVideo);
   }
 
   stopVideoDelay(video) {
     if (this.delayedVideos.has(video)) {
-      const dv = this.delayedVideos.get(video);
-      dv.cleanupTextures();
-      dv.stopDelayedVideo();
+      this.delayedVideos.get(video).destroy();
       this.delayedVideos.delete(video);
     }
   }
 }
 
 class DelayedVideo {
-  constructor(video, delay) {
+  constructor(video, delay, quality = "max") {
     this.video = video;
-    this.originalDelay = delay;
     this.delay = delay;
-    this.frameDelay = Math.max(Math.round(delay / 16.67) - 1, 0);
+    this.quality = quality;
 
-    this.timingMode = "frame";
-    this.frameCounter = 0;
-    this.lastRAFTime = performance.now();
-    this.rafIntervals = [];
+    this.isActive = true;
+    this.isTabVisible = !document.hidden;
+    this.lastRenderedSubtitleHash = "";
 
-    this.availableTextures = [];
-    this.usedTextures = new Set();
+    this.frameQueue = [];
 
     this.subtitleElements = [];
     this.hiddenSubtitleElements = [];
-    this.delayedSubtitleLines = [];
 
-    this.visibleTab = !document.hidden;
-    this.tabWasHidden = false;
-    this.videoEnded = false;
-    this.lastFrameShown = false;
-    this.restartDelayedVideo = false;
+    this.init();
+  }
 
-    this.pendingTimeouts = [];
-    this.pendingRAFs = [];
+  updateQuality(newQuality) {
+    this.quality = newQuality;
+    this.resize();
+  }
 
-    this.addEventListeners();
+  async init() {
     this.createCanvases();
     this.determineSubtitlePlayer();
-    this.startDelayedVideo();
+    this.addEventListeners();
+
+    this.video.requestVideoFrameCallback(this.onVideoFrame.bind(this));
+    this.renderLoopId = requestAnimationFrame(this.renderLoop.bind(this));
   }
 
-  checkFrameRate(currentTime) {
-    const interval = currentTime - this.lastRAFTime;
-    this.lastRAFTime = currentTime;
-
-    if (this.frameCounter < 10) return;
-
-    this.rafIntervals.push(interval);
-
-    if (this.rafIntervals.length >= 10) {
-      const avgInterval =
-        this.rafIntervals.reduce((a, b) => a + b) / this.rafIntervals.length;
-
-      if (avgInterval < 14) this.switchToTimeMode();
-
-      this.rafIntervals = [];
-    }
-  }
-
-  switchToTimeMode() {
-    this.timingMode = "time";
-    this.delay = this.originalDelay;
-    this.videoStartTime = this.initiationTime;
-  }
-
-  addEventListeners() {
-    this.video.addEventListener("resize", () => {
-      this.updateCanvasDimensions();
-    });
-
-    this.resizeObserver = new ResizeObserver(() => {
-      this.updateCanvasDimensions();
-    });
-    this.resizeObserver.observe(this.video);
-
-    this.videoEmptiedHandler = () => {
-      monitor.stopVideoDelay(this.video);
-    };
-
-    this.video.addEventListener("emptied", this.videoEmptiedHandler);
-
-    this.visibilityChangeHandler = () => {
-      this.visibleTab = !document.hidden;
-
-      if (!this.visibleTab) this.tabWasHidden = true;
-    };
-
-    document.addEventListener("visibilitychange", this.visibilityChangeHandler);
-  }
-
-  isPlex() {
-    if (
-      document.childNodes.length < 2 ||
-      document.childNodes[1].nodeType !== Node.COMMENT_NODE
-    )
-      return false;
-
-    const commentText = document.childNodes[1].textContent.trim();
-
-    return (
-      commentText.includes("=======   ==") &&
-      commentText.includes("/==   /== /==   =====   ==   ==") &&
-      commentText.includes("/==////   /== /=======  //===") &&
-      commentText.includes("/==       /== //======  == //==") &&
-      commentText.includes("//        //   /////   //   //")
-    );
-  }
-
-  updateCanvasDimensions() {
-    if (!this.videoCanvas || !this.video) return;
-
-    const videoStyle = window.getComputedStyle(this.video);
-
-    this.videoCanvas.width = this.video.videoWidth;
-    this.videoCanvas.height = this.video.videoHeight;
-
-    const videoRect = this.video.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-
-    if (window.location.hostname.includes("instagram.com")) {
-      this.videoCanvas.style.position = "absolute";
-      this.videoCanvas.style.top = "0px";
-      this.videoCanvas.style.left = "0px";
-      this.videoCanvas.style.width = videoStyle.width;
-      this.videoCanvas.style.height = videoStyle.height;
-      this.videoCanvas.style.transform = videoStyle.transform;
-    } else {
-      if (videoStyle.position === "relative") {
-        this.videoCanvas.style.position = "absolute";
-        this.videoCanvas.style.top = "0px";
-        this.videoCanvas.style.left = "0px";
-      } else {
-        this.videoCanvas.style.position = videoStyle.position;
-        this.videoCanvas.style.top = videoStyle.top;
-        this.videoCanvas.style.left = videoStyle.left;
-      }
-
-      this.videoCanvas.style.width = videoStyle.width;
-      this.videoCanvas.style.height = videoStyle.height;
-      this.videoCanvas.style.transform = videoStyle.transform;
-    }
-
-    if (this.subtitleContext) {
-      this.subtitleContext.setTransform(1, 0, 0, 1, 0, 0);
-      this.subtitleContext.scale(dpr, dpr);
-      this.subtitleContext.imageSmoothingEnabled = false;
-    }
-
-    this.subtitleCanvas.width = videoRect.width * dpr;
-    this.subtitleCanvas.height = videoRect.height * dpr;
-
-    if (videoStyle.position === "relative") {
-      this.subtitleCanvas.style.position = "absolute";
-      this.subtitleCanvas.style.top = "0px";
-      this.subtitleCanvas.style.left = "0px";
-    } else {
-      this.subtitleCanvas.style.position = videoStyle.position;
-      this.subtitleCanvas.style.top = videoStyle.top;
-      this.subtitleCanvas.style.left = videoStyle.left;
-    }
-
-    this.subtitleCanvas.style.width = videoStyle.width;
-    this.subtitleCanvas.style.height = videoStyle.height;
-    this.subtitleCanvas.style.transform = videoStyle.transform;
-
-    if (this.gl)
-      this.gl.viewport(0, 0, this.videoCanvas.width, this.videoCanvas.height);
-  }
-
-  drawWebGLFrame(texture) {
-    if (!this.gl || !texture || !this.gl.isTexture(texture)) return;
-
-    const gl = this.gl;
-
-    gl.useProgram(this.program);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-    gl.enableVertexAttribArray(this.positionAttributeLocation);
-    gl.vertexAttribPointer(
-      this.positionAttributeLocation,
-      2,
-      gl.FLOAT,
-      false,
-      0,
-      0
-    );
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-    gl.enableVertexAttribArray(this.texCoordAttributeLocation);
-    gl.vertexAttribPointer(
-      this.texCoordAttributeLocation,
-      2,
-      gl.FLOAT,
-      false,
-      0,
-      0
-    );
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.uniform1i(this.textureUniformLocation, 0);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  }
-
-  async createCanvases() {
-    if (!this.video) return;
-
+  createCanvases() {
+    const cssText =
+      "pointer-events: none !important; position: absolute !important; object-fit: contain !important;";
     this.videoCanvas = document.createElement("canvas");
-    this.videoCanvas.style.setProperty("pointer-events", "none", "important");
-    this.videoCanvas.style.setProperty("object-fit", "contain", "important");
-
+    this.videoCanvas.style.cssText = cssText;
     this.subtitleCanvas = document.createElement("canvas");
-    this.subtitleCanvas.style.setProperty(
-      "pointer-events",
-      "none",
-      "important"
-    );
-    this.subtitleCanvas.style.setProperty("object-fit", "contain", "important");
-
-    if (!this.videoCanvas) return;
-
-    this.gl =
-      this.videoCanvas.getContext("webgl2") ||
-      this.videoCanvas.getContext("webgl");
-
-    if (!this.gl) return;
-
-    this.setupWebGL();
-
-    this.subtitleContext = this.subtitleCanvas.getContext("2d", {
-      alpha: true,
-    });
+    this.subtitleCanvas.style.cssText = cssText;
 
     if (this.video.parentNode) {
       this.video.parentNode.insertBefore(
@@ -402,1084 +206,300 @@ class DelayedVideo {
       );
     }
 
-    if (this.subtitleContext)
-      this.subtitleContext.imageSmoothingEnabled = false;
+    this.gl =
+      this.videoCanvas.getContext("webgl2") ||
+      this.videoCanvas.getContext("webgl");
+    this.subCtx = this.subtitleCanvas.getContext("2d");
 
-    const framePromise = await this.captureFrame(performance.now());
-
-    if (framePromise) {
-      const frame = framePromise;
-
-      const initialTexture = this.getReusableTexture();
-
-      this.gl.bindTexture(this.gl.TEXTURE_2D, initialTexture);
-      this.gl.texImage2D(
-        this.gl.TEXTURE_2D,
-        0,
-        this.gl.RGBA,
-        this.gl.RGBA,
-        this.gl.UNSIGNED_BYTE,
-        this.video
-      );
-
-      this.initialFrame = {
-        texture: initialTexture,
-        timestamp: frame.timestamp,
-        frameNumber: frame.frameNumber,
-      };
-
-      try {
-        this.drawWebGLFrame(frame.texture);
-      } catch {}
+    if (!this.gl) {
+      console.error("WebGL not supported");
+      this.destroy();
+      return;
     }
 
+    this.setupWebGL();
+
     setTimeout(() => {
-      this.video.style.setProperty(
-        "opacity",
-        this.isPlex() ? "1" : "0",
-        "important"
-      );
-    }, 17);
+      if (this.video) this.video.style.setProperty("opacity", "0", "important");
+    }, 50);
+    this.resize();
   }
 
   setupWebGL() {
     const gl = this.gl;
 
-    const vertexShaderSource = `
-      attribute vec2 a_position;
-      attribute vec2 a_texCoord;
-      varying vec2 v_texCoord;
-      
-      void main() {
-        gl_Position = vec4(a_position, 0.0, 1.0);
-        v_texCoord = a_texCoord;
-      }
-    `;
-    const fragmentShaderSource = `
-      precision mediump float;
-      uniform sampler2D u_texture;
-      varying vec2 v_texCoord;
-      
-      void main() {
-        gl_FragColor = texture2D(u_texture, v_texCoord);
-      }
-    `;
-    const vertexShader = this.createShader(
-      gl.VERTEX_SHADER,
-      vertexShaderSource
+    const vsSource = `attribute vec2 p; attribute vec2 t; varying vec2 v; void main(){gl_Position=vec4(p,0,1);v=t;}`;
+    const fsSource = `precision mediump float; uniform sampler2D u; varying vec2 v; void main(){gl_FragColor=texture2D(u,v);}`;
+
+    const compile = (type, src) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      return s;
+    };
+
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSource));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSource));
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+      gl.STATIC_DRAW
     );
-    const fragmentShader = this.createShader(
-      gl.FRAGMENT_SHADER,
-      fragmentShaderSource
+    const posLoc = gl.getAttribLocation(prog, "p");
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([0, 1, 1, 1, 0, 0, 1, 0]),
+      gl.STATIC_DRAW
     );
+    const texLoc = gl.getAttribLocation(prog, "t");
+    gl.enableVertexAttribArray(texLoc);
+    gl.vertexAttribPointer(texLoc, 2, gl.FLOAT, false, 0, 0);
 
-    this.program = gl.createProgram();
-
-    gl.attachShader(this.program, vertexShader);
-    gl.attachShader(this.program, fragmentShader);
-    gl.linkProgram(this.program);
-
-    if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) return;
-
-    this.positionAttributeLocation = gl.getAttribLocation(
-      this.program,
-      "a_position"
-    );
-    this.texCoordAttributeLocation = gl.getAttribLocation(
-      this.program,
-      "a_texCoord"
-    );
-    this.textureUniformLocation = gl.getUniformLocation(
-      this.program,
-      "u_texture"
-    );
-
-    this.positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-
-    const positions = [-1, -1, 1, -1, -1, 1, 1, 1];
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-
-    this.texCoordBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-
-    const texCoords = [0, 1, 1, 1, 0, 0, 1, 0];
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texCoords), gl.STATIC_DRAW);
-
-    this.createReusableTextures();
-  }
-
-  createReusableTextures() {
-    const gl = this.gl;
-
-    for (let i = 0; i < 4; i++) {
-      const texture = gl.createTexture();
-
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-      this.availableTextures.push(texture);
-    }
-  }
-
-  getReusableTexture() {
-    if (this.availableTextures.length > 0) {
-      const texture = this.availableTextures.pop();
-      this.usedTextures.add(texture);
-
-      return texture;
-    }
-
-    const gl = this.gl;
-    const texture = gl.createTexture();
-
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    this.renderTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.renderTexture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    this.usedTextures.add(texture);
-
-    return texture;
   }
 
-  returnReusableTexture(texture) {
-    if (this.usedTextures.has(texture)) {
-      this.usedTextures.delete(texture);
-
-      if (this.availableTextures.length < 4)
-        this.availableTextures.push(texture);
-      else if (this.gl && this.gl.deleteTexture) this.gl.deleteTexture(texture);
-    }
-  }
-
-  createShader(type, source) {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      gl.deleteShader(shader);
-
-      return null;
-    }
-
-    return shader;
-  }
-
-  captureFrame(frameArrivalTime) {
-    if (!this.video || this.video.readyState < 2) return null;
+  async onVideoFrame(now, metadata) {
+    if (!this.isActive) return;
+    this.video.requestVideoFrameCallback(this.onVideoFrame.bind(this));
+    if (!this.gl || this.delay <= 0) return;
 
     try {
-      const gl = this.gl;
-      const texture = this.getReusableTexture();
+      const bitmap = await createImageBitmap(this.video);
 
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        this.video
-      );
-
-      return Promise.resolve({
-        texture: texture,
-        timestamp: frameArrivalTime,
-        frameNumber: this.frameCounter,
+      this.frameQueue.push({
+        bitmap: bitmap,
+        timestamp: performance.now(),
+        subtitles: this.captureSubtitleSnapshot(),
       });
-    } catch {
-      return Promise.resolve(null);
+
+      if (this.frameQueue.length > 1000) {
+        const dropped = this.frameQueue.shift();
+        if (dropped && dropped.bitmap) dropped.bitmap.close();
+      }
+    } catch (e) {}
+  }
+
+  renderLoop() {
+    if (!this.isActive) return;
+    this.renderLoopId = requestAnimationFrame(this.renderLoop.bind(this));
+
+    if (this.frameQueue.length === 0 || !this.isTabVisible) return;
+
+    const now = performance.now();
+
+    const slot = this.frameQueue[0];
+
+    const timeSinceCapture = now - slot.timestamp;
+
+    if (timeSinceCapture >= this.delay) {
+      const frameToRender = this.frameQueue.shift();
+
+      this.drawFrame(frameToRender);
+
+      frameToRender.bitmap.close();
+
+      while (
+        this.frameQueue.length > 0 &&
+        now - this.frameQueue[0].timestamp > this.delay + 100
+      ) {
+        const dropped = this.frameQueue.shift();
+        if (dropped.bitmap) dropped.bitmap.close();
+      }
     }
   }
 
-  async startDelayedVideo() {
-    this.delayedVideoActive = true;
-    this.lastDrawnFrameTimestamp = 0;
-    this.stopFrameCounter = 0;
+  drawFrame(slot) {
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.renderTexture);
+    this.gl.texImage2D(
+      this.gl.TEXTURE_2D,
+      0,
+      this.gl.RGBA,
+      this.gl.RGBA,
+      this.gl.UNSIGNED_BYTE,
+      slot.bitmap
+    );
 
-    const renderLoop = async (timestamp) => {
-      if (!this.delayedVideoActive) return;
-
-      requestAnimationFrame(renderLoop);
-
-      if (this.timingMode === "frame") this.checkFrameRate(timestamp);
-
-      if (!this.visibleTab || this.lastFrameShown) return;
-
-      this.frameCounter++;
-
-      try {
-        if (this.timingMode === "time") {
-          if (timestamp - this.videoStartTime < this.delay + 17) {
-            this.drawWebGLFrame(this.initialFrame.texture);
-          } else if (
-            this.delayedFrame &&
-            this.delayedFrame.timestamp > this.lastDrawnFrameTimestamp - 34
-          ) {
-            this.drawWebGLFrame(this.delayedFrame.texture);
-
-            this.lastDrawnFrameTimestamp = this.delayedFrame.timestamp;
-
-            if (this.subtitleContext) {
-              this.subtitleContext.clearRect(
-                0,
-                0,
-                this.subtitleCanvas.width,
-                this.subtitleCanvas.height
-              );
-              this.renderSubtitles(
-                this.subtitleCanvas.width,
-                this.subtitleCanvas.height
-              );
-            }
-          }
-        } else {
-          if (this.frameCounter - this.videoStartTime < this.frameDelay + 1) {
-            this.drawWebGLFrame(this.initialFrame.texture);
-          } else if (this.delayedFrame) {
-            this.drawWebGLFrame(this.delayedFrame.texture);
-
-            if (this.subtitleContext) {
-              this.subtitleContext.clearRect(
-                0,
-                0,
-                this.subtitleCanvas.width,
-                this.subtitleCanvas.height
-              );
-              this.renderSubtitles(
-                this.subtitleCanvas.width,
-                this.subtitleCanvas.height
-              );
-            }
-          }
-        }
-      } catch {}
-
-      if (this.video.ended) {
-        if (this.timingMode === "time" && !this.videoEnded) {
-          this.videoEnded = true;
-
-          setTimeout(() => {
-            if (this.video.ended && !this.lastFrameShown) {
-              if (this.gl) this.gl.clear(this.gl.COLOR_BUFFER_BIT);
-              if (this.subtitleContext)
-                this.subtitleContext.clearRect(
-                  0,
-                  0,
-                  this.subtitleCanvas.width,
-                  this.subtitleCanvas.height
-                );
-
-              this.lastFrameShown = true;
-            }
-          }, this.delay + 34);
-        } else if (this.timingMode === "frame") {
-          this.videoEnded = true;
-          this.stopFrameCounter++;
-
-          if (this.stopFrameCounter > this.frameDelay) {
-            if (this.gl) this.gl.clear(this.gl.COLOR_BUFFER_BIT);
-            if (this.subtitleContext)
-              this.subtitleContext.clearRect(
-                0,
-                0,
-                this.subtitleCanvas.width,
-                this.subtitleCanvas.height
-              );
-
-            this.lastFrameShown = true;
-          }
-        }
-      } else if (this.video.paused) {
-        if (this.timingMode === "time" && !this.videoPaused) {
-          this.videoPaused = true;
-
-          setTimeout(() => {
-            if (this.video.paused && !this.lastFrameShown)
-              this.lastFrameShown = true;
-          }, this.delay);
-        } else if (this.timingMode === "frame") {
-          this.stopFrameCounter++;
-
-          if (this.stopFrameCounter > this.frameDelay)
-            this.lastFrameShown = true;
-        }
-      }
-    };
-
-    this.initiationTime = performance.now();
-    this.videoStartTime = this.frameCounter;
-
-    renderLoop();
-
-    this.getFrameStates();
-    this.captureFrameData();
+    this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+    this.drawSubtitles(slot.subtitles);
   }
 
-  getFrameStates() {
-    const getFrameState = async () => {
-      if (!this.delayedVideoActive) return;
-
-      if (this.videoEnded) this.restartDelayedVideo = true;
-
-      this.lastFrameShown = false;
-      this.videoPaused = false;
-      this.videoEnded = false;
-      this.stopFrameCounter = 0;
-
-      this.requestVideoAnimationFrame(getFrameState);
-    };
-
-    getFrameState();
-  }
-
-  requestVideoAnimationFrame(callback) {
-    return this.video.requestVideoFrameCallback(callback);
-  }
-
-  async captureFrameData() {
-    const captureFrameLoop = async () => {
-      if (!this.delayedVideoActive) return;
-
-      requestAnimationFrame(captureFrameLoop);
-
-      if (!this.visibleTab || this.video.paused || this.video.ended) return;
-
-      const frameArrivalTime = performance.now();
-      const framePromise = await this.captureFrame(frameArrivalTime);
-
-      if (!framePromise) return;
-
-      const frame = framePromise;
-
-      if (!frame || !frame.texture) return;
-
-      if (!this.initialFrame) {
-        const initialTexture = this.getReusableTexture();
-
-        this.gl.bindTexture(this.gl.TEXTURE_2D, initialTexture);
-        this.gl.texImage2D(
-          this.gl.TEXTURE_2D,
-          0,
-          this.gl.RGBA,
-          this.gl.RGBA,
-          this.gl.UNSIGNED_BYTE,
-          this.video
-        );
-
-        this.initialFrame = {
-          texture: initialTexture,
-          timestamp: frame.timestamp,
-          frameNumber: frame.frameNumber,
-        };
-      }
-
-      if (this.restartDelayedVideo) {
-        this.restartDelayedVideo = false;
-
-        if (this.initialFrame?.texture)
-          this.returnReusableTexture(this.initialFrame.texture);
-
-        const initialTexture = this.getReusableTexture();
-
-        this.gl.bindTexture(this.gl.TEXTURE_2D, initialTexture);
-        this.gl.texImage2D(
-          this.gl.TEXTURE_2D,
-          0,
-          this.gl.RGBA,
-          this.gl.RGBA,
-          this.gl.UNSIGNED_BYTE,
-          this.video
-        );
-
-        this.initialFrame = {
-          texture: initialTexture,
-          timestamp: frame.timestamp,
-          frameNumber: frame.frameNumber,
-        };
-
-        if (this.timingMode === "time") this.videoStartTime = performance.now();
-        else this.videoStartTime = this.frameCounter;
-      }
-
-      if (this.tabWasHidden) {
-        this.tabWasHidden = false;
-
-        if (this.initialFrame?.texture)
-          this.returnReusableTexture(this.initialFrame.texture);
-
-        const initialTexture = this.getReusableTexture();
-
-        this.gl.bindTexture(this.gl.TEXTURE_2D, initialTexture);
-        this.gl.texImage2D(
-          this.gl.TEXTURE_2D,
-          0,
-          this.gl.RGBA,
-          this.gl.RGBA,
-          this.gl.UNSIGNED_BYTE,
-          this.video
-        );
-
-        this.initialFrame = {
-          texture: initialTexture,
-          timestamp: frame.timestamp,
-          frameNumber: frame.frameNumber,
-        };
-
-        if (this.timingMode === "time") this.videoStartTime = performance.now();
-        else this.videoStartTime = this.frameCounter;
-      }
-
-      this.currentFrame = frame;
-
-      this.scheduleFrameDelay();
-      this.captureSubtitleData();
-    };
-
-    captureFrameLoop();
-  }
-
-  scheduleFrameDelay() {
-    const currentFrame = this.currentFrame;
-
-    if (this.timingMode === "time") {
-      const adjustedDelay =
-        this.delay - (performance.now() - currentFrame.timestamp) - 2;
-
-      const timeoutId = setTimeout(() => {
-        if (!this.delayedVideoActive) return;
-
-        this.pendingTimeouts = this.pendingTimeouts.filter(
-          (id) => id !== timeoutId
-        );
-
-        if (this.delayedFrame?.texture)
-          this.returnReusableTexture(this.delayedFrame.texture);
-
-        this.delayedFrame = currentFrame;
-      }, Math.max(0, adjustedDelay));
-
-      this.pendingTimeouts.push(timeoutId);
+  captureSubtitleSnapshot() {
+    let snapshot = [];
+    if (this.subtitleType === "jwp") {
+      this.subtitleElements.forEach((el) => snapshot.push(el.innerHTML));
     } else {
-      const targetFrameNumber = this.frameCounter + this.frameDelay;
-
-      const delayLoop = () => {
-        if (!this.delayedVideoActive) return;
-
-        if (this.frameCounter >= targetFrameNumber) {
-          if (currentFrame.frameNumber <= (this.acceptFramesAfter || 0)) {
-            this.returnReusableTexture(currentFrame.texture);
-
-            return;
-          }
-
-          if (this.delayedFrame?.texture)
-            this.returnReusableTexture(this.delayedFrame.texture);
-
-          this.delayedFrame = currentFrame;
-        } else {
-          const rafId = requestAnimationFrame(delayLoop);
-          this.pendingRAFs.push(rafId);
-        }
-      };
-
-      const rafId = requestAnimationFrame(delayLoop);
-      this.pendingRAFs.push(rafId);
+      const yt = document.querySelectorAll(".ytp-caption-segment");
+      yt.forEach((el) => snapshot.push({ text: el.textContent }));
     }
+    return snapshot;
+  }
+
+  drawSubtitles(subtitleData) {
+    const currentHash = JSON.stringify(subtitleData);
+    if (currentHash === this.lastRenderedSubtitleHash) return;
+    this.lastRenderedSubtitleHash = currentHash;
+
+    this.subCtx.clearRect(
+      0,
+      0,
+      this.subtitleCanvas.width,
+      this.subtitleCanvas.height
+    );
+    if (!subtitleData || subtitleData.length === 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const w = this.subtitleCanvas.width / dpr;
+    const h = this.subtitleCanvas.height / dpr;
+    const fontSize = h * 0.05;
+
+    this.subCtx.save();
+    this.subCtx.scale(dpr, dpr);
+    this.subCtx.font = `bold ${fontSize}px Arial`;
+    this.subCtx.textAlign = "center";
+    this.subCtx.fillStyle = "white";
+    this.subCtx.strokeStyle = "black";
+    this.subCtx.lineWidth = 3;
+
+    let yPos = h * 0.9;
+    subtitleData.forEach((line) => {
+      const text =
+        typeof line === "string" ? line.replace(/<[^>]*>?/gm, "") : line.text;
+      if (text) {
+        this.subCtx.strokeText(text, w / 2, yPos);
+        this.subCtx.fillText(text, w / 2, yPos);
+        yPos -= fontSize + 5;
+      }
+    });
+    this.subCtx.restore();
   }
 
   determineSubtitlePlayer() {
-    const captionElements = document.querySelectorAll('[class*="caption"]');
+    const jw = document.querySelector(".jw-captions");
+    if (jw) {
+      this.subtitleType = "jwp";
+      this.subtitleElements = [jw];
+      jw.style.opacity = "0";
+      this.hiddenSubtitleElements.push({ el: jw, prop: "opacity", val: "" });
+    } else {
+      const style = document.createElement("style");
+      style.textContent =
+        ".ytp-caption-window-bottom, .ytp-caption-window-rollup { opacity: 0 !important; }";
+      document.head.appendChild(style);
+      this.hideSubtitlesStyle = style;
+    }
+  }
 
-    if (captionElements.length === 0) return false;
+  updateDelay(newDelay) {
+    this.delay = newDelay;
+  }
 
-    const visibleCaptions = Array.from(captionElements).filter((element) => {
-      const styles = window.getComputedStyle(element);
-
-      return (
-        styles.display !== "none" &&
-        styles.visibility !== "hidden" &&
-        styles.opacity !== "0"
-      );
-    });
-
-    if (visibleCaptions.length === 0) return false;
-
-    const hasJwCaptions = visibleCaptions.some((element) =>
-      element.innerHTML.trim().includes("jw-reset")
+  addEventListeners() {
+    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver.observe(this.video);
+    if (this.video.parentNode)
+      this.resizeObserver.observe(this.video.parentNode);
+    document.addEventListener("fullscreenchange", () =>
+      setTimeout(() => this.resize(), 100)
     );
 
-    if (!hasJwCaptions) {
-      this.hideSubtitlesStyle = document.createElement("style");
-      this.hideSubtitlesStyle.textContent =
-        ".ytp-caption-window-bottom, .ytp-caption-window-rollup { opacity: 0 !important; }";
-      document.head.appendChild(this.hideSubtitlesStyle);
-
-      return false;
-    }
-
-    this.subtitleType = "jwp";
-    this.subtitleElements = Array.from(visibleCaptions);
-
-    this.subtitleElements.forEach((element) => {
-      const originalStyles = {
-        opacity: element.style.opacity,
-        display: element.style.display,
-      };
-
-      element.style.setProperty("opacity", "0", "important");
-
-      this.hiddenSubtitleElements.push({
-        element: element,
-        originalStyles: originalStyles,
-      });
-    });
-
-    return true;
-  }
-
-  captureSubtitleData() {
-    this.lines = [];
-
-    if (this.subtitleType === "jwp") {
-      this.subtitleElements.forEach((element) => {
-        const html = element.innerHTML.trim();
-
-        if (html) this.parseJWSubtitles(html);
-      });
-    } else {
-      const ytCaptionElements = document.querySelectorAll(
-        ".ytp-caption-window-bottom, .ytp-caption-window-rollup"
-      );
-
-      if (ytCaptionElements.length > 0) {
-        const captionsToCheck = Array.from(ytCaptionElements).filter(
-          (element) => element.innerHTML.trim().length > 0
-        );
-
-        if (captionsToCheck.length > 0) {
-          if (
-            captionsToCheck.some((element) =>
-              element.classList.contains("ytp-caption-window-rollup")
-            )
-          ) {
-            const ytElements = captionsToCheck.filter((element) =>
-              element.classList.contains("ytp-caption-window-rollup")
-            );
-
-            this.parseYTSubtitles(ytElements, true);
-          } else {
-            this.parseYTSubtitles(captionsToCheck, false);
-          }
-        }
-      }
-    }
-
-    this.scheduleSubtitleDelay();
-  }
-
-  parseJWSubtitles(html) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const spans = doc.querySelectorAll(".jw-text-track-cue");
-
-    spans.forEach((span) => {
-      const text = span.textContent;
-
-      if (text) {
-        const parsedSegments = this.parseStylizedJWSubtitles(text, true);
-
-        parsedSegments.forEach((segment) => {
-          this.lines.push(segment);
-        });
-      }
-    });
-  }
-
-  parseStylizedJWSubtitles(text, needsNewline) {
-    let currentText = "";
-    let segments = [];
-
-    let currentSegment = {
-      text: currentText,
-      newline: needsNewline,
-      styles: { bold: false, italic: false, underlined: false },
+    this.visHandler = () => {
+      this.isTabVisible = !document.hidden;
     };
+    document.addEventListener("visibilitychange", this.visHandler);
 
-    for (let i = 0; i < text.length; i++) {
-      if (text[i] === "<") {
-        if (
-          text.substring(i, i + 3) === "<b>" ||
-          text.substring(i, i + 3) === "<i>" ||
-          text.substring(i, i + 3) === "<u>"
-        ) {
-          if (currentText) {
-            this.pushStylizedJWSubtitles(
-              segments,
-              currentText,
-              needsNewline,
-              currentSegment
-            );
+    this.emptyHandler = () => monitor.stopVideoDelay(this.video);
+    this.video.addEventListener("emptied", this.emptyHandler);
+  }
 
-            currentText = "";
-            needsNewline = false;
-          }
+  resize() {
+    if (!this.videoCanvas || !this.video) return;
 
-          if (text.substring(i, i + 3) === "<b>")
-            currentSegment.styles.bold = true;
-          else if (text.substring(i, i + 3) === "<i>")
-            currentSegment.styles.italic = true;
-          else if (text.substring(i, i + 3) === "<u>")
-            currentSegment.styles.underlined = true;
+    const style = window.getComputedStyle(this.video);
+    const rect = this.video.getBoundingClientRect();
 
-          i += 2;
-        } else if (
-          text.substring(i, i + 4) === "</b>" ||
-          text.substring(i, i + 4) === "</i>" ||
-          text.substring(i, i + 4) === "</u>"
-        ) {
-          if (currentText) {
-            this.pushStylizedJWSubtitles(
-              segments,
-              currentText,
-              needsNewline,
-              currentSegment
-            );
+    const originalWidth = this.video.videoWidth || rect.width;
+    const originalHeight = this.video.videoHeight || rect.height;
 
-            currentText = "";
-            needsNewline = false;
-          }
+    let renderWidth = originalWidth;
+    let renderHeight = originalHeight;
 
-          if (text.substring(i, i + 4) === "</b>")
-            currentSegment.styles.bold = false;
-          else if (text.substring(i, i + 4) === "</i>")
-            currentSegment.styles.italic = false;
-          else if (text.substring(i, i + 4) === "</u>")
-            currentSegment.styles.underlined = false;
+    if (this.quality && this.quality !== "max") {
+      let targetH = originalHeight;
+      if (this.quality === "low") targetH = 320;
+      else if (this.quality === "mid") targetH = 720;
+      else if (this.quality === "high") targetH = 1080;
 
-          i += 3;
-        } else {
-          currentText += text[i];
-        }
-      } else if (text[i] === "\n") {
-        if (currentText) {
-          while (currentText[currentText.length - 1] === " ")
-            currentText = currentText.slice(0, -1);
-
-          this.pushStylizedJWSubtitles(
-            segments,
-            currentText,
-            needsNewline,
-            currentSegment
-          );
-
-          currentText = "";
-        }
-
-        needsNewline = true;
-      } else {
-        currentText += text[i];
+      if (originalHeight > targetH) {
+        const ratio = originalWidth / originalHeight;
+        renderHeight = targetH;
+        renderWidth = targetH * ratio;
       }
     }
 
-    if (currentText)
-      this.pushStylizedJWSubtitles(
-        segments,
-        currentText,
-        needsNewline,
-        currentSegment
-      );
+    this.videoCanvas.width = renderWidth;
+    this.videoCanvas.height = renderHeight;
 
-    return segments.filter((segment) => segment.text.trim());
-  }
-
-  pushStylizedJWSubtitles(segments, currentText, needsNewline, currentSegment) {
-    while (needsNewline && currentText[0] === " ")
-      currentText = currentText.slice(1);
-
-    segments.push({
-      text: currentText,
-      newline: needsNewline,
-      styles: {
-        bold: currentSegment.styles.bold,
-        italic: currentSegment.styles.italic,
-        underlined: currentSegment.styles.underlined,
-      },
-    });
-  }
-
-  parseYTSubtitles(ytElements, isAutogenerated) {
-    this.subtitleType = isAutogenerated ? "ytp-auto" : "ytp";
-
-    ytElements.forEach((element) => {
-      const captionText = element.querySelector(".captions-text");
-
-      if (!captionText) return;
-
-      const visualLines = captionText.querySelectorAll(".caption-visual-line");
-
-      visualLines.forEach((visualLine, lineIndex) => {
-        const segments = visualLine.querySelectorAll(".ytp-caption-segment");
-
-        segments.forEach((segment, segmentIndex) => {
-          const text = segment.textContent.trim();
-
-          if (text) {
-            this.lines.push({
-              text: text,
-              newline: segmentIndex === 0,
-              styles: { bold: false, italic: false, underlined: false },
-            });
-          }
-        });
-      });
-    });
-
-    if (!isAutogenerated || this.lines.length === 0) return;
-
-    const logicalLines = [];
-    let currentLine = [];
-
-    this.lines.forEach((segment) => {
-      if (segment.newline) {
-        if (currentLine.length > 0) logicalLines.push(currentLine);
-
-        currentLine = [segment];
-      } else {
-        currentLine.push(segment);
-      }
-    });
-
-    if (currentLine.length > 0) logicalLines.push(currentLine);
-
-    this.lines = logicalLines.slice(-2).flat();
-  }
-
-  scheduleSubtitleDelay() {
-    const currentSubtitleLines = this.lines;
-
-    if (this.timingMode === "time") {
-      setTimeout(() => {
-        this.delayedSubtitleLines = currentSubtitleLines;
-      }, this.delay);
-    } else {
-      const currentFrameNumber = this.frameCounter;
-
-      const subtitleDelayLoop = () => {
-        if (this.frameCounter - currentFrameNumber >= this.frameDelay)
-          this.delayedSubtitleLines = currentSubtitleLines;
-        else requestAnimationFrame(subtitleDelayLoop);
-      };
-
-      requestAnimationFrame(subtitleDelayLoop);
-    }
-  }
-
-  renderSubtitles(overlayWidth, overlayHeight) {
-    if (this.delayedSubtitleLines.length === 0 || !this.subtitleContext) return;
+    this.videoCanvas.style.width = style.width;
+    this.videoCanvas.style.height = style.height;
+    this.videoCanvas.style.top = style.top;
+    this.videoCanvas.style.left = style.left;
+    this.videoCanvas.style.transform = style.transform;
 
     const dpr = window.devicePixelRatio || 1;
+    this.subtitleCanvas.width = rect.width * dpr;
+    this.subtitleCanvas.height = rect.height * dpr;
+    this.subtitleCanvas.style.width = style.width;
+    this.subtitleCanvas.style.height = style.height;
+    this.subtitleCanvas.style.top = style.top;
+    this.subtitleCanvas.style.left = style.left;
+    this.subtitleCanvas.style.transform = style.transform;
 
-    this.subtitleContext.setTransform(1, 0, 0, 1, 0, 0);
-    this.subtitleContext.scale(dpr, dpr);
-    this.subtitleContext.imageSmoothingEnabled = false;
-    this.subtitleContext.save();
-
-    const adjustedWidth = overlayWidth / dpr;
-    const adjustedHeight = overlayHeight / dpr;
-    const baselineY = Math.round(adjustedHeight * 0.865);
-    const fontSize = Math.max(12, Math.round(adjustedHeight * 0.04));
-    const padding = Math.round(fontSize * 0.3);
-    const lineSpacing = Math.round((fontSize + padding) * 1.13);
-
-    this.subtitleContext.textAlign = "center";
-    this.subtitleContext.textBaseline = "middle";
-    this.subtitleContext.fontKerning = "normal";
-    this.subtitleContext.textRendering = "geometricPrecision";
-
-    const bgColor = "rgba(0, 0, 0, 0.55)";
-    const textColor = "rgb(255, 255, 255)";
-    const logicalLines = [];
-
-    let currentLine = [];
-
-    this.delayedSubtitleLines.forEach((segment) => {
-      if (segment.newline) {
-        currentLine = [segment];
-
-        logicalLines.push(currentLine);
-      } else {
-        if (currentLine.length === 0) {
-          currentLine = [segment];
-
-          logicalLines.push(currentLine);
-        } else {
-          currentLine.push(segment);
-        }
-      }
-    });
-
-    const totalLogicalLines = logicalLines.length;
-    const verticalPositions = Array(totalLogicalLines)
-      .fill(0)
-      .map((_, i) =>
-        Math.round(baselineY - (totalLogicalLines - 1 - i) * lineSpacing)
-      );
-
-    logicalLines.forEach((lineSegments, lineIndex) => {
-      const lineY = verticalPositions[lineIndex];
-
-      let totalLineWidth = 0;
-      const segmentWidths = [];
-
-      lineSegments.forEach((segment) => {
-        let fontStyle = "";
-
-        if (segment.styles.italic) fontStyle += "italic ";
-        if (segment.styles.bold) fontStyle += "bold ";
-
-        this.subtitleContext.font = `${fontStyle}${fontSize}px Helvetica, sans-serif`;
-
-        const textMetrics = this.subtitleContext.measureText(segment.text);
-        const segmentWidth = Math.round(textMetrics.width);
-
-        segmentWidths.push(segmentWidth);
-
-        totalLineWidth += segmentWidth;
-      });
-
-      let rectX, currentX;
-
-      if (this.subtitleType === "ytp-auto") {
-        rectX = Math.round(adjustedWidth * 0.25 * (fontSize === 12 ? 0.4 : 1));
-        currentX = rectX + padding;
-      } else {
-        rectX = Math.round(adjustedWidth / 2 - totalLineWidth / 2 - padding);
-        currentX = adjustedWidth / 2 - totalLineWidth / 2;
-      }
-
-      const rectY = Math.round(lineY - fontSize / 2 - padding / 2);
-      const rectWidth = Math.round(totalLineWidth + padding * 2);
-      const rectHeight = Math.round(fontSize + padding);
-
-      this.subtitleContext.fillStyle = bgColor;
-      this.subtitleContext.fillRect(rectX, rectY, rectWidth, rectHeight);
-
-      lineSegments.forEach((segment, segmentIndex) => {
-        const segmentText = segment.text;
-        const segmentWidth = segmentWidths[segmentIndex];
-
-        let fontStyle = "";
-
-        if (segment.styles.italic) fontStyle += "italic ";
-        if (segment.styles.bold) fontStyle += "bold ";
-
-        this.subtitleContext.font = `${fontStyle}${fontSize}px Helvetica, sans-serif`;
-        this.subtitleContext.textAlign = "left";
-        this.subtitleContext.fillStyle = textColor;
-        this.subtitleContext.fillText(
-          segmentText,
-          Math.round(currentX),
-          lineY + 0.0025 * adjustedHeight
-        );
-
-        if (segment.styles.underlined) {
-          this.subtitleContext.beginPath();
-
-          const underlineY = Math.round(lineY + fontSize * 0.34);
-
-          this.subtitleContext.moveTo(Math.round(currentX), underlineY);
-          this.subtitleContext.lineTo(
-            Math.round(currentX + segmentWidth),
-            underlineY
-          );
-          this.subtitleContext.lineWidth = Math.max(
-            1,
-            Math.round(fontSize * 0.05)
-          );
-          this.subtitleContext.strokeStyle = textColor;
-          this.subtitleContext.stroke();
-        }
-
-        currentX += segmentWidth;
-      });
-
-      this.subtitleContext.textAlign = "center";
-    });
-
-    this.subtitleContext.restore();
+    if (this.gl) this.gl.viewport(0, 0, renderWidth, renderHeight);
+    this.lastRenderedSubtitleHash = "";
   }
 
-  updateDelayedVideo(newDelay) {
-    this.originalDelay = newDelay;
-
-    if (this.timingMode === "time") {
-      this.delay = newDelay;
-    } else {
-      const newFrameDelay = Math.max(Math.round(newDelay / 16.67) - 1, 0);
-      const oldDelay = this.frameDelay;
-
-      this.frameDelay = newFrameDelay;
-
-      if (newFrameDelay < oldDelay)
-        this.acceptFramesAfter = this.frameCounter + newFrameDelay;
-    }
-  }
-
-  cleanupTextures() {
-    if (!this.gl) return;
-
-    this.pendingTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
-    this.pendingTimeouts = [];
-
-    this.pendingRAFs.forEach((rafId) => cancelAnimationFrame(rafId));
-    this.pendingRAFs = [];
-
-    try {
-      if (this.currentFrame && this.currentFrame.texture) {
-        this.gl.deleteTexture(this.currentFrame.texture);
-        this.usedTextures.delete(this.currentFrame.texture);
-      }
-
-      if (this.delayedFrame && this.delayedFrame.texture) {
-        this.gl.deleteTexture(this.delayedFrame.texture);
-        this.usedTextures.delete(this.delayedFrame.texture);
-      }
-
-      if (this.initialFrame && this.initialFrame.texture) {
-        this.gl.deleteTexture(this.initialFrame.texture);
-        this.usedTextures.delete(this.initialFrame.texture);
-      }
-
-      this.availableTextures.forEach((texture) => {
-        if (this.gl.isTexture(texture)) this.gl.deleteTexture(texture);
-      });
-      this.usedTextures.forEach((texture) => {
-        if (this.gl.isTexture(texture)) this.gl.deleteTexture(texture);
-      });
-
-      this.availableTextures = [];
-      this.usedTextures.clear();
-      this.currentFrame = null;
-      this.delayedFrame = null;
-      this.initialFrame = null;
-    } catch {}
-  }
-
-  stopDelayedVideo() {
-    this.delayedVideoActive = false;
-
-    this.pendingTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
-    this.pendingTimeouts = [];
-
-    this.pendingRAFs.forEach((rafId) => cancelAnimationFrame(rafId));
-    this.pendingRAFs = [];
-
-    if (this.videoFrameCallbacks) this.videoFrameCallbacks = null;
+  destroy() {
+    this.isActive = false;
+    cancelAnimationFrame(this.renderLoopId);
 
     if (this.video) {
-      this.video.removeEventListener("emptied", this.videoEmptiedHandler);
-      this.video.style.setProperty("opacity", "1", "important");
-      setTimeout(() => {
-        this.video.style.setProperty("opacity", "1", "important");
-      }, 17);
+      this.video.style.removeProperty("opacity");
+      this.video.removeEventListener("emptied", this.emptyHandler);
+    }
+    document.removeEventListener("visibilitychange", this.visHandler);
+    if (this.resizeObserver) this.resizeObserver.disconnect();
+
+    if (this.hideSubtitlesStyle) this.hideSubtitlesStyle.remove();
+    this.hiddenSubtitleElements.forEach(
+      (item) => (item.el.style[item.prop] = item.val)
+    );
+
+    if (this.gl) {
+      const ext = this.gl.getExtension("WEBGL_lose_context");
+      if (ext) ext.loseContext();
     }
 
-    if (this.visibilityChangeHandler) {
-      document.removeEventListener(
-        "visibilitychange",
-        this.visibilityChangeHandler
-      );
-      this.visibilityChangeHandler = null;
+    if (this.videoCanvas) this.videoCanvas.remove();
+    if (this.subtitleCanvas) this.subtitleCanvas.remove();
+
+    while (this.frameQueue.length > 0) {
+      const frame = this.frameQueue.shift();
+      if (frame.bitmap) frame.bitmap.close();
     }
-
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-    }
-
-    if (this.hiddenSubtitleElements && this.hiddenSubtitleElements.length > 0) {
-      this.hiddenSubtitleElements.forEach((item) => {
-        if (item.element) {
-          item.element.style.removeProperty("opacity");
-
-          if (item.originalStyles) {
-            Object.entries(item.originalStyles).forEach(([prop, value]) => {
-              if (value !== undefined && value !== null)
-                item.element.style[prop] = value;
-            });
-          }
-        }
-      });
-
-      this.hiddenSubtitleElements = [];
-    }
-
-    if (this.hideSubtitlesStyle && this.hideSubtitlesStyle.parentNode) {
-      this.hideSubtitlesStyle.parentNode.removeChild(this.hideSubtitlesStyle);
-      this.hideSubtitlesStyle = null;
-    }
-
-    this.subtitleElements = [];
-    this.delayedSubtitleLines = [];
-
-    if (this.videoCanvas && this.videoCanvas.parentNode)
-      this.videoCanvas.parentNode.removeChild(this.videoCanvas);
-    if (this.subtitleCanvas && this.subtitleCanvas.parentNode)
-      this.subtitleCanvas.parentNode.removeChild(this.subtitleCanvas);
-
-    this.videoCanvas = null;
-    this.subtitleCanvas = null;
-    this.subtitleContext = null;
-
-    setTimeout(() => {
-      if (this.gl) {
-        this.availableTextures.forEach((texture) => {
-          if (this.gl.isTexture(texture)) this.gl.deleteTexture(texture);
-        });
-        this.usedTextures.forEach((texture) => {
-          if (this.gl.isTexture(texture)) this.gl.deleteTexture(texture);
-        });
-
-        if (this.program) {
-          const shaders = this.gl.getAttachedShaders(this.program);
-
-          if (shaders) {
-            shaders.forEach((shader) => {
-              this.gl.detachShader(this.program, shader);
-              this.gl.deleteShader(shader);
-            });
-          }
-
-          this.gl.deleteProgram(this.program);
-        }
-
-        if (this.positionBuffer) this.gl.deleteBuffer(this.positionBuffer);
-        if (this.texCoordBuffer) this.gl.deleteBuffer(this.texCoordBuffer);
-
-        const loseContext = this.gl.getExtension("WEBGL_lose_context");
-
-        if (loseContext) loseContext.loseContext();
-      }
-
-      this.availableTextures = [];
-      this.usedTextures.clear();
-      this.currentFrame = null;
-      this.delayedFrame = null;
-      this.initialFrame = null;
-      this.gl = null;
-      this.program = null;
-      this.positionBuffer = null;
-      this.texCoordBuffer = null;
-    }, 34);
   }
 }
 

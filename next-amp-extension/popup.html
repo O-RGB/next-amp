@@ -253,14 +253,14 @@
         margin-top: -4px;
         box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
       }
-      /* ซ่อนลูกศร Up/Down ในช่องกรอกตัวเลข */
+
       #num-video-delay::-webkit-inner-spin-button,
       #num-video-delay::-webkit-outer-spin-button {
         -webkit-appearance: none;
         margin: 0;
       }
       #num-video-delay {
-        -moz-appearance: textfield; /* สำหรับ Firefox */
+        -moz-appearance: textfield;
       }
     </style>
   </head>
@@ -318,7 +318,21 @@
               <div
                 class="flex justify-between text-[7px] font-pixel theme-text-main font-bold -mb-1"
               >
-                <span>VOL</span><span id="txt-vol">100%</span>
+                <div class="flex gap-1">
+                  <span>VOL</span>
+                  <button
+                    id="btn-normalize"
+                    class="win-btn w-full h-full border bg-black text-[7px] font-bold transition-colors duration-200 flex items-center justify-center gap-0.5"
+                    title="Loudness Normalization"
+                  >
+                    <span>DYNAMIC</span>
+                    <div
+                      id="norm-indicator"
+                      class="w-1 h-1 rounded-full bg-gray-500"
+                    ></div>
+                  </button>
+                </div>
+                <span id="txt-vol">100%</span>
               </div>
               <input
                 type="range"
@@ -385,12 +399,25 @@
             />
           </div>
         </div>
-        <div>
-          <div class="win-border-in bg-[#1a1a1a] p-1.5 relative mt-2">
+
+        <div class="flex gap-2">
+          <div class="win-border-in bg-[#1a1a1a] p-1.5 relative flex-1">
             <div
               class="flex justify-between items-center text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
             >
               <span>Video Delay (s)</span>
+              <div class="flex items-center gap-2">
+                <span>GPU</span>
+                <select
+                  id="video-quality"
+                  class="bg-black text-[#00ff00] border border-gray-600 text-[8px] outline-none h-3 p-0 px-1 font-pixel focus:border-green-500"
+                >
+                  <option value="max">MAX</option>
+                  <option value="high">1080P</option>
+                  <option value="mid">720P</option>
+                  <option value="low">320P</option>
+                </select>
+              </div>
 
               <div class="flex items-center gap-0.5">
                 <button

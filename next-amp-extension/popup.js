@@ -22,6 +22,7 @@ const PRESETS = {
 };
 
 let isEqOn = true;
+let isNormalizeOn = false; // State สำหรับ Normalize
 let currentEqValues = [...PRESETS.flat];
 let visualMode = 0;
 
@@ -75,9 +76,9 @@ document.addEventListener("DOMContentLoaded", async () => {
               videoDelayInput.value = delayVal;
             }
 
-            const label = $("#txt-video-delay");
+            const label = $("#num-video-delay");
             if (label) {
-              label.textContent = delayVal.toFixed(1) + "s";
+              label.value = delayVal.toFixed(2);
             }
           }
         }
@@ -108,6 +109,31 @@ function loadState(state) {
 
   $("#main-verb").value = state.reverb;
   $("#txt-verb").textContent = parseFloat(state.reverb).toFixed(1);
+
+  // --- Load Normalize State ---
+  isNormalizeOn = state.normalize || false;
+  updateNormalizeButton();
+  // ---------------------------
+
+  // --- Load Video Quality State ---
+  const savedQuality = state.videoQuality || "max";
+  const qualitySelect = $("#video-quality");
+  if (qualitySelect) {
+    qualitySelect.value = savedQuality;
+  }
+
+  // Sync to content script just in case
+  chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+    if (tab) {
+      chrome.tabs
+        .sendMessage(tab.id, {
+          type: "SET_VIDEO_QUALITY",
+          value: savedQuality,
+        })
+        .catch(() => {});
+    }
+  });
+  // --------------------------------
 
   const savedDelay = state.videoDelay || 0;
 
@@ -217,6 +243,43 @@ function setupListeners() {
     sendParam("reverb", v);
   });
 
+  // --- Normalize Button Listener ---
+  const btnNorm = $("#btn-normalize");
+  if (btnNorm) {
+    btnNorm.addEventListener("click", () => {
+      isNormalizeOn = !isNormalizeOn;
+      updateNormalizeButton();
+      sendParam("normalize", isNormalizeOn);
+    });
+  }
+  // ---------------------------------
+
+  // --- Video Quality Listener ---
+  const qualitySelect = $("#video-quality");
+  if (qualitySelect) {
+    qualitySelect.addEventListener("change", async (e) => {
+      const val = e.target.value;
+
+      // 1. บันทึกลง State (Offscreen)
+      sendParam("videoQuality", val);
+
+      // 2. ส่งไปบอก Content Script (Video Delay) ทันที
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (tab) {
+        chrome.tabs
+          .sendMessage(tab.id, {
+            type: "SET_VIDEO_QUALITY",
+            value: val,
+          })
+          .catch(() => {});
+      }
+    });
+  }
+  // ------------------------------
+
   const slider = $("#video-delay");
   const numberInput = $("#num-video-delay");
   const btnMinus = $("#btn-delay-minus");
@@ -297,12 +360,21 @@ function setupListeners() {
     currentEqValues = PRESETS.flat.map(() => 0);
     document.querySelectorAll(".eq-slider").forEach((inp) => (inp.value = 0));
 
+    // Reset Normalize
+    isNormalizeOn = false;
+    updateNormalizeButton();
+
+    // Reset Video Quality
+    if (qualitySelect) qualitySelect.value = "max";
+    sendParam("videoQuality", "max");
+
     sendParam("reset", true);
 
+    const videoDelayInput = $("#video-delay");
     if (videoDelayInput) {
       videoDelayInput.value = 0;
-      const label = $("#txt-video-delay");
-      if (label) label.textContent = "0s";
+      const label = $("#num-video-delay");
+      if (label) label.value = "0.00";
 
       const [tab] = await chrome.tabs.query({
         active: true,
@@ -311,6 +383,14 @@ function setupListeners() {
       if (tab) {
         chrome.tabs
           .sendMessage(tab.id, { type: "SET_VIDEO_DELAY", value: 0 })
+          .catch(() => {});
+
+        // Reset Quality on page
+        chrome.tabs
+          .sendMessage(tab.id, {
+            type: "SET_VIDEO_QUALITY",
+            value: "max",
+          })
           .catch(() => {});
       }
     }
@@ -355,6 +435,31 @@ function setupListeners() {
         console.error("Failed to copy ID", err);
       }
     });
+  }
+}
+
+function updateNormalizeButton() {
+  const btn = $("#btn-normalize");
+  const indicator = $("#norm-indicator");
+
+  if (!btn || !indicator) return;
+
+  if (isNormalizeOn) {
+    // ON State: Green Border + Green Text
+    btn.classList.remove("border-gray-600", "text-gray-400");
+    btn.classList.add("border-[#00ff00]", "text-[#00ff00]");
+
+    // ไฟสถานะสีเขียวสว่าง
+    indicator.classList.remove("bg-gray-500");
+    indicator.classList.add("bg-[#00ff00]", "shadow-[0_0_5px_#00ff00]");
+  } else {
+    // OFF State: Gray Border + Gray Text
+    btn.classList.remove("border-[#00ff00]", "text-[#00ff00]");
+    btn.classList.add("border-gray-600", "text-gray-400");
+
+    // ไฟสถานะดับ
+    indicator.classList.remove("bg-[#00ff00]", "shadow-[0_0_5px_#00ff00]");
+    indicator.classList.add("bg-gray-500");
   }
 }
 
