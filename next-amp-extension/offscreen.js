@@ -1,14 +1,19 @@
 import { PitchProcessor } from "./pitch-processor.js";
 import { AudioEffects } from "./audio-effects.js";
+import { DBManager } from "./db-manager.js";
 
 let audioCtx;
 let globalStream = null;
 let currentTabId = null;
 
-// Modules
 let pitchProc = null;
 let effects = null;
 let analyser = null;
+
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingStreamDest = null;
+const db = new DBManager();
 
 let params = {
   pitch: 0,
@@ -25,24 +30,28 @@ let params = {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "START_CAPTURE") {
-    startAudio(msg.streamId, msg.tabId, sendResponse);
+    startAudio(msg.streamId, msg.tabId, msg.latencyHint, sendResponse);
     return true;
+  } else if (msg.type === "START_RECORDING") {
+    startRecording();
+    sendResponse(true);
+  } else if (msg.type === "STOP_RECORDING") {
+    stopRecording();
+    sendResponse(true);
   } else if (msg.type === "SET_PARAM") {
-    if (msg.key === "reset") {
-      resetParams();
-    } else {
-      updateParams(msg);
-    }
+    if (msg.key === "reset") resetParams();
+    else updateParams(msg);
   } else if (msg.type === "GET_STATE") {
     const currentEq = effects
       ? effects.getEQNodes().map((n) => n.gain.value)
       : params.eq;
-    const isActive = audioCtx && audioCtx.state === "running";
+    const isRec = mediaRecorder && mediaRecorder.state === "recording";
     sendResponse({
       ...params,
       eqGains: currentEq,
-      isAudioActive: isActive,
+      isAudioActive: !!audioCtx,
       activeTabId: currentTabId,
+      isRecording: isRec,
     });
   } else if (msg.type === "STOP_CAPTURE") {
     stopAudio();
@@ -50,68 +59,114 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-async function startAudio(streamId, tabId, sendResponse) {
+async function startAudio(
+  streamId,
+  tabId,
+  latencyHint = "interactive",
+  sendResponse
+) {
   if (audioCtx || globalStream) stopAudio();
   currentTabId = tabId;
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        mandatory: {
-          chromeMediaSource: "tab",
-          chromeMediaSourceId: streamId,
-        },
+        mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: streamId },
       },
     });
 
     globalStream = stream;
-    audioCtx = new AudioContext();
+
+    audioCtx = new AudioContext({ latencyHint: latencyHint });
     const source = audioCtx.createMediaStreamSource(stream);
 
-    // 1. Init Modules
     pitchProc = new PitchProcessor(audioCtx);
     await pitchProc.init();
-
     effects = new AudioEffects(audioCtx);
 
-    // 2. Connect Graph: Source -> Stretch -> Effects -> Dest
     let head = source;
-
-    // ต่อ Pitch Shift (ถ้าโหลดผ่าน)
     if (pitchProc.getNode()) {
       source.connect(pitchProc.getNode());
-      head = pitchProc.getNode(); // เปลี่ยนหัวขบวนเป็น Stretch Node
+      head = pitchProc.getNode();
     }
-
-    // ต่อเข้า Effects Chain
     effects.setInput(head);
 
-    // ต่อ Analyzer (สำหรับ Visualizer)
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
     analyser.smoothingTimeConstant = 0.8;
 
-    // Master -> Analyzer -> Destination
     const master = effects.getMasterNode();
+
     master.connect(analyser);
     master.connect(audioCtx.destination);
 
-    // 3. Apply Initial Params
-    applyAllParams();
+    recordingStreamDest = audioCtx.createMediaStreamDestination();
+    master.connect(recordingStreamDest);
+    setupRecorder(recordingStreamDest.stream);
 
-    // Start Loops
+    applyAllParams();
     if (pitchProc) pitchProc.setPitch(params.pitch);
     setTimeout(loopVisualizer, 30);
 
     sendResponse({ success: true });
   } catch (e) {
-    console.error("Audio Engine Error:", e);
+    console.error("Engine Start Error:", e);
     currentTabId = null;
     sendResponse({ success: false, error: e.message });
   }
 }
 
+function setupRecorder(stream) {
+  try {
+    const options = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? { mimeType: "audio/webm;codecs=opus" }
+      : {};
+
+    mediaRecorder = new MediaRecorder(stream, options);
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      const blob = new Blob(recordedChunks, { type: "audio/webm" });
+      recordedChunks = [];
+
+      try {
+        await db.saveRecording(blob);
+        chrome.runtime.sendMessage({ type: "RECORDING_SAVED" }).catch(() => {});
+      } catch (err) {
+        console.error("Save Error:", err);
+      }
+    };
+  } catch (e) {
+    console.error("Recorder Setup Failed:", e);
+  }
+}
+
+function startRecording() {
+  if (mediaRecorder && mediaRecorder.state === "inactive") {
+    recordedChunks = [];
+    mediaRecorder.start();
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+  }
+}
+
 function stopAudio() {
+  if (currentTabId) {
+    chrome.runtime
+      .sendMessage({
+        type: "BG_RESET_DELAY",
+        tabId: currentTabId,
+      })
+      .catch(() => {});
+  }
+
   if (globalStream) {
     globalStream.getTracks().forEach((track) => track.stop());
     globalStream = null;
@@ -125,17 +180,14 @@ function stopAudio() {
   pitchProc = null;
   effects = null;
   currentTabId = null;
+  mediaRecorder = null;
+  recordingStreamDest = null;
 }
-// ในฟังก์ชัน updateParams ของ offscreen.js
 
 function updateParams({ key, value, index }) {
-  // Update local state
   if (key === "eq" && index !== null) params.eq[index] = value;
   else if (key in params) params[key] = value;
-
   if (!audioCtx || !effects) return;
-
-  // Delegate to modules
   switch (key) {
     case "pitch":
       if (pitchProc) pitchProc.setPitch(value);
@@ -171,7 +223,6 @@ function applyAllParams() {
 }
 
 function resetParams() {
-  // Reset state object
   params = {
     pitch: 0,
     reverb: 0,
@@ -190,15 +241,10 @@ function resetParams() {
 
 function loopVisualizer() {
   if (!audioCtx || !analyser) return;
-  if (params.visualMode === 3) return; // Mode ปิด
-
+  if (params.visualMode === 3) return;
   const data = new Uint8Array(analyser.frequencyBinCount);
-  if (params.visualMode === 2) {
-    analyser.getByteTimeDomainData(data);
-  } else {
-    analyser.getByteFrequencyData(data);
-  }
-
+  if (params.visualMode === 2) analyser.getByteTimeDomainData(data);
+  else analyser.getByteFrequencyData(data);
   chrome.runtime
     .sendMessage({
       type: "VISUALIZER_DATA",
@@ -206,6 +252,5 @@ function loopVisualizer() {
       mode: params.visualMode,
     })
     .catch(() => {});
-
   setTimeout(loopVisualizer, 30);
 }

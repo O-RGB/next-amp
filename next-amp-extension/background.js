@@ -17,14 +17,42 @@ async function setupOffscreen() {
   }
 }
 
+async function checkOffscreenDocument() {
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ["OFFSCREEN_DOCUMENT"],
+  });
+  return contexts.length > 0;
+}
+
+async function setupOffscreenDocument(path) {
+  if (await checkOffscreenDocument()) return;
+
+  await chrome.offscreen.createDocument({
+    url: path,
+    reasons: ["AUDIO_PLAYBACK", "USER_MEDIA"],
+    justification: "Recording and processing tab audio",
+  });
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "CHECK_OFFSCREEN") {
-    chrome.offscreen.hasDocument().then((has) => sendResponse(has));
+    checkOffscreenDocument().then((has) => sendResponse(has));
     return true;
-  }
-  if (msg.type === "INIT_OFFSCREEN") {
-    setupOffscreen().then(() => sendResponse(true));
+  } else if (msg.type === "INIT_OFFSCREEN") {
+    setupOffscreenDocument(msg.path || "offscreen.html").then(() =>
+      sendResponse(true)
+    );
     return true;
+  } else if (msg.type === "BG_RESET_DELAY") {
+    if (msg.tabId) {
+      chrome.tabs
+        .sendMessage(msg.tabId, { type: "SET_VIDEO_DELAY", value: 0 })
+        .catch(() => {});
+
+      chrome.tabs
+        .sendMessage(msg.tabId, { type: "SET_VIDEO_QUALITY", value: "max" })
+        .catch(() => {});
+    }
   }
 });
 
