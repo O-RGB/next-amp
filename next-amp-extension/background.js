@@ -1,3 +1,5 @@
+// next-amp-extension/background.js
+
 let creating;
 
 async function setupOffscreen() {
@@ -26,7 +28,6 @@ async function checkOffscreenDocument() {
 
 async function setupOffscreenDocument(path) {
   if (await checkOffscreenDocument()) return;
-
   await chrome.offscreen.createDocument({
     url: path,
     reasons: ["AUDIO_PLAYBACK", "USER_MEDIA"],
@@ -45,12 +46,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   } else if (msg.type === "BG_RESET_DELAY") {
     if (msg.tabId) {
+      // 1. Reset Delay
       chrome.tabs
         .sendMessage(msg.tabId, { type: "SET_VIDEO_DELAY", value: 0 })
         .catch(() => {});
-
+      // 2. Reset Quality
       chrome.tabs
         .sendMessage(msg.tabId, { type: "SET_VIDEO_QUALITY", value: "max" })
+        .catch(() => {});
+      // 3. [เพิ่ม] Reset Zoom & Rotate (ROI) ให้กลับเป็นค่าเริ่มต้น
+      chrome.tabs
+        .sendMessage(msg.tabId, {
+          type: "SET_VIDEO_ZOOM",
+          scale: 1,
+          translateY: 0,
+          rotate: 0,
+        })
         .catch(() => {});
     }
   }
@@ -75,31 +86,37 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
       { targetTabId: sender.tab.id },
       (streamId) => {
         if (chrome.runtime.lastError || !streamId) {
-          console.error("Error getting stream ID:", chrome.runtime.lastError);
           sendResponse({
             success: false,
             error: chrome.runtime.lastError?.message,
           });
           return;
         }
-
         chrome.runtime.sendMessage({
           type: "START_CAPTURE",
           streamId: streamId,
           tabId: sender.tab.id,
         });
-
         sendResponse({ success: true });
       }
     );
     return true;
-  } else if (msg.type === "STOP_CAPTURE" || msg.type === "SET_PARAM") {
+  } else if (msg.type === "STOP_CAPTURE") {
+    chrome.runtime.sendMessage(msg);
+    sendResponse({ success: true });
+  } else if (msg.type === "SET_PARAM") {
     chrome.runtime.sendMessage(msg);
     sendResponse({ success: true });
   } else if (msg.type === "GET_STATE") {
-    chrome.runtime.sendMessage({ type: "GET_STATE" }, (response) => {
+    chrome.runtime.sendMessage(msg, (response) => {
       sendResponse(response || {});
     });
     return true;
   }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  chrome.runtime
+    .sendMessage({ type: "STOP_CAPTURE", tabId: tabId })
+    .catch(() => {});
 });

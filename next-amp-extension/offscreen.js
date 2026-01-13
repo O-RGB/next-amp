@@ -1,21 +1,12 @@
+// next-amp-extension/offscreen.js
 import { PitchProcessor } from "./pitch-processor.js";
 import { AudioEffects } from "./audio-effects.js";
 import { DBManager } from "./db-manager.js";
 
-let audioCtx;
-let globalStream = null;
-let currentTabId = null;
-
-let pitchProc = null;
-let effects = null;
-let analyser = null;
-
-let mediaRecorder = null;
-let recordedChunks = [];
-let recordingStreamDest = null;
+const sessions = new Map();
 const db = new DBManager();
 
-let params = {
+const createDefaultParams = () => ({
   pitch: 0,
   reverb: 0,
   pan: 0,
@@ -26,36 +17,79 @@ let params = {
   videoQuality: "max",
   normalize: false,
   eq: new Array(10).fill(0),
-};
+  eqPreset: "flat", // [New] เพิ่ม Default Preset
+  reverbTime: 3.0,
+  reverbDecay: 2.0,
+  dynBoost: 40,
+  dynLimit: 60,
+});
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  const tabId = msg.tabId;
+
   if (msg.type === "START_CAPTURE") {
-    startAudio(msg.streamId, msg.tabId, msg.latencyHint, sendResponse);
+    // [New] รับ initialPreset มาด้วย
+    startAudio(
+      msg.streamId,
+      tabId,
+      msg.latencyHint,
+      msg.mode,
+      msg.initialPreset,
+      sendResponse
+    );
     return true;
   } else if (msg.type === "START_RECORDING") {
-    startRecording();
+    startRecording(tabId);
     sendResponse(true);
   } else if (msg.type === "STOP_RECORDING") {
-    stopRecording();
+    stopRecording(tabId);
     sendResponse(true);
   } else if (msg.type === "SET_PARAM") {
-    if (msg.key === "reset") resetParams();
+    if (msg.key === "reset") resetParams(tabId, msg.isShared);
     else updateParams(msg);
+  } else if (msg.type === "SET_MODE") {
+    const session = sessions.get(tabId);
+    if (session) {
+      session.mode = msg.mode;
+      sendResponse(true);
+    }
   } else if (msg.type === "GET_STATE") {
-    const currentEq = effects
-      ? effects.getEQNodes().map((n) => n.gain.value)
-      : params.eq;
-    const isRec = mediaRecorder && mediaRecorder.state === "recording";
-    sendResponse({
-      ...params,
-      eqGains: currentEq,
-      isAudioActive: !!audioCtx,
-      activeTabId: currentTabId,
-      isRecording: isRec,
-    });
+    const session = sessions.get(tabId);
+    if (session) {
+      const currentEq = session.effects
+        ? session.effects.getEQNodes().map((n) => n.gain.value)
+        : session.params.eq;
+
+      const isRec =
+        session.mediaRecorder && session.mediaRecorder.state === "recording";
+
+      sendResponse({
+        ...session.params,
+        eqGains: currentEq,
+        isAudioActive: true,
+        activeTabId: tabId,
+        isRecording: isRec,
+        mode: session.mode,
+      });
+    } else {
+      sendResponse({
+        isAudioActive: false,
+        ...createDefaultParams(),
+        mode: null,
+      });
+    }
   } else if (msg.type === "STOP_CAPTURE") {
-    stopAudio();
+    stopAudio(tabId);
     sendResponse({ success: true });
+  } else if (msg.type === "CHECK_ACTIVE_SESSIONS") {
+    const otherSessions = Array.from(sessions.keys()).filter(
+      (id) => id !== msg.currentTabId
+    );
+    sendResponse({
+      hasActiveSession: otherSessions.length > 0,
+      count: otherSessions.length,
+      activeTabs: otherSessions,
+    });
   }
 });
 
@@ -63,10 +97,13 @@ async function startAudio(
   streamId,
   tabId,
   latencyHint = "interactive",
+  initialMode = "shared",
+  initialPreset = "flat", // [New] รับค่า
   sendResponse
 ) {
-  if (audioCtx || globalStream) stopAudio();
-  currentTabId = tabId;
+  if (sessions.has(tabId)) {
+    stopAudio(tabId);
+  }
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -75,14 +112,11 @@ async function startAudio(
       },
     });
 
-    globalStream = stream;
-
-    audioCtx = new AudioContext({ latencyHint: latencyHint });
+    const audioCtx = new AudioContext({ latencyHint: latencyHint });
     const source = audioCtx.createMediaStreamSource(stream);
-
-    pitchProc = new PitchProcessor(audioCtx);
+    const pitchProc = new PitchProcessor(audioCtx);
     await pitchProc.init();
-    effects = new AudioEffects(audioCtx);
+    const effects = new AudioEffects(audioCtx);
 
     let head = source;
     if (pitchProc.getNode()) {
@@ -91,47 +125,60 @@ async function startAudio(
     }
     effects.setInput(head);
 
-    analyser = audioCtx.createAnalyser();
+    const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
     analyser.smoothingTimeConstant = 0.8;
 
     const master = effects.getMasterNode();
-
     master.connect(analyser);
     master.connect(audioCtx.destination);
-
-    recordingStreamDest = audioCtx.createMediaStreamDestination();
+    const recordingStreamDest = audioCtx.createMediaStreamDestination();
     master.connect(recordingStreamDest);
-    setupRecorder(recordingStreamDest.stream);
 
-    applyAllParams();
-    if (pitchProc) pitchProc.setPitch(params.pitch);
-    setTimeout(loopVisualizer, 30);
+    // ตั้งค่า Params เริ่มต้นรวม Preset
+    const defaultP = createDefaultParams();
+    defaultP.eqPreset = initialPreset;
 
+    const newSession = {
+      audioCtx,
+      stream,
+      pitchProc,
+      effects,
+      analyser,
+      recordingStreamDest,
+      mediaRecorder: null,
+      recordedChunks: [],
+      params: defaultP,
+      visualLoopId: null,
+      mode: initialMode,
+    };
+
+    setupRecorder(newSession, recordingStreamDest.stream);
+    sessions.set(tabId, newSession);
+
+    applyAllParams(newSession);
+
+    startVisualizerLoop(tabId);
     sendResponse({ success: true });
   } catch (e) {
-    console.error("Engine Start Error:", e);
-    currentTabId = null;
+    console.error(`[Tab ${tabId}] Start Error:`, e);
     sendResponse({ success: false, error: e.message });
   }
 }
 
-function setupRecorder(stream) {
+function setupRecorder(session, stream) {
   try {
     const options = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
       ? { mimeType: "audio/webm;codecs=opus" }
       : {};
-
-    mediaRecorder = new MediaRecorder(stream, options);
-
+    const mediaRecorder = new MediaRecorder(stream, options);
+    session.mediaRecorder = mediaRecorder;
     mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
+      if (e.data.size > 0) session.recordedChunks.push(e.data);
     };
-
     mediaRecorder.onstop = async () => {
-      const blob = new Blob(recordedChunks, { type: "audio/webm" });
-      recordedChunks = [];
-
+      const blob = new Blob(session.recordedChunks, { type: "audio/webm" });
+      session.recordedChunks = [];
       try {
         await db.saveRecording(blob);
         chrome.runtime.sendMessage({ type: "RECORDING_SAVED" }).catch(() => {});
@@ -144,50 +191,64 @@ function setupRecorder(stream) {
   }
 }
 
-function startRecording() {
-  if (mediaRecorder && mediaRecorder.state === "inactive") {
-    recordedChunks = [];
-    mediaRecorder.start();
+function startRecording(tabId) {
+  const session = sessions.get(tabId);
+  if (
+    session &&
+    session.mediaRecorder &&
+    session.mediaRecorder.state === "inactive"
+  ) {
+    session.recordedChunks = [];
+    session.mediaRecorder.start();
   }
 }
 
-function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state === "recording") {
-    mediaRecorder.stop();
+function stopRecording(tabId) {
+  const session = sessions.get(tabId);
+  if (
+    session &&
+    session.mediaRecorder &&
+    session.mediaRecorder.state === "recording"
+  ) {
+    session.mediaRecorder.stop();
   }
 }
 
-function stopAudio() {
-  if (currentTabId) {
-    chrome.runtime
-      .sendMessage({
-        type: "BG_RESET_DELAY",
-        tabId: currentTabId,
-      })
-      .catch(() => {});
-  }
-
-  if (globalStream) {
-    globalStream.getTracks().forEach((track) => track.stop());
-    globalStream = null;
-  }
-  if (audioCtx) {
+function stopAudio(tabId) {
+  const session = sessions.get(tabId);
+  if (!session) return;
+  chrome.runtime
+    .sendMessage({ type: "BG_RESET_DELAY", tabId: tabId })
+    .catch(() => {});
+  if (session.visualLoopId) clearTimeout(session.visualLoopId);
+  if (session.stream)
+    session.stream.getTracks().forEach((track) => track.stop());
+  if (session.audioCtx) {
     try {
-      audioCtx.close();
+      session.audioCtx.close();
     } catch (e) {}
-    audioCtx = null;
   }
-  pitchProc = null;
-  effects = null;
-  currentTabId = null;
-  mediaRecorder = null;
-  recordingStreamDest = null;
+  sessions.delete(tabId);
 }
 
-function updateParams({ key, value, index }) {
+function updateParams(msg) {
+  const { key, value, index, tabId, isShared } = msg;
+  if (isShared) {
+    sessions.forEach((session) => {
+      if (session.mode === "shared")
+        applyParamToSession(session, key, value, index);
+    });
+  } else {
+    const session = sessions.get(tabId);
+    if (session) applyParamToSession(session, key, value, index);
+  }
+}
+
+function applyParamToSession(session, key, value, index) {
+  const { params, effects, pitchProc } = session;
   if (key === "eq" && index !== null) params.eq[index] = value;
   else if (key in params) params[key] = value;
-  if (!audioCtx || !effects) return;
+
   switch (key) {
     case "pitch":
       if (pitchProc) pitchProc.setPitch(value);
@@ -210,47 +271,80 @@ function updateParams({ key, value, index }) {
     case "isEqOn":
       effects.setEQEnabled(value);
       break;
+    case "eqPreset": // [New] Handle Preset
+      params.eqPreset = value;
+      break;
+    case "reverbTime":
+      params.reverbTime = value;
+      effects.setReverbParams(params.reverbTime, params.reverbDecay);
+      break;
+    case "reverbDecay":
+      params.reverbDecay = value;
+      effects.setReverbParams(params.reverbTime, params.reverbDecay);
+      break;
+    case "dynBoost":
+      params.dynBoost = value;
+      effects.setDynamicsParams(params.dynBoost, params.dynLimit);
+      break;
+    case "dynLimit":
+      params.dynLimit = value;
+      effects.setDynamicsParams(params.dynBoost, params.dynLimit);
+      break;
+    case "visualMode":
+      params.visualMode = value;
+      break;
   }
 }
 
-function applyAllParams() {
+function applyAllParams(session) {
+  const { params, effects, pitchProc } = session;
   if (!effects) return;
   effects.setVolume(params.volume);
   effects.setPan(params.pan);
   effects.setReverb(params.reverb);
   effects.updateNormalize(params.normalize);
   params.eq.forEach((val, i) => effects.setEQ(i, val));
+  effects.setEQEnabled(params.isEqOn); // [New] Ensure EQ State applied
+  effects.setReverbParams(params.reverbTime, params.reverbDecay);
+  effects.setDynamicsParams(params.dynBoost, params.dynLimit);
+  if (pitchProc) pitchProc.setPitch(params.pitch);
 }
 
-function resetParams() {
-  params = {
-    pitch: 0,
-    reverb: 0,
-    pan: 0,
-    volume: 1.0,
-    visualMode: 0,
-    isEqOn: true,
-    videoDelay: 0,
-    videoQuality: "max",
-    normalize: false,
-    eq: new Array(10).fill(0),
+function resetParams(tabId, isShared) {
+  if (isShared) {
+    sessions.forEach((session) => {
+      if (session.mode === "shared") {
+        session.params = createDefaultParams();
+        applyAllParams(session);
+      }
+    });
+  } else {
+    const session = sessions.get(tabId);
+    if (!session) return;
+    session.params = createDefaultParams();
+    applyAllParams(session);
+  }
+}
+
+function startVisualizerLoop(tabId) {
+  const loop = () => {
+    const session = sessions.get(tabId);
+    if (!session) return;
+    const { analyser, params, audioCtx } = session;
+    if (params.visualMode !== 3 && audioCtx.state === "running") {
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      if (params.visualMode === 2) analyser.getByteTimeDomainData(data);
+      else analyser.getByteFrequencyData(data);
+      chrome.runtime
+        .sendMessage({
+          type: "VISUALIZER_DATA",
+          data: Array.from(data),
+          mode: params.visualMode,
+          tabId: tabId,
+        })
+        .catch(() => {});
+    }
+    session.visualLoopId = setTimeout(loop, 30);
   };
-  applyAllParams();
-  if (pitchProc) pitchProc.setPitch(0);
-}
-
-function loopVisualizer() {
-  if (!audioCtx || !analyser) return;
-  if (params.visualMode === 3) return;
-  const data = new Uint8Array(analyser.frequencyBinCount);
-  if (params.visualMode === 2) analyser.getByteTimeDomainData(data);
-  else analyser.getByteFrequencyData(data);
-  chrome.runtime
-    .sendMessage({
-      type: "VISUALIZER_DATA",
-      data: Array.from(data),
-      mode: params.visualMode,
-    })
-    .catch(() => {});
-  setTimeout(loopVisualizer, 30);
+  loop();
 }

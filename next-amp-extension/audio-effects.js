@@ -9,6 +9,12 @@ export class AudioEffects {
     this.isEqOn = true;
     this.isNormalizeOn = false;
 
+    // Default Values
+    this.revDuration = 3.0;
+    this.revDecay = 2.0;
+    this.dynBoost = 40; // Default matches 40% UI
+    this.dynLimit = 60; // Default matches 60% UI
+
     this.setupNodes();
   }
 
@@ -159,27 +165,64 @@ export class AudioEffects {
     }
   }
 
+  // -- NEW Methods --
+
+  setReverbParams(duration, decay) {
+    this.revDuration = duration;
+    this.revDecay = decay;
+    const newBuffer = this.createImpulseResponse(duration, decay);
+    this.nodes.reverbConv.buffer = newBuffer;
+  }
+
+  setDynamicsParams(boost, limit) {
+    this.dynBoost = boost;
+    this.dynLimit = limit;
+    if (this.isNormalizeOn) {
+      this.applyDynamicsValues();
+    }
+  }
+
+  applyDynamicsValues() {
+    const now = this.ctx.currentTime;
+    const { compressor, makeup, limiter } = this.nodes;
+
+    // คำนวณค่าจาก 0-100% ให้ครอบคลุมช่วงที่ต้องการ
+    // Boost 40% (ค่าเริ่มต้น) จะได้ Threshold ~ -26dB, Gain ~ 1.4x (ใกล้เคียงมาตรฐานเดิม)
+    // Limit 60% (ค่าเริ่มต้น) จะได้ Ratio ~ 12.4 (ใกล้เคียงมาตรฐานเดิม)
+
+    // Threshold: -10 (เบา) ไปถึง -50 (หนัก)
+    const threshold = -10 - this.dynBoost * 0.4;
+
+    // Makeup Gain: 1.0 (ปกติ) ไปถึง 2.0 (คูณสอง)
+    const mkGain = 1.0 + this.dynBoost * 0.01;
+
+    // Ratio: 1 (ไม่กด) ไปถึง 20 (กดหนัก)
+    const ratio = 1 + this.dynLimit * 0.19;
+
+    compressor.threshold.setTargetAtTime(threshold, now, 0.1);
+    compressor.ratio.setTargetAtTime(ratio, now, 0.1);
+    compressor.knee.setTargetAtTime(5, now, 0.1);
+
+    makeup.gain.setTargetAtTime(mkGain, now, 0.1);
+
+    limiter.threshold.setTargetAtTime(-1.0, now, 0.05);
+    limiter.ratio.setTargetAtTime(20, now, 0.05);
+  }
+
   updateNormalize(isNormalizeOn) {
     this.isNormalizeOn = isNormalizeOn;
-    // ตั้งค่า Parameter ต่างๆ
     const now = this.ctx.currentTime;
     const { compressor, makeup, limiter } = this.nodes;
 
     if (isNormalizeOn) {
-      compressor.threshold.setTargetAtTime(-25, now, 0.1);
-      compressor.knee.setTargetAtTime(5, now, 0.1);
-      compressor.ratio.setTargetAtTime(12, now, 0.1);
-      makeup.gain.setTargetAtTime(1.25, now, 0.1);
-      limiter.threshold.setTargetAtTime(-1.0, now, 0.05);
+      this.applyDynamicsValues();
     } else {
-      // Reset ค่า (เผื่อไว้)
+      // Reset เป็นค่า Bypass
       compressor.threshold.setTargetAtTime(0, now, 0.1);
       compressor.ratio.setTargetAtTime(1, now, 0.1);
       makeup.gain.setTargetAtTime(1.0, now, 0.1);
       limiter.threshold.setTargetAtTime(0, now, 0.1);
     }
-
-    // สลับสาย True Bypass
     this.refreshOutputChain();
   }
 

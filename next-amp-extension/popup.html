@@ -12,454 +12,302 @@
     <script src="./assets/js/tailwindcss.js"></script>
     <script src="./assets/js/config.js"></script>
     <script src="./assets/js/phosphor.js"></script>
-
-    <style>
-      :root {
-        --theme-window: #000080;
-        --theme-text: #00ff00;
-        --theme-text-sec: #ffcc00;
-        --eq-col-1: #00ff00;
-        --eq-col-2: #ffff00;
-        --eq-col-3: #ff0000;
-      }
-
-      html,
-      body {
-        width: 320px !important;
-        height: 450px !important;
-        min-width: 320px;
-        min-height: 450px;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        font-family: "Sarabun", sans-serif;
-        background: transparent;
-      }
-
-      .app-bg {
-        background: transparent;
-        width: 100%;
-        height: 100%;
-        padding: 4px;
-        box-sizing: border-box;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        position: relative;
-      }
-
-      .win-border-out {
-        background: #292929;
-        border-top: 2px solid #888;
-        border-left: 2px solid #888;
-        border-right: 2px solid #000;
-        border-bottom: 2px solid #000;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-        display: flex;
-        flex-direction: column;
-      }
-
-      .win-border-in {
-        border: 1px solid #444;
-        border-right: 1px solid #fff;
-        border-bottom: 1px solid #fff;
-        box-shadow: inset 1px 1px 0 #000;
-        background: #151515;
-      }
-
-      .theme-bar {
-        background-color: var(--theme-window);
-        color: white;
-        padding: 2px 4px;
-        font-family: "Chakra Petch", sans-serif;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        border-bottom: 1px solid #000;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        height: 20px;
-      }
-
-      .win-btn {
-        background-color: #c0c0c0;
-        color: black;
-        border-top: 1px solid #fff;
-        border-left: 1px solid #fff;
-        border-right: 1px solid #000;
-        border-bottom: 1px solid #000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        font-family: "Chakra Petch", sans-serif;
-        font-weight: bold;
-        font-size: 9px;
-        line-height: 1;
-        height: 14px;
-        padding: 0 4px;
-      }
-      .win-btn:active,
-      .win-btn.pressed {
-        border-top: 1px solid #000;
-        border-left: 1px solid #000;
-        border-right: 1px solid #fff;
-        border-bottom: 1px solid #fff;
-        background-color: #a0a0a0;
-      }
-
-      .theme-text-main {
-        color: var(--theme-text);
-        text-shadow: 0 0 2px rgba(0, 255, 0, 0.5);
-      }
-      .theme-text-sec {
-        color: var(--theme-text-sec);
-      }
-
-      #visualizer {
-        width: 100%;
-        height: 100%;
-        z-index: 9999;
-      }
-
-      #eq-container {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        padding: 4px;
-        padding-top: 8px;
-        flex: 1;
-        background: #050505;
-        border: 1px solid #000;
-        border-right: 1px solid #444;
-        border-bottom: 1px solid #444;
-        overflow: hidden;
-      }
-
-      .eq-col {
-        position: relative;
-        height: 100%;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        margin: 0 1px;
-      }
-
-      .eq-bar-wrapper {
-        width: 4px;
-        flex: 1;
-        position: relative;
-        margin: 0 auto;
-        border-radius: 2px;
-        background: linear-gradient(
-          to top,
-          var(--eq-col-1) 0%,
-          var(--eq-col-2) 50%,
-          var(--eq-col-3) 100%
-        );
-      }
-
-      .eq-bar-mask {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 50%;
-        background: #333;
-        pointer-events: none;
-        transition: height 0.05s linear;
-        border-top-left-radius: 2px;
-        border-top-right-radius: 2px;
-        z-index: 10;
-      }
-
-      .eq-off .eq-bar-wrapper {
-        opacity: 0.5;
-        filter: grayscale(100%);
-      }
-
-      .eq-thumb {
-        height: 10px;
-        width: 18px;
-        background: #c0c0c0;
-        border: 1px solid #000;
-        border-top: 1px solid #fff;
-        border-left: 1px solid #fff;
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-        pointer-events: none;
-        z-index: 40;
-        margin-bottom: -5px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-      }
-
-      .eq-label {
-        font-family: "Chakra Petch", sans-serif;
-        font-size: 8px;
-        color: #888;
-        text-align: center;
-        width: 100%;
-        margin-top: 4px;
-        height: 10px;
-        line-height: 1;
-        cursor: default;
-        user-select: none;
-      }
-
-      input[type="range"].v-input {
-        -webkit-appearance: none;
-        writing-mode: vertical-lr;
-        direction: rtl;
-        position: absolute;
-        top: -15px;
-        left: 0;
-        width: 100%;
-        height: calc(100% + 15px);
-        opacity: 0;
-        margin: 0;
-        z-index: 50;
-        cursor: pointer;
-      }
-
-      input[type="range"].h-slider {
-        -webkit-appearance: none;
-        background: transparent;
-        height: 20px;
-        width: 100%;
-        margin: 2px 0;
-      }
-      input[type="range"].h-slider:focus {
-        outline: none;
-      }
-      input[type="range"].h-slider::-webkit-slider-runnable-track {
-        width: 100%;
-        height: 6px;
-        background: #000;
-        border-bottom: 1px solid #444;
-        margin-top: 7px;
-      }
-      input[type="range"].h-slider::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        height: 12px;
-        width: 20px;
-        background: #c0c0c0;
-        border: 1px solid #000;
-        border-top: 1px solid #fff;
-        border-left: 1px solid #fff;
-        cursor: pointer;
-        margin-top: -4px;
-        box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-      }
-
-      /* --- Modal Styles --- */
-      #modal-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.85);
-        z-index: 99999;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-      }
-
-      #modal-overlay.active {
-        display: flex;
-      }
-
-      .modal-window {
-        width: 100%;
-        max-width: 280px;
-        height: 350px;
-        background: #292929;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .tab-header {
-        display: flex;
-        background: #1a1a1a;
-        border-bottom: 1px solid #000;
-      }
-
-      .tab-btn {
-        flex: 1;
-        padding: 6px 4px;
-        font-family: "Chakra Petch", sans-serif;
-        font-size: 10px;
-        font-weight: bold;
-        color: #888;
-        background: #151515;
-        border: none;
-        border-right: 1px solid #000;
-        border-bottom: 1px solid #444;
-        cursor: pointer;
-        text-align: center;
-      }
-      .tab-btn:last-child {
-        border-right: none;
-      }
-
-      .tab-btn.active {
-        background: var(--theme-window);
-        color: #fff;
-        border-bottom: 1px solid var(--theme-window);
-      }
-
-      .tab-content {
-        display: none;
-        flex: 1;
-        padding: 8px;
-        overflow-y: auto;
-        background: #222;
-        flex-direction: column;
-        gap: 6px;
-      }
-
-      .tab-content.active {
-        display: flex;
-      }
-
-      .setting-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-family: "Chakra Petch", sans-serif;
-        font-size: 9px;
-        color: #ccc;
-        padding: 4px 0;
-        border-bottom: 1px solid #333;
-      }
-
-      .rec-item {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px;
-        background: #111;
-        border: 1px solid #444;
-        margin-bottom: 2px;
-      }
-
-      .rec-icon {
-        color: var(--theme-text-sec);
-      }
-
-      .rec-info {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .tab-content::-webkit-scrollbar {
-        width: 4px;
-      }
-      .tab-content::-webkit-scrollbar-track {
-        background: #111;
-      }
-      .tab-content::-webkit-scrollbar-thumb {
-        background: #555;
-      }
-
-      @keyframes pulse-red {
-        0% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.5;
-        }
-        100% {
-          opacity: 1;
-        }
-      }
-      .recording-dot {
-        width: 8px;
-        height: 8px;
-        background-color: #ff0000;
-        border-radius: 50%;
-        animation: pulse-red 1s infinite;
-        display: none;
-      }
-      .recording-dot.active {
-        display: block;
-      }
-
-      #num-video-delay::-webkit-inner-spin-button,
-      #num-video-delay::-webkit-outer-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-      }
-      #num-video-delay {
-        -moz-appearance: textfield;
-      }
-
-      .theme-box {
-        transition: transform 0.1s;
-      }
-      .theme-box:active {
-        transform: scale(0.9);
-      }
-    </style>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="app-bg">
-    <div class="win-border-out flex-none">
+    <div id="session-mode-overlay" class="z-[100000]">
+      <div class="win-border-out session-dialog shadow-2xl">
+        <div class="theme-bar justify-center mb-2">
+          <span>MULTIPLE SESSIONS DETECTED</span>
+        </div>
+        <div class="bg-[#222] p-4 flex flex-col gap-4 text-center">
+          <p class="text-white text-[10px] font-sarabun">
+            ตรวจพบการใช้งานใน Tab อื่น <br />กรุณาเลือกรูปแบบการทำงาน:
+          </p>
+          <div class="flex flex-col gap-2">
+            <button
+              id="btn-mode-shared"
+              class="win-btn h-8 bg-blue-900 text-white border-blue-400 hover:bg-blue-800"
+            >
+              <div class="flex flex-col items-center">
+                <span class="text-[9px]">SHARED MODE</span
+                ><span class="text-[7px] text-gray-300 font-normal"
+                  >ใช้ค่า Setting เดียวกัน (Sync)</span
+                >
+              </div>
+            </button>
+            <button
+              id="btn-mode-temp"
+              class="win-btn h-8 bg-gray-700 text-white hover:bg-gray-600"
+            >
+              <div class="flex flex-col items-center">
+                <span class="text-[9px]">TEMPORARY MODE</span
+                ><span class="text-[7px] text-gray-300 font-normal"
+                  >แยกการทำงาน (ไม่บันทึกค่า)</span
+                >
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="modal-overlay">
+      <div class="win-border-out modal-window shadow-2xl">
+        <div class="theme-bar">
+          <span>SETTINGS & TOOLS</span
+          ><button
+            id="btn-modal-close"
+            class="win-btn text-red-900 font-bold bg-[#e0e0e0]"
+          >
+            X
+          </button>
+        </div>
+        <div class="tab-header">
+          <button class="tab-btn active" data-tab="tab-general">GENERAL</button>
+          <button class="tab-btn" data-tab="tab-advanced">ADVANCED</button>
+          <button class="tab-btn" data-tab="tab-record">RECORDER</button>
+          <button class="tab-btn" data-tab="tab-about">ABOUT</button>
+        </div>
+        <div class="win-border-in flex-1 m-2 flex flex-col min-h-0">
+          <div id="tab-general" class="tab-content active">
+            <div class="setting-row">
+              <span>Startup Volume</span
+              ><select
+                id="sel-startup-vol"
+                class="bg-black border border-gray-600 text-[8px] text-green-500 h-4 outline-none"
+              >
+                <option value="1.0">100%</option>
+                <option value="0.8">80%</option>
+                <option value="0.5">50%</option>
+                <option value="0.3">30%</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <span>Theme Color</span>
+              <div class="flex gap-1">
+                <div
+                  class="w-3 h-3 bg-[#000080] border border-white cursor-pointer theme-box"
+                  data-theme="blue"
+                ></div>
+                <div
+                  class="w-3 h-3 bg-[#800000] border border-gray-600 cursor-pointer theme-box"
+                  data-theme="red"
+                ></div>
+                <div
+                  class="w-3 h-3 bg-[#005000] border border-gray-600 cursor-pointer theme-box"
+                  data-theme="green"
+                ></div>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>Audio Latency Hint</span
+              ><select
+                id="sel-latency"
+                class="bg-black border border-gray-600 text-[8px] text-white h-4 outline-none"
+              >
+                <option value="interactive">Interactive</option>
+                <option value="balanced">Balanced</option>
+                <option value="playback">Playback</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <span>Show FPS / Stats</span
+              ><input
+                type="checkbox"
+                id="chk-show-stats"
+                class="accent-green-500"
+              />
+            </div>
+          </div>
+          <div id="tab-advanced" class="tab-content">
+            <div
+              class="text-[9px] font-bold text-green-500 mb-0.5 border-b border-gray-700"
+            >
+              REVERB SETTINGS
+            </div>
+            <div class="setting-row flex-col items-start gap-0.5 py-0.5">
+              <div class="w-full flex justify-between leading-none">
+                <span class="text-[8px]">Duration</span
+                ><span id="txt-rev-time" class="text-[8px]">3.0s</span>
+              </div>
+              <input
+                type="range"
+                id="adv-rev-time"
+                min="0.1"
+                max="10"
+                step="0.1"
+                value="3.0"
+                class="h-slider w-full"
+                style="height: 12px; margin: 0"
+              />
+            </div>
+            <div class="setting-row flex-col items-start gap-0.5 py-0.5">
+              <div class="w-full flex justify-between leading-none">
+                <span class="text-[8px]">Decay</span
+                ><span id="txt-rev-decay" class="text-[8px]">2.0</span>
+              </div>
+              <input
+                type="range"
+                id="adv-rev-decay"
+                min="0.1"
+                max="10"
+                step="0.1"
+                value="2.0"
+                class="h-slider w-full"
+                style="height: 12px; margin: 0"
+              />
+            </div>
+            <div
+              class="text-[9px] font-bold text-yellow-500 mb-0.5 mt-1 border-b border-gray-700"
+            >
+              DYNAMICS
+            </div>
+            <div class="setting-row flex-col items-start gap-0.5 py-0.5">
+              <div class="w-full flex justify-between leading-none">
+                <span class="text-[8px]">Boost Low</span
+                ><span id="txt-dyn-boost" class="text-[8px]">40%</span>
+              </div>
+              <input
+                type="range"
+                id="adv-dyn-boost"
+                min="0"
+                max="100"
+                step="1"
+                value="40"
+                class="h-slider w-full"
+                style="height: 12px; margin: 0"
+              />
+            </div>
+            <div class="setting-row flex-col items-start gap-0.5 py-0.5">
+              <div class="w-full flex justify-between leading-none">
+                <span class="text-[8px]">Limit High</span
+                ><span id="txt-dyn-limit" class="text-[8px]">60%</span>
+              </div>
+              <input
+                type="range"
+                id="adv-dyn-limit"
+                min="0"
+                max="100"
+                step="1"
+                value="60"
+                class="h-slider w-full"
+                style="height: 12px; margin: 0"
+              />
+            </div>
+            <div
+              class="text-[9px] font-bold text-blue-400 mb-0.5 mt-1 border-b border-gray-700"
+            >
+              UTILITIES
+            </div>
+            <div class="flex flex-col gap-1 mt-0.5">
+              <div class="flex items-center gap-1">
+                <span class="text-[8px] text-gray-500 w-8">ID:</span
+                ><input
+                  type="text"
+                  id="txt-ext-id"
+                  class="flex-1 bg-[#111] border border-gray-600 text-[8px] text-gray-400 px-1 h-4 outline-none cursor-default"
+                  readonly
+                  value="Loading..."
+                /><button id="btn-copy-id" class="win-btn w-8 h-4 text-[8px]">
+                  CPY
+                </button>
+              </div>
+              <button
+                id="btn-reset"
+                class="win-btn w-full py-0.5 text-red-900 font-bold bg-[#e0e0e0]"
+              >
+                FACTORY RESET
+              </button>
+            </div>
+          </div>
+          <div id="tab-record" class="tab-content">
+            <div
+              class="flex justify-between items-center mb-2 p-1 bg-black border border-gray-700"
+            >
+              <span class="text-[9px] font-pixel text-gray-400"
+                >STATUS: <span id="rec-status">READY</span></span
+              ><button
+                id="btn-rec-action"
+                class="win-btn w-12 h-4 text-[8px] flex items-center justify-center gap-1"
+              >
+                <div class="w-1.5 h-1.5 rounded-full bg-red-600"></div>
+                <span>REC</span>
+              </button>
+            </div>
+            <div class="text-[8px] text-gray-500 mb-1 font-bold">
+              SAVED RECORDINGS
+            </div>
+            <div class="flex flex-col gap-1" id="rec-list"></div>
+          </div>
+          <div id="tab-about" class="tab-content">
+            <div
+              class="flex flex-col items-center justify-center h-full text-center gap-2"
+            >
+              <div
+                class="w-12 h-12 bg-gray-800 border border-white flex items-center justify-center p-1"
+              >
+                <img
+                  src="./assets/logo.png"
+                  alt="Logo"
+                  class="w-full h-full object-contain"
+                />
+              </div>
+              <div>
+                <div class="text-[10px] font-bold text-white">
+                  NEXTAMP EXTENSION
+                </div>
+                <div class="text-[8px] text-gray-400">Version 4.5.1</div>
+              </div>
+              <p class="text-[8px] text-gray-500 px-4">
+                Advanced audio processing & real-time visualizer.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="win-border-out flex-none" id="block-audio">
       <div class="theme-bar cursor-default select-none">
         <div class="flex items-center gap-2">
+          <button
+            id="btn-toggle-audio"
+            class="win-btn h-3 w-8 text-[8px] font-bold pressed"
+          >
+            ON
+          </button>
           <i class="ph-bold ph-music-note"></i>
-          <span>NEXTAMP</span>
+          <span>AUDIO MASTER</span>
         </div>
         <div class="flex items-center gap-1">
-          <button
-            id="btn-rec-top"
-            class="win-btn text-red-900 font-bold"
-            title="Record Audio"
-          >
+          <button id="btn-rec-top" class="win-btn text-red-900 font-bold">
             REC
           </button>
-          <button
-            id="btn-settings"
-            class="win-btn text-gray-800 font-bold"
-            title="Settings"
-          >
+          <button id="btn-settings" class="win-btn text-gray-800 font-bold">
             SET
           </button>
-
           <div class="w-[1px] h-3 bg-black/50 mx-0.5"></div>
-
-          <button
-            id="btn-copy-id"
-            class="win-btn text-blue-900 font-bold bg-[#e0e0e0]"
-            title="Copy Extension ID"
-          >
-            ID
-          </button>
-          <button id="btn-reset" class="win-btn" title="Reset">R</button>
           <button
             id="btn-close"
             class="win-btn text-red-900 font-bold bg-[#e0e0e0]"
-            title="Close"
           >
             X
           </button>
         </div>
       </div>
 
-      <div class="p-2 flex flex-col gap-2 bg-[#222]">
-        <div class="win-border-in p-1 flex gap-1 h-[80px] bg-[#1a1a1a]">
+      <div class="p-1 flex flex-col gap-1 bg-[#222]">
+        <div class="win-border-in p-1 flex gap-1 h-[76px] bg-[#1a1a1a]">
           <div
             class="col-span-3 bg-black border border-gray-700 relative cursor-pointer flex-1"
           >
             <canvas id="visualizer" class=""></canvas>
-
             <div
               class="absolute top-0.5 left-1 text-[8px] text-[#00ff00] opacity-50"
             >
               VISUALIZER
             </div>
-
             <div
               id="rec-indicator"
               class="absolute top-0.5 right-1 hidden flex items-center gap-1 z-10"
@@ -469,7 +317,6 @@
                 >REC</span
               >
             </div>
-
             <div
               id="live-indicator"
               class="absolute bottom-0.5 right-1 flex items-center gap-1 opacity-80 z-10"
@@ -480,20 +327,19 @@
               >
             </div>
           </div>
-
           <div
-            class="w-[50%] flex flex-col justify-between py-0.5 px-1 bg-[#222] border-l border-gray-700"
+            class="w-[50%] flex flex-col justify-center gap-0.5 px-1 bg-[#222] border-l border-gray-700"
+            id="audio-controls-area"
           >
-            <div class="flex flex-col gap-0">
+            <div class="flex flex-col gap-0 relative">
               <div
                 class="flex justify-between text-[7px] font-pixel theme-text-main font-bold -mb-1"
               >
-                <div class="flex gap-1">
-                  <span>VOL</span>
-                  <button
+                <div class="flex gap-1 z-50">
+                  <span>VOL</span
+                  ><button
                     id="btn-normalize"
-                    class="win-btn w-full h-full border text-[7px] font-bold transition-colors duration-200 flex items-center justify-center gap-0.5"
-                    title="Loudness Normalization"
+                    class="win-btn w-full h-full border text-[7px] font-bold flex items-center justify-center gap-0.5 px-1"
                   >
                     <span>DYN</span>
                     <div
@@ -511,7 +357,8 @@
                 max="1"
                 step="0.05"
                 value="1.0"
-                class="h-slider"
+                class="h-slider z-20"
+                style="margin: 2px 0 0 0; height: 16px"
               />
             </div>
             <div class="flex flex-col gap-0">
@@ -528,113 +375,19 @@
                 step="0.1"
                 value="0"
                 class="h-slider"
+                style="margin: 2px 0 0 0; height: 16px"
               />
             </div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2">
-          <div class="win-border-in bg-[#1a1a1a] p-1.5 relative">
-            <div
-              class="flex justify-between text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
-            >
-              <span>Pitch</span
-              ><span id="txt-pitch" class="theme-text-sec text-[9px]">0</span>
-            </div>
-            <input
-              type="range"
-              id="main-pitch"
-              min="-12"
-              max="12"
-              step="1"
-              value="0"
-              class="h-slider w-full"
-            />
-          </div>
-          <div class="win-border-in bg-[#1a1a1a] p-1.5 relative">
-            <div
-              class="flex justify-between text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
-            >
-              <span>Reverb</span
-              ><span id="txt-verb" class="theme-text-main text-[9px]">0.0</span>
-            </div>
-            <input
-              type="range"
-              id="main-verb"
-              min="0"
-              max="2"
-              step="0.1"
-              value="0"
-              class="h-slider w-full"
-            />
-          </div>
-        </div>
-
-        <div class="flex gap-2">
-          <div class="win-border-in bg-[#1a1a1a] p-1.5 relative flex-1">
-            <div
-              class="flex justify-between items-center text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
-            >
-              <span>Video Delay (s)</span>
-              <div class="flex items-center gap-2">
-                <span>GPU</span>
-                <select
-                  id="video-quality"
-                  class="bg-black text-[#00ff00] border border-gray-600 text-[8px] outline-none h-3 p-0 px-1 font-pixel focus:border-green-500"
-                >
-                  <option value="max">MAX</option>
-                  <option value="high">1080P</option>
-                  <option value="mid">720P</option>
-                  <option value="low">320P</option>
-                </select>
-              </div>
-
-              <div class="flex items-center gap-0.5">
-                <button
-                  id="btn-delay-minus"
-                  class="win-btn w-3 h-3 flex items-center justify-center text-[9px] p-0 font-bold active:bg-[#a0a0a0]"
-                >
-                  -
-                </button>
-
-                <input
-                  type="number"
-                  id="num-video-delay"
-                  min="0"
-                  max="9.99"
-                  step="0.01"
-                  value="0.00"
-                  class="w-8 bg-black text-[#ffcc00] border border-gray-600 text-[9px] text-center outline-none focus:border-green-500 font-pixel h-3.5 p-0 mx-0.5"
-                />
-
-                <button
-                  id="btn-delay-plus"
-                  class="win-btn w-3 h-3 flex items-center justify-center text-[9px] p-0 font-bold active:bg-[#a0a0a0]"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
-            <input
-              type="range"
-              id="video-delay"
-              min="0"
-              max="9.99"
-              step="0.01"
-              value="0"
-              class="h-slider w-full"
-            />
           </div>
         </div>
       </div>
     </div>
 
-    <div class="win-border-out flex-1 min-h-0">
+    <div class="win-border-out flex-none h-[130px]" id="block-eq-fx">
       <div class="theme-bar cursor-default select-none">
         <div class="flex items-center gap-2">
           <i class="ph-bold ph-faders"></i>
-          <span>EQUALIZER</span>
+          <span>EQ / FX</span>
         </div>
         <select
           id="eq-preset"
@@ -649,144 +402,198 @@
         </select>
       </div>
 
-      <div class="p-2 flex flex-col h-full bg-[#222] min-h-0">
+      <div
+        class="flex h-full bg-[#222] min-h-0 p-1 gap-1"
+        id="eq-controls-area"
+      >
         <div
-          class="flex items-center h-[30px] border border-gray-700 bg-black p-[1px] mb-2 flex-none shadow-md relative"
+          class="w-[30%] flex flex-col justify-center gap-1 p-1 bg-[#1a1a1a] win-border-in"
         >
-          <canvas
-            id="eq-graph"
-            class="flex-1 h-full bg-[#080808]"
-            width="280"
-            height="30"
-          ></canvas>
-          <button
-            id="btn-eq-toggle"
-            class="win-btn h-full w-8 text-[8px] flex flex-col gap-0 leading-none ml-[1px] border-l border-gray-600 absolute right-0 top-0 z-20 opacity-90"
-          >
-            <span>EQ</span><span class="text-[8px] font-bold">ON</span>
-          </button>
+          <div class="flex flex-col gap-0">
+            <div
+              class="flex justify-between text-[7px] font-pixel text-gray-400 font-bold -mb-1"
+            >
+              <span>PITCH</span
+              ><span id="txt-pitch" class="theme-text-sec">0</span>
+            </div>
+            <input
+              type="range"
+              id="main-pitch"
+              min="-12"
+              max="12"
+              step="1"
+              value="0"
+              class="h-slider"
+              style="margin: 2px 0 0 0; height: 14px"
+            />
+          </div>
+          <div class="flex flex-col gap-0 mt-2">
+            <div
+              class="flex justify-between text-[7px] font-pixel text-gray-400 font-bold -mb-1"
+            >
+              <span>VERB</span
+              ><span id="txt-verb" class="theme-text-main">0.0</span>
+            </div>
+            <input
+              type="range"
+              id="main-verb"
+              min="0"
+              max="2"
+              step="0.1"
+              value="0"
+              class="h-slider"
+              style="margin: 2px 0 0 0; height: 14px"
+            />
+          </div>
         </div>
 
-        <div id="eq-container" class="win-border-in"></div>
+        <div class="flex-1 flex flex-col min-w-0">
+          <div
+            class="flex items-center h-[20px] border border-gray-700 bg-black p-[1px] mb-1 flex-none shadow-md relative w-full"
+          >
+            <canvas id="eq-graph" class="w-full h-full bg-[#080808]"></canvas>
+            <button
+              id="btn-eq-toggle"
+              class="win-btn h-full w-8 text-[8px] flex flex-col gap-0 leading-none ml-[1px] border-l border-gray-600 absolute right-0 top-0 z-20 opacity-90"
+            >
+             <span class="text-[8px] font-bold">ON</span>
+            </button>
+          </div>
+          <div id="eq-container" class="win-border-in flex-1"></div>
+        </div>
       </div>
     </div>
 
-    <div id="modal-overlay">
-      <div class="win-border-out modal-window shadow-2xl">
-        <div class="theme-bar">
-          <span>SETTINGS & TOOLS</span>
+    <div class="win-border-out flex-none" id="block-video">
+      <div class="theme-bar cursor-default select-none border-t border-black">
+        <div class="flex items-center gap-2">
           <button
-            id="btn-modal-close"
-            class="win-btn text-red-900 font-bold bg-[#e0e0e0]"
+            id="btn-toggle-video"
+            class="win-btn h-3 w-8 text-[8px] font-bold pressed"
           >
-            X
+            ON
           </button>
+          <i class="ph-bold ph-monitor-play"></i>
+          <span>VIDEO</span>
         </div>
-
-        <div class="tab-header">
-          <button class="tab-btn active" data-tab="tab-general">GENERAL</button>
-          <button class="tab-btn" data-tab="tab-record">RECORDER</button>
-          <button class="tab-btn" data-tab="tab-about">ABOUT</button>
-        </div>
-
-        <div class="win-border-in flex-1 m-2 flex flex-col min-h-0">
-          <div id="tab-general" class="tab-content active">
-            <div class="setting-row">
-              <span>Startup Volume</span>
+      </div>
+      <div
+        class="p-1.5 grid grid-cols-2 gap-1 bg-[#222]"
+        id="video-controls-area"
+      >
+        <div class="win-border-in bg-[#1a1a1a] p-1 relative col-span-2">
+          <div
+            class="flex justify-between items-center text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold border-b border-[#333] pb-0.5"
+          >
+            <span>Delay</span>
+            <div class="flex items-center gap-2">
               <select
-                id="sel-startup-vol"
-                class="bg-black border border-gray-600 text-[8px] text-green-500 h-4 outline-none"
+                id="video-quality"
+                class="bg-black text-[#00ff00] border border-gray-600 text-[8px] outline-none h-3 p-0 px-1 font-pixel focus:border-green-500"
               >
-                <option value="1.0">100%</option>
-                <option value="0.8">80%</option>
-                <option value="0.5">50%</option>
-                <option value="0.3">30%</option>
+                <option value="max">MAX</option>
+                <option value="high">1080P</option>
+                <option value="mid">720P</option>
+                <option value="low">320P</option>
               </select>
-            </div>
-            <div class="setting-row">
-              <span>Theme Color</span>
-              <div class="flex gap-1">
-                <div
-                  class="w-3 h-3 bg-[#000080] border border-white cursor-pointer theme-box"
-                  data-theme="blue"
-                  title="Classic Blue"
-                ></div>
-                <div
-                  class="w-3 h-3 bg-[#800000] border border-gray-600 cursor-pointer theme-box"
-                  data-theme="red"
-                  title="Crimson Red"
-                ></div>
-                <div
-                  class="w-3 h-3 bg-[#005000] border border-gray-600 cursor-pointer theme-box"
-                  data-theme="green"
-                  title="Matrix Green"
-                ></div>
+              <div class="flex items-center gap-0.5">
+                <button
+                  id="btn-delay-minus"
+                  class="win-btn w-3 h-3 flex items-center justify-center text-[9px] p-0 font-bold"
+                >
+                  -</button
+                ><input
+                  type="number"
+                  id="num-video-delay"
+                  min="0"
+                  max="9.99"
+                  step="0.01"
+                  value="0.00"
+                  class="w-8 bg-black text-[#ffcc00] border border-gray-600 text-[9px] text-center outline-none font-pixel h-3.5 p-0 mx-0.5"
+                /><button
+                  id="btn-delay-plus"
+                  class="win-btn w-3 h-3 flex items-center justify-center text-[9px] p-0 font-bold"
+                >
+                  +
+                </button>
               </div>
             </div>
-            <div class="setting-row">
-              <span>Audio Latency Hint</span>
-              <select
-                id="sel-latency"
-                class="bg-black border border-gray-600 text-[8px] text-white h-4 outline-none"
-              >
-                <option value="interactive">Interactive (Low)</option>
-                <option value="balanced">Balanced</option>
-                <option value="playback">Playback (High)</option>
-              </select>
-            </div>
-            <div class="setting-row">
-              <span>Show FPS / Stats</span>
-              <input
-                type="checkbox"
-                id="chk-show-stats"
-                class="accent-green-500"
-              />
-            </div>
           </div>
-
-          <div id="tab-record" class="tab-content">
-            <div
-              class="flex justify-between items-center mb-2 p-1 bg-black border border-gray-700"
-            >
-              <span class="text-[9px] font-pixel text-gray-400"
-                >STATUS: <span id="rec-status">READY</span></span
+          <input
+            type="range"
+            id="video-delay"
+            min="0"
+            max="9.99"
+            step="0.01"
+            value="0"
+            class="h-slider w-full"
+            style="margin: 0"
+          />
+        </div>
+        <div class="win-border-in bg-[#1a1a1a] p-1 relative">
+          <div
+            class="flex justify-between items-center text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
+          >
+            <div class="flex items-center gap-1">
+              <span>ZOOM</span
+              ><span id="txt-zoom" class="text-blue-400">100%</span>
+            </div>
+            <div class="flex gap-0.5">
+              <button id="btn-zoom-fit" class="win-btn h-3 text-[7px] px-1">
+                1:1</button
+              ><button
+                id="btn-zoom-ultra"
+                class="win-btn h-3 text-[7px] px-1 text-green-800"
               >
-              <button
-                id="btn-rec-action"
-                class="win-btn w-12 h-4 text-[8px] flex items-center justify-center gap-1"
+                21:9</button
+              ><button
+                id="btn-zoom-fill"
+                class="win-btn h-3 text-[7px] px-1 text-blue-900"
               >
-                <div class="w-1.5 h-1.5 rounded-full bg-red-600"></div>
-                <span>REC</span>
+                FILL
               </button>
             </div>
-
-            <div class="text-[8px] text-gray-500 mb-1 font-bold">
-              SAVED RECORDINGS
-            </div>
-            <div class="flex flex-col gap-1" id="rec-list"></div>
           </div>
-
-          <div id="tab-about" class="tab-content">
-            <div
-              class="flex flex-col items-center justify-center h-full text-center gap-2"
-            >
-              <div
-                class="w-12 h-12 bg-gray-800 border border-white flex items-center justify-center"
+          <input
+            type="range"
+            id="video-zoom"
+            min="1"
+            max="3"
+            step="0.01"
+            value="1"
+            class="h-slider w-full"
+            style="margin: 0"
+          />
+        </div>
+        <div class="win-border-in bg-[#1a1a1a] p-1 relative">
+          <div
+            class="flex justify-between items-center text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
+          >
+            <div class="flex items-center gap-1">
+              <span>ROT</span
+              ><span id="txt-rotate" class="text-purple-400">0°</span>
+            </div>
+            <div class="flex gap-0.5">
+              <button id="btn-rotate-0" class="win-btn h-3 text-[7px] px-1">
+                0°</button
+              ><button
+                id="btn-rotate-90"
+                class="win-btn h-3 text-[7px] px-1 text-purple-800"
               >
-                <i class="ph-duotone ph-rocket text-2xl text-green-500"></i>
-              </div>
-              <div>
-                <div class="text-[10px] font-bold text-white">
-                  NEXTAMP EXTENSION
-                </div>
-                <div class="text-[8px] text-gray-400">Version 4.5.0</div>
-              </div>
-              <p class="text-[8px] text-gray-500 px-4">
-                Advanced audio processing, real-time visualizer, and in-browser
-                audio recording.
-              </p>
+                +90°
+              </button>
             </div>
           </div>
+          <input
+            type="range"
+            id="video-rotate"
+            min="0"
+            max="360"
+            step="5"
+            value="0"
+            class="h-slider w-full"
+            style="margin: 0"
+          />
         </div>
       </div>
     </div>

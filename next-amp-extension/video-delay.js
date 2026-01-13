@@ -1,3 +1,4 @@
+// next-amp-extension/video-delay.js
 class Monitor {
   constructor() {
     this.videoCallbacks = new Map();
@@ -10,21 +11,29 @@ class Monitor {
 
   startMonitor() {
     chrome.runtime.sendMessage({ type: "GET_STATE" }, (response) => {
-      if (response) {
-        if (response.videoQuality) {
-          this.quality = response.videoQuality;
+      if (response && response.videoDelay) {
+        const globalDelay = parseFloat(response.videoDelay) * 1000;
+        if (globalDelay > 0) {
+          this.delay = globalDelay;
+          this.setupVideoListeners();
+          document
+            .querySelectorAll("video")
+            .forEach((v) => this.waitForVideoFrameRefresh(v));
         }
-
-        if (response.videoDelay) {
-          const globalDelay = parseFloat(response.videoDelay) * 1000;
-          if (globalDelay > 0) {
-            this.delay = globalDelay;
-            this.setupVideoListeners();
-            document
-              .querySelectorAll("video")
-              .forEach((v) => this.waitForVideoFrameRefresh(v));
+      } else {
+        // Fallback: ดูใน Storage เผื่อ Popup ปิดอยู่และ Audio OFF แต่ User ตั้ง Delay ไว้
+        chrome.storage.local.get(["videoDelay"], (res) => {
+          if (res.videoDelay) {
+            const globalDelay = parseFloat(res.videoDelay) * 1000;
+            if (globalDelay > 0) {
+              this.delay = globalDelay;
+              this.setupVideoListeners();
+              document
+                .querySelectorAll("video")
+                .forEach((v) => this.waitForVideoFrameRefresh(v));
+            }
           }
-        }
+        });
       }
     });
 
@@ -166,9 +175,11 @@ class DelayedVideo {
     this.lastRenderedSubtitleHash = "";
 
     this.frameQueue = [];
-
     this.subtitleElements = [];
     this.hiddenSubtitleElements = [];
+
+    // เพิ่ม styleObserver เพื่อจับการเปลี่ยนแปลง Zoom/Rotate ของ Video ต้นฉบับ
+    this.styleObserver = null;
 
     this.init();
   }
@@ -412,6 +423,14 @@ class DelayedVideo {
     this.resizeObserver.observe(this.video);
     if (this.video.parentNode)
       this.resizeObserver.observe(this.video.parentNode);
+
+    // [แก้ไข] เพิ่ม Observer จับการเปลี่ยน Style (Zoom/Rotate)
+    this.styleObserver = new MutationObserver(() => this.syncStyle());
+    this.styleObserver.observe(this.video, {
+      attributes: true,
+      attributeFilter: ["style"],
+    });
+
     document.addEventListener("fullscreenchange", () =>
       setTimeout(() => this.resize(), 100)
     );
@@ -425,12 +444,11 @@ class DelayedVideo {
     this.video.addEventListener("emptied", this.emptyHandler);
   }
 
+  // [แก้ไข] แยก Logic การ Resize
   resize() {
     if (!this.videoCanvas || !this.video) return;
 
-    const style = window.getComputedStyle(this.video);
     const rect = this.video.getBoundingClientRect();
-
     const originalWidth = this.video.videoWidth || rect.width;
     const originalHeight = this.video.videoHeight || rect.height;
 
@@ -453,28 +471,44 @@ class DelayedVideo {
     this.videoCanvas.width = renderWidth;
     this.videoCanvas.height = renderHeight;
 
+    const dpr = window.devicePixelRatio || 1;
+    this.subtitleCanvas.width = rect.width * dpr;
+    this.subtitleCanvas.height = rect.height * dpr;
+
+    if (this.gl) this.gl.viewport(0, 0, renderWidth, renderHeight);
+
+    // เรียก syncStyle เพื่ออัปเดตตำแหน่งและ Transform
+    this.syncStyle();
+    this.lastRenderedSubtitleHash = "";
+  }
+
+  // [แก้ไข] ฟังก์ชันใหม่สำหรับ Sync Style (Transform)
+  syncStyle() {
+    if (!this.videoCanvas || !this.video) return;
+    const style = window.getComputedStyle(this.video);
+
+    // Copy ตำแหน่งและ Transform (Zoom/Rotate)
     this.videoCanvas.style.width = style.width;
     this.videoCanvas.style.height = style.height;
     this.videoCanvas.style.top = style.top;
     this.videoCanvas.style.left = style.left;
-    this.videoCanvas.style.transform = style.transform;
+    this.videoCanvas.style.transform = style.transform; // สำคัญ: Copy transform
+    this.videoCanvas.style.transformOrigin = style.transformOrigin;
 
-    const dpr = window.devicePixelRatio || 1;
-    this.subtitleCanvas.width = rect.width * dpr;
-    this.subtitleCanvas.height = rect.height * dpr;
     this.subtitleCanvas.style.width = style.width;
     this.subtitleCanvas.style.height = style.height;
     this.subtitleCanvas.style.top = style.top;
     this.subtitleCanvas.style.left = style.left;
-    this.subtitleCanvas.style.transform = style.transform;
-
-    if (this.gl) this.gl.viewport(0, 0, renderWidth, renderHeight);
-    this.lastRenderedSubtitleHash = "";
+    this.subtitleCanvas.style.transform = style.transform; // สำคัญ: Copy transform
+    this.subtitleCanvas.style.transformOrigin = style.transformOrigin;
   }
 
   destroy() {
     this.isActive = false;
     cancelAnimationFrame(this.renderLoopId);
+
+    // [แก้ไข] Cleanup styleObserver
+    if (this.styleObserver) this.styleObserver.disconnect();
 
     if (this.video) {
       this.video.style.removeProperty("opacity");
