@@ -364,7 +364,10 @@ async function toggleRecording() {
   const btnRecTop = $("#btn-rec-top");
   const recIndicator = $("#rec-indicator");
   if (!isRecording) {
-    const success = await sendMessageWithRetry({ type: "START_RECORDING" });
+    const success = await sendMessageWithRetry({
+      type: "START_RECORDING",
+      tabId: currentTabId,
+    });
     if (success) {
       isRecording = true;
       settingsModal.updateRecordStatus(true);
@@ -377,7 +380,11 @@ async function toggleRecording() {
     isRecording = false;
     settingsModal.updateRecordStatus(false);
     if (recIndicator) recIndicator.classList.add("hidden");
-    await sendMessageWithRetry({ type: "STOP_RECORDING" });
+
+    await sendMessageWithRetry({
+      type: "STOP_RECORDING",
+      tabId: currentTabId,
+    });
     btnRecTop.textContent = "REC";
     btnRecTop.classList.remove("bg-red-600", "text-white");
     btnRecTop.classList.add("text-red-900");

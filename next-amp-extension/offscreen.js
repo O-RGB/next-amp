@@ -1,4 +1,3 @@
-// next-amp-extension/offscreen.js
 import { PitchProcessor } from "./pitch-processor.js";
 import { AudioEffects } from "./audio-effects.js";
 import { DBManager } from "./db-manager.js";
@@ -40,8 +39,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     );
     return true;
   } else if (msg.type === "START_RECORDING") {
-    startRecording(tabId);
-    sendResponse(true);
+    console.log(
+      `[Message Received] Requesting START_RECORDING for Tab: ${tabId}`
+    );
+
+    const result = startRecording(tabId);
+
+    if (result.success) {
+      console.log("[Status] Recording Started Successfully");
+      sendResponse(true);
+    } else {
+      console.error("[Error] Failed to start recording:", result.reason);
+
+      sendResponse(false);
+    }
+    return true;
   } else if (msg.type === "STOP_RECORDING") {
     stopRecording(tabId);
     sendResponse(true);
@@ -91,14 +103,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       count: otherSessions.length,
       activeTabs: otherSessions,
     });
-  }
-
-  // [UPDATED] WebRTC Handlers using RTCServer
-  else if (msg.type === "START_WEBRTC_STREAM") {
+  } else if (msg.type === "START_WEBRTC_STREAM") {
     startWebRTC(msg.sourceTabId, msg.playerTabId);
   } else if (msg.type === "STOP_WEBRTC_STREAM") {
     rtcServer.stopSession(msg.sourceTabId);
-    // Unmute local if needed
+
     unmuteLocal(msg.sourceTabId);
   } else if (msg.type === "RTC_ANSWER") {
     rtcServer.handleAnswer(msg.sourceTabId, msg.answer);
@@ -111,7 +120,6 @@ async function startWebRTC(sourceTabId, playerTabId) {
   const session = sessions.get(sourceTabId);
   if (!session) return;
 
-  // Start RTC Session via Server Module
   await rtcServer.startSession(
     sourceTabId,
     playerTabId,
@@ -119,12 +127,11 @@ async function startWebRTC(sourceTabId, playerTabId) {
     session.audioCtx
   );
 
-  // Mute Local (Offscreen) to prevent double audio, pipe only to RTC
   if (session.masterNode) {
     try {
       session.masterNode.disconnect(session.audioCtx.destination);
     } catch (e) {}
-    // Ensure it's still connected to recording dest (RTC source) & analyser
+
     session.masterNode.connect(session.recordingStreamDest);
     session.masterNode.connect(session.analyser);
   }
@@ -179,7 +186,6 @@ async function startAudio(
     master.connect(analyser);
     master.connect(audioCtx.destination);
 
-    // Channel count 2 for stereo
     const recordingStreamDest = audioCtx.createMediaStreamDestination();
     recordingStreamDest.channelCount = 2;
 
@@ -215,7 +221,6 @@ async function startAudio(
     sendResponse({ success: false, error: e.message });
   }
 }
-
 function setupRecorder(session, stream) {
   try {
     const options = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -223,14 +228,32 @@ function setupRecorder(session, stream) {
       : {};
     const mediaRecorder = new MediaRecorder(stream, options);
     session.mediaRecorder = mediaRecorder;
+
     mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) session.recordedChunks.push(e.data);
+      if (e.data.size > 0) {
+        session.recordedChunks.push(e.data);
+        console.log(`[Recorder] Chunk received: ${e.data.size} bytes`);
+      }
     };
+
     mediaRecorder.onstop = async () => {
+      console.log(
+        `[Recorder] Stopping. Total chunks: ${session.recordedChunks.length}`
+      );
+
       const blob = new Blob(session.recordedChunks, { type: "audio/webm" });
+      console.log(
+        `[Recorder] Blob created. Size: ${blob.size}, Type: ${blob.type}`
+      );
+
       session.recordedChunks = [];
       try {
+        if (blob.size === 0) {
+          console.error("[Recorder Error] Blob size is 0. Nothing recorded.");
+          return;
+        }
         await db.saveRecording(blob);
+        console.log("[Recorder] Saved to DB successfully");
         chrome.runtime.sendMessage({ type: "RECORDING_SAVED" }).catch(() => {});
       } catch (err) {
         console.error("Save Error:", err);
@@ -240,16 +263,38 @@ function setupRecorder(session, stream) {
     console.error("Recorder Setup Failed:", e);
   }
 }
-
 function startRecording(tabId) {
+  console.log(`[Function] startRecording called for tab ${tabId}`);
+
   const session = sessions.get(tabId);
-  if (
-    session &&
-    session.mediaRecorder &&
-    session.mediaRecorder.state === "inactive"
-  ) {
+
+  if (!session) {
+    console.warn(
+      `[Fail] No session found for tab ${tabId}. Did you start Audio Capture?`
+    );
+    return { success: false, reason: "NO_SESSION" };
+  }
+
+  if (!session.mediaRecorder) {
+    console.warn(`[Fail] MediaRecorder not initialized for tab ${tabId}`);
+    return { success: false, reason: "NO_RECORDER" };
+  }
+
+  if (session.mediaRecorder.state !== "inactive") {
+    console.warn(
+      `[Fail] Recorder is busy. State: ${session.mediaRecorder.state}`
+    );
+    return { success: false, reason: "RECORDER_BUSY" };
+  }
+
+  try {
     session.recordedChunks = [];
-    session.mediaRecorder.start();
+    session.mediaRecorder.start(1000);
+    console.log(`[Success] MediaRecorder started with 1000ms timeslice`);
+    return { success: true };
+  } catch (e) {
+    console.error("[Exception] Error starting MediaRecorder:", e);
+    return { success: false, reason: e.message };
   }
 }
 
@@ -265,7 +310,6 @@ function stopRecording(tabId) {
 }
 
 function stopAudio(tabId) {
-  // Stop RTC Session if exists
   rtcServer.stopSession(tabId);
 
   const session = sessions.get(tabId);

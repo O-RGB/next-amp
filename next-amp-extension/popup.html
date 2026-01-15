@@ -111,14 +111,6 @@
                 <option value="playback">Playback</option>
               </select>
             </div>
-            <div class="setting-row">
-              <span>Show FPS / Stats</span
-              ><input
-                type="checkbox"
-                id="chk-show-stats"
-                class="accent-green-500"
-              />
-            </div>
           </div>
           <div id="tab-advanced" class="tab-content">
             <div
@@ -201,12 +193,12 @@
               UTILITIES
             </div>
             <div class="flex flex-col gap-1 mt-0.5">
-              <button
+              <!-- <button
                 id="btn-open-player"
                 class="win-btn w-full py-0.5 text-blue-900 font-bold bg-[#e0e0ff] mb-1"
               >
                 OPEN CAST PLAYER
-              </button>
+              </button> -->
               <div class="flex items-center gap-1">
                 <span class="text-[8px] text-gray-500 w-8">ID:</span
                 ><input
@@ -284,9 +276,12 @@
             ON
           </button>
           <i class="ph-bold ph-music-note"></i>
-          <span>AUDIO MASTER</span>
+          <span>MASTER</span>
         </div>
         <div class="flex items-center gap-1">
+          <button id="btn-open-player" class="win-btn text-green-900 font-bold">
+            OUT
+          </button>
           <button id="btn-rec-top" class="win-btn text-red-900 font-bold">
             REC
           </button>
@@ -363,7 +358,7 @@
                 max="1"
                 step="0.05"
                 value="1.0"
-                class="h-slider z-20"
+                class="h-slider z-10"
                 style="margin: 2px 0 0 0; height: 16px"
               />
             </div>
@@ -386,86 +381,78 @@
             </div>
           </div>
         </div>
-      </div>
-    </div>
-
-    <div class="win-border-out flex-none h-[130px]" id="block-eq-fx">
-      <div class="theme-bar cursor-default select-none">
-        <div class="flex items-center gap-2">
-          <i class="ph-bold ph-faders"></i>
-          <span>EQ / FX</span>
-        </div>
-        <select
-          id="eq-preset"
-          class="bg-black text-[9px] text-gray-300 border border-gray-500 outline-none px-1 h-3.5 font-pixel focus:border-green-500"
-        >
-          <option value="flat">Flat</option>
-          <option value="bass">Bass</option>
-          <option value="rock">Rock</option>
-          <option value="pop">Pop</option>
-          <option value="voice">Voice</option>
-          <option value="custom">User</option>
-        </select>
-      </div>
-
-      <div
-        class="flex h-full bg-[#222] min-h-0 p-1 gap-1"
-        id="eq-controls-area"
-      >
         <div
-          class="w-[30%] flex flex-col justify-center gap-1 p-1 bg-[#1a1a1a] win-border-in"
+          class="flex h-[100px] bg-[#222] min-h-0 gap-1"
+          id="eq-controls-area"
         >
-          <div class="flex flex-col gap-0">
-            <div
-              class="flex justify-between text-[7px] font-pixel text-gray-400 font-bold -mb-1"
-            >
-              <span>PITCH</span
-              ><span id="txt-pitch" class="theme-text-sec">0</span>
-            </div>
-            <input
-              type="range"
-              id="main-pitch"
-              min="-12"
-              max="12"
-              step="1"
-              value="0"
-              class="h-slider"
-              style="margin: 2px 0 0 0; height: 14px"
-            />
-          </div>
-          <div class="flex flex-col gap-0 mt-2">
-            <div
-              class="flex justify-between text-[7px] font-pixel text-gray-400 font-bold -mb-1"
-            >
-              <span>VERB</span
-              ><span id="txt-verb" class="theme-text-main">0.0</span>
-            </div>
-            <input
-              type="range"
-              id="main-verb"
-              min="0"
-              max="2"
-              step="0.1"
-              value="0"
-              class="h-slider"
-              style="margin: 2px 0 0 0; height: 14px"
-            />
-          </div>
-        </div>
-
-        <div class="flex-1 flex flex-col min-w-0">
           <div
-            class="flex items-center h-[20px] border border-gray-700 bg-black p-[1px] mb-1 flex-none shadow-md relative w-full"
+            class="w-[30%] flex flex-col justify-between gap-1 p-1 pb-2 bg-[#1a1a1a] win-border-in px-1.5 pb-3"
           >
-            <canvas id="eq-graph" class="w-full h-full bg-[#080808]"></canvas>
-            <button
-              id="btn-eq-toggle"
-              class="win-btn h-full w-8 text-[8px] flex flex-col gap-0 leading-none ml-[1px] border-l border-gray-600 absolute right-0 top-0 z-20 opacity-90"
-            >
-              <span class="text-[8px] font-bold">ON</span>
-            </button>
+            <div class="flex flex-col gap-0">
+              <select
+                id="eq-preset"
+                class="bg-black text-[9px] text-gray-300 border border-gray-500 outline-none px-1 h-3.5 font-pixel focus:border-green-500"
+              >
+                <option value="flat">FLAT</option>
+                <option value="bass">BASS</option>
+                <option value="rock">ROCK</option>
+                <option value="pop">POP</option>
+                <option value="voice">VOICE</option>
+                <option value="custom">USER</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-0 -mb-2">
+              <div
+                class="flex justify-between text-[7px] font-pixel text-gray-400 font-bold -mb-1"
+              >
+                <span>PITCH</span
+                ><span id="txt-pitch" class="theme-text-sec">0</span>
+              </div>
+              <input
+                type="range"
+                id="main-pitch"
+                min="-12"
+                max="12"
+                step="1"
+                value="0"
+                class="h-slider"
+                style="margin: 2px 0 0 0; height: 14px"
+              />
+            </div>
+            <div class="flex flex-col gap-0">
+              <div
+                class="flex justify-between text-[7px] font-pixel text-gray-400 font-bold -mb-1"
+              >
+                <span>VERB</span
+                ><span id="txt-verb" class="theme-text-main">0.0</span>
+              </div>
+              <input
+                type="range"
+                id="main-verb"
+                min="0"
+                max="2"
+                step="0.1"
+                value="0"
+                class="h-slider"
+                style="margin: 2px 0 0 0; height: 14px"
+              />
+            </div>
           </div>
-          <div id="eq-container" class="win-border-in flex-1"></div>
+
+          <div class="flex-1 flex flex-col min-w-0">
+            <div
+              class="flex items-center h-[20px] border border-gray-700 bg-black p-[1px] mb-1 flex-none shadow-md relative w-full"
+            >
+              <canvas id="eq-graph" class="w-full h-full bg-[#080808]"></canvas>
+              <button
+                id="btn-eq-toggle"
+                class="win-btn h-full w-8 text-[8px] flex flex-col gap-0 leading-none ml-[1px] border-l border-gray-600 absolute right-0 top-0 z-20 opacity-90"
+              >
+                <span class="text-[8px] font-bold">ON</span>
+              </button>
+            </div>
+            <div id="eq-container" class="win-border-in flex-1"></div>
+          </div>
         </div>
       </div>
     </div>

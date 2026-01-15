@@ -6,10 +6,10 @@
     <title>NextAmp - Audio Output</title>
     <style>
       :root {
-        --bg-color: #000000;       /* ดำสนิท */
-        --panel-bg: #050505;       /* ดำรอง */
-        --border-color: #1a1a1a;   /* เส้นขอบจางๆ */
-        --accent-color: #00ff00;   /* สีเขียว */
+        --bg-color: #000000;
+        --panel-bg: #050505;
+        --border-color: #1a1a1a;
+        --accent-color: #00ff00;
         --text-main: #e0e0e0;
         --text-dim: #555555;
       }
@@ -26,11 +26,10 @@
         overflow: hidden;
       }
 
-      /* Main Container: กรอบหลัก */
       .container {
         background-color: var(--panel-bg);
         border: 1px solid var(--border-color);
-        border-radius: 2px; /* มุมมนนิดเดียวให้ดูแข็ง */
+        border-radius: 2px;
         box-shadow: 0 0 50px rgba(0, 0, 0, 1);
         display: flex;
         flex-direction: row;
@@ -40,11 +39,12 @@
         position: relative;
       }
 
-      /* Tech Line: เส้นเขียวคาดหัว */
       .container::before {
-        content: '';
+        content: "";
         position: absolute;
-        top: 0; left: 0; right: 0;
+        top: 0;
+        left: 0;
+        right: 0;
         height: 2px;
         background: var(--accent-color);
         box-shadow: 0 0 15px var(--accent-color);
@@ -52,13 +52,12 @@
         z-index: 10;
       }
 
-      /* --- LEFT PANEL: Visualizer & Status --- */
       .left-panel {
         flex: 1.8;
         padding: 40px;
         display: flex;
         flex-direction: column;
-        justify-content: space-between; /* จัดบนล่าง */
+        justify-content: space-between;
         border-right: 1px solid var(--border-color);
         background: radial-gradient(circle at bottom left, #0a0a0a, #000);
       }
@@ -86,27 +85,25 @@
         opacity: 0.8;
       }
 
-      /* Visualizer Box */
       #visualizer {
         display: flex;
         gap: 2px;
         height: 180px;
         width: 100%;
         align-items: flex-end;
-        background: #000; 
+        background: #000;
         border: 1px solid #111;
         padding: 0 5px;
         box-sizing: border-box;
         margin-top: 20px;
       }
-      
+
       .bar {
         flex: 1;
         background: #1a1a1a;
         transition: height 0.05s ease;
       }
 
-      /* --- RIGHT PANEL: Controls --- */
       .right-panel {
         flex: 1.2;
         padding: 40px;
@@ -117,11 +114,11 @@
         position: relative;
       }
 
-      /* Decorative corner line */
       .right-panel::after {
-        content: '';
+        content: "";
         position: absolute;
-        bottom: 0; right: 0;
+        bottom: 0;
+        right: 0;
         width: 20px;
         height: 20px;
         border-bottom: 2px solid #333;
@@ -147,14 +144,13 @@
         position: relative;
       }
 
-      /* Hard Tech Select Box */
       select {
         width: 100%;
         background-color: #000;
         color: #fff;
         padding: 16px;
         border: 1px solid #222;
-        border-radius: 0; /* เหลี่ยมจัด */
+        border-radius: 0;
         font-size: 0.85rem;
         font-family: "Segoe UI", monospace;
         cursor: pointer;
@@ -163,12 +159,12 @@
         outline: none;
         transition: border-color 0.2s;
       }
-      
+
       select:hover {
         border-color: #444;
         background-color: #080808;
       }
-      
+
       select:focus {
         border-color: var(--accent-color);
         box-shadow: 0 0 8px rgba(0, 255, 0, 0.15);
@@ -192,7 +188,6 @@
         font-family: monospace;
       }
 
-      /* Cast Info */
       .cast-info {
         display: flex;
         align-items: flex-start;
@@ -207,8 +202,10 @@
         width: 16px;
         height: 16px;
         background-color: #444;
-        mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.92-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>') no-repeat center;
-        -webkit-mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.92-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>') no-repeat center;
+        mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.92-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>')
+          no-repeat center;
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.92-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>')
+          no-repeat center;
         margin-right: 12px;
         margin-top: 2px;
       }
@@ -221,12 +218,13 @@
         margin-bottom: 2px;
       }
 
-      audio { display: none; }
+      audio {
+        display: none;
+      }
     </style>
   </head>
   <body>
     <div class="container">
-      
       <div class="left-panel">
         <div class="header-group">
           <h1>AUDIO OUTPUT</h1>

@@ -1,8 +1,5 @@
-// next-amp-extension/background.js
-
 let creating;
 
-// ฟังก์ชันช่วยจัดการข้อมูลใน storage session
 async function setMap(playerTabId, sourceTabId) {
   const data = await chrome.storage.session.get("playerMap");
   const map = data.playerMap || {};
@@ -96,7 +93,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const sourceTabId = parseInt(msg.sourceTabId);
 
       if (!isNaN(sourceTabId)) {
-        // [FIX] ใช้ storage แทน Map
         setMap(playerTabId, sourceTabId).then(() => {
           chrome.runtime.sendMessage({
             type: "START_WEBRTC_STREAM",
@@ -116,7 +112,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         chrome.tabs.sendMessage(msg.playerTabId, msg).catch(() => {});
       }
     } else if (msg.target === "OFFSCREEN") {
-      // [FIX] ดึงค่าจาก storage แบบ Async
       (async () => {
         const playerTabId = sender.tab ? sender.tab.id : null;
         const sourceTabId = await getSourceId(playerTabId);
@@ -179,7 +174,6 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  // [FIX] ใช้ removeMap เพื่อลบข้อมูลจาก storage และคืนค่า sourceTabId
   removeMap(tabId).then((sourceTabId) => {
     if (sourceTabId) {
       chrome.runtime

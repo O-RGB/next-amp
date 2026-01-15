@@ -1,5 +1,3 @@
-// next-amp-extension/player.js
-
 const pc = new RTCPeerConnection();
 const statusText = document.getElementById("status-text");
 const visualizer = document.getElementById("visualizer");
@@ -11,7 +9,6 @@ const sourceTabId = urlParams.get("source");
 
 const bars = [];
 
-// สร้าง Visualizer bars
 for (let i = 0; i < 40; i++) {
   const d = document.createElement("div");
   d.className = "bar";
@@ -19,10 +16,8 @@ for (let i = 0; i < 40; i++) {
   bars.push(d);
 }
 
-// ฟังก์ชันเลือก Output Device
 async function initAudioDevices() {
   try {
-    // ขอ Permission ไมโครโฟนเพื่อเปิด list devices (บาง browser ต้องขอ)
     await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
 
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -107,7 +102,6 @@ pc.ontrack = (event) => {
 
   audioElement.srcObject = event.streams[0];
 
-  // Setup Visualizer
   const ctx = new AudioContext();
   const src = ctx.createMediaStreamSource(event.streams[0]);
   const analyser = ctx.createAnalyser();
@@ -132,7 +126,6 @@ pc.ontrack = (event) => {
 
 pc.onicecandidate = (event) => {
   if (event.candidate) {
-    // ส่ง Candidate กลับไป (ไม่ต้องระบุ ID ปลายทาง เพราะ background จะจัดการ routing ให้ หรือระบุให้ชัดเจนก็ได้)
     chrome.runtime.sendMessage({
       type: "RTC_CANDIDATE",
       target: "OFFSCREEN",
@@ -141,7 +134,6 @@ pc.onicecandidate = (event) => {
   }
 };
 
-// [FIX] เริ่มต้นการทำงานหลังจากได้รับ Tab ID ของตัวเองแล้วเท่านั้น
 chrome.tabs.getCurrent((tab) => {
   if (!tab) {
     console.error("Cannot get current tab info");
@@ -152,9 +144,8 @@ chrome.tabs.getCurrent((tab) => {
   console.log("Player Tab ID:", myTabId);
 
   chrome.runtime.onMessage.addListener(async (msg) => {
-    // [FIX] ตรวจสอบว่าข้อความนี้ส่งมาให้ Tab นี้หรือไม่
     if (msg.playerTabId && msg.playerTabId !== myTabId) {
-      return; // ถ้าไม่ใช่ของฉัน ให้ข้ามไปเลย
+      return;
     }
 
     if (msg.type === "RTC_OFFER") {
@@ -170,7 +161,7 @@ chrome.tabs.getCurrent((tab) => {
         type: "RTC_ANSWER",
         target: "OFFSCREEN",
         answer: answer,
-        // ส่ง ID กลับไปยืนยัน (optional แต่ดีสำหรับการ debug)
+
         playerTabId: myTabId,
       });
     } else if (msg.type === "RTC_CANDIDATE") {
@@ -178,7 +169,6 @@ chrome.tabs.getCurrent((tab) => {
     }
   });
 
-  // แจ้ง Background ว่าพร้อมแล้ว
   chrome.runtime.sendMessage({
     type: "PLAYER_READY",
     sourceTabId: sourceTabId,
