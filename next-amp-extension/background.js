@@ -2,6 +2,32 @@
 
 let creating;
 
+// ฟังก์ชันช่วยจัดการข้อมูลใน storage session
+async function setMap(playerTabId, sourceTabId) {
+  const data = await chrome.storage.session.get("playerMap");
+  const map = data.playerMap || {};
+  map[playerTabId] = sourceTabId;
+  await chrome.storage.session.set({ playerMap: map });
+}
+
+async function getSourceId(playerTabId) {
+  const data = await chrome.storage.session.get("playerMap");
+  const map = data.playerMap || {};
+  return map[playerTabId];
+}
+
+async function removeMap(playerTabId) {
+  const data = await chrome.storage.session.get("playerMap");
+  const map = data.playerMap || {};
+  if (map[playerTabId]) {
+    const sourceTabId = map[playerTabId];
+    delete map[playerTabId];
+    await chrome.storage.session.set({ playerMap: map });
+    return sourceTabId;
+  }
+  return null;
+}
+
 async function setupOffscreen() {
   const path = "offscreen.html";
   if (await chrome.offscreen.hasDocument()) return;
@@ -46,15 +72,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   } else if (msg.type === "BG_RESET_DELAY") {
     if (msg.tabId) {
-      // 1. Reset Delay
       chrome.tabs
         .sendMessage(msg.tabId, { type: "SET_VIDEO_DELAY", value: 0 })
         .catch(() => {});
-      // 2. Reset Quality
       chrome.tabs
         .sendMessage(msg.tabId, { type: "SET_VIDEO_QUALITY", value: "max" })
         .catch(() => {});
-      // 3. [เพิ่ม] Reset Zoom & Rotate (ROI) ให้กลับเป็นค่าเริ่มต้น
       chrome.tabs
         .sendMessage(msg.tabId, {
           type: "SET_VIDEO_ZOOM",
@@ -63,6 +86,46 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           rotate: 0,
         })
         .catch(() => {});
+    }
+  } else if (msg.type === "OPEN_PLAYER_TAB") {
+    const sourceTabId = msg.sourceTabId;
+    chrome.tabs.create({ url: `player.html?source=${sourceTabId}` });
+  } else if (msg.type === "PLAYER_READY") {
+    if (sender.tab) {
+      const playerTabId = sender.tab.id;
+      const sourceTabId = parseInt(msg.sourceTabId);
+
+      if (!isNaN(sourceTabId)) {
+        // [FIX] ใช้ storage แทน Map
+        setMap(playerTabId, sourceTabId).then(() => {
+          chrome.runtime.sendMessage({
+            type: "START_WEBRTC_STREAM",
+            sourceTabId: sourceTabId,
+            playerTabId: playerTabId,
+          });
+        });
+      }
+    }
+  } else if (
+    msg.type === "RTC_OFFER" ||
+    msg.type === "RTC_ANSWER" ||
+    msg.type === "RTC_CANDIDATE"
+  ) {
+    if (msg.target === "PLAYER") {
+      if (msg.playerTabId) {
+        chrome.tabs.sendMessage(msg.playerTabId, msg).catch(() => {});
+      }
+    } else if (msg.target === "OFFSCREEN") {
+      // [FIX] ดึงค่าจาก storage แบบ Async
+      (async () => {
+        const playerTabId = sender.tab ? sender.tab.id : null;
+        const sourceTabId = await getSourceId(playerTabId);
+
+        if (sourceTabId) {
+          msg.sourceTabId = sourceTabId;
+          chrome.runtime.sendMessage(msg).catch(() => {});
+        }
+      })();
     }
   }
 });
@@ -116,6 +179,15 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  // [FIX] ใช้ removeMap เพื่อลบข้อมูลจาก storage และคืนค่า sourceTabId
+  removeMap(tabId).then((sourceTabId) => {
+    if (sourceTabId) {
+      chrome.runtime
+        .sendMessage({ type: "STOP_WEBRTC_STREAM", sourceTabId: sourceTabId })
+        .catch(() => {});
+    }
+  });
+
   chrome.runtime
     .sendMessage({ type: "STOP_CAPTURE", tabId: tabId })
     .catch(() => {});

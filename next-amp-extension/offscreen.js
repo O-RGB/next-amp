@@ -2,9 +2,11 @@
 import { PitchProcessor } from "./pitch-processor.js";
 import { AudioEffects } from "./audio-effects.js";
 import { DBManager } from "./db-manager.js";
+import { RTCServer } from "./modules/rtc-server.js";
 
 const sessions = new Map();
 const db = new DBManager();
+const rtcServer = new RTCServer();
 
 const createDefaultParams = () => ({
   pitch: 0,
@@ -17,7 +19,7 @@ const createDefaultParams = () => ({
   videoQuality: "max",
   normalize: false,
   eq: new Array(10).fill(0),
-  eqPreset: "flat", // [New] เพิ่ม Default Preset
+  eqPreset: "flat",
   reverbTime: 3.0,
   reverbDecay: 2.0,
   dynBoost: 40,
@@ -28,7 +30,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = msg.tabId;
 
   if (msg.type === "START_CAPTURE") {
-    // [New] รับ initialPreset มาด้วย
     startAudio(
       msg.streamId,
       tabId,
@@ -91,14 +92,59 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       activeTabs: otherSessions,
     });
   }
+
+  // [UPDATED] WebRTC Handlers using RTCServer
+  else if (msg.type === "START_WEBRTC_STREAM") {
+    startWebRTC(msg.sourceTabId, msg.playerTabId);
+  } else if (msg.type === "STOP_WEBRTC_STREAM") {
+    rtcServer.stopSession(msg.sourceTabId);
+    // Unmute local if needed
+    unmuteLocal(msg.sourceTabId);
+  } else if (msg.type === "RTC_ANSWER") {
+    rtcServer.handleAnswer(msg.sourceTabId, msg.answer);
+  } else if (msg.type === "RTC_CANDIDATE") {
+    rtcServer.handleCandidate(msg.sourceTabId, msg.candidate);
+  }
 });
+
+async function startWebRTC(sourceTabId, playerTabId) {
+  const session = sessions.get(sourceTabId);
+  if (!session) return;
+
+  // Start RTC Session via Server Module
+  await rtcServer.startSession(
+    sourceTabId,
+    playerTabId,
+    session.recordingStreamDest.stream,
+    session.audioCtx
+  );
+
+  // Mute Local (Offscreen) to prevent double audio, pipe only to RTC
+  if (session.masterNode) {
+    try {
+      session.masterNode.disconnect(session.audioCtx.destination);
+    } catch (e) {}
+    // Ensure it's still connected to recording dest (RTC source) & analyser
+    session.masterNode.connect(session.recordingStreamDest);
+    session.masterNode.connect(session.analyser);
+  }
+}
+
+function unmuteLocal(tabId) {
+  const session = sessions.get(tabId);
+  if (session && session.masterNode && session.audioCtx) {
+    try {
+      session.masterNode.connect(session.audioCtx.destination);
+    } catch (e) {}
+  }
+}
 
 async function startAudio(
   streamId,
   tabId,
   latencyHint = "interactive",
   initialMode = "shared",
-  initialPreset = "flat", // [New] รับค่า
+  initialPreset = "flat",
   sendResponse
 ) {
   if (sessions.has(tabId)) {
@@ -132,10 +178,13 @@ async function startAudio(
     const master = effects.getMasterNode();
     master.connect(analyser);
     master.connect(audioCtx.destination);
+
+    // Channel count 2 for stereo
     const recordingStreamDest = audioCtx.createMediaStreamDestination();
+    recordingStreamDest.channelCount = 2;
+
     master.connect(recordingStreamDest);
 
-    // ตั้งค่า Params เริ่มต้นรวม Preset
     const defaultP = createDefaultParams();
     defaultP.eqPreset = initialPreset;
 
@@ -146,6 +195,7 @@ async function startAudio(
       effects,
       analyser,
       recordingStreamDest,
+      masterNode: master,
       mediaRecorder: null,
       recordedChunks: [],
       params: defaultP,
@@ -169,7 +219,7 @@ async function startAudio(
 function setupRecorder(session, stream) {
   try {
     const options = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? { mimeType: "audio/webm;codecs=opus" }
+      ? { mimeType: "audio/webm;codecs=opus", audioBitsPerSecond: 256000 }
       : {};
     const mediaRecorder = new MediaRecorder(stream, options);
     session.mediaRecorder = mediaRecorder;
@@ -215,8 +265,12 @@ function stopRecording(tabId) {
 }
 
 function stopAudio(tabId) {
+  // Stop RTC Session if exists
+  rtcServer.stopSession(tabId);
+
   const session = sessions.get(tabId);
   if (!session) return;
+
   chrome.runtime
     .sendMessage({ type: "BG_RESET_DELAY", tabId: tabId })
     .catch(() => {});
@@ -271,7 +325,7 @@ function applyParamToSession(session, key, value, index) {
     case "isEqOn":
       effects.setEQEnabled(value);
       break;
-    case "eqPreset": // [New] Handle Preset
+    case "eqPreset":
       params.eqPreset = value;
       break;
     case "reverbTime":
@@ -304,7 +358,7 @@ function applyAllParams(session) {
   effects.setReverb(params.reverb);
   effects.updateNormalize(params.normalize);
   params.eq.forEach((val, i) => effects.setEQ(i, val));
-  effects.setEQEnabled(params.isEqOn); // [New] Ensure EQ State applied
+  effects.setEQEnabled(params.isEqOn);
   effects.setReverbParams(params.reverbTime, params.reverbDecay);
   effects.setDynamicsParams(params.dynBoost, params.dynLimit);
   if (pitchProc) pitchProc.setPitch(params.pitch);

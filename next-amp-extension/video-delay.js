@@ -1,4 +1,3 @@
-// next-amp-extension/video-delay.js
 class Monitor {
   constructor() {
     this.videoCallbacks = new Map();
@@ -21,7 +20,6 @@ class Monitor {
             .forEach((v) => this.waitForVideoFrameRefresh(v));
         }
       } else {
-        // Fallback: ดูใน Storage เผื่อ Popup ปิดอยู่และ Audio OFF แต่ User ตั้ง Delay ไว้
         chrome.storage.local.get(["videoDelay"], (res) => {
           if (res.videoDelay) {
             const globalDelay = parseFloat(res.videoDelay) * 1000;
@@ -178,7 +176,6 @@ class DelayedVideo {
     this.subtitleElements = [];
     this.hiddenSubtitleElements = [];
 
-    // เพิ่ม styleObserver เพื่อจับการเปลี่ยนแปลง Zoom/Rotate ของ Video ต้นฉบับ
     this.styleObserver = null;
 
     this.init();
@@ -424,7 +421,6 @@ class DelayedVideo {
     if (this.video.parentNode)
       this.resizeObserver.observe(this.video.parentNode);
 
-    // [แก้ไข] เพิ่ม Observer จับการเปลี่ยน Style (Zoom/Rotate)
     this.styleObserver = new MutationObserver(() => this.syncStyle());
     this.styleObserver.observe(this.video, {
       attributes: true,
@@ -444,7 +440,6 @@ class DelayedVideo {
     this.video.addEventListener("emptied", this.emptyHandler);
   }
 
-  // [แก้ไข] แยก Logic การ Resize
   resize() {
     if (!this.videoCanvas || !this.video) return;
 
@@ -477,29 +472,26 @@ class DelayedVideo {
 
     if (this.gl) this.gl.viewport(0, 0, renderWidth, renderHeight);
 
-    // เรียก syncStyle เพื่ออัปเดตตำแหน่งและ Transform
     this.syncStyle();
     this.lastRenderedSubtitleHash = "";
   }
 
-  // [แก้ไข] ฟังก์ชันใหม่สำหรับ Sync Style (Transform)
   syncStyle() {
     if (!this.videoCanvas || !this.video) return;
     const style = window.getComputedStyle(this.video);
 
-    // Copy ตำแหน่งและ Transform (Zoom/Rotate)
     this.videoCanvas.style.width = style.width;
     this.videoCanvas.style.height = style.height;
     this.videoCanvas.style.top = style.top;
     this.videoCanvas.style.left = style.left;
-    this.videoCanvas.style.transform = style.transform; // สำคัญ: Copy transform
+    this.videoCanvas.style.transform = style.transform;
     this.videoCanvas.style.transformOrigin = style.transformOrigin;
 
     this.subtitleCanvas.style.width = style.width;
     this.subtitleCanvas.style.height = style.height;
     this.subtitleCanvas.style.top = style.top;
     this.subtitleCanvas.style.left = style.left;
-    this.subtitleCanvas.style.transform = style.transform; // สำคัญ: Copy transform
+    this.subtitleCanvas.style.transform = style.transform;
     this.subtitleCanvas.style.transformOrigin = style.transformOrigin;
   }
 
@@ -507,7 +499,6 @@ class DelayedVideo {
     this.isActive = false;
     cancelAnimationFrame(this.renderLoopId);
 
-    // [แก้ไข] Cleanup styleObserver
     if (this.styleObserver) this.styleObserver.disconnect();
 
     if (this.video) {

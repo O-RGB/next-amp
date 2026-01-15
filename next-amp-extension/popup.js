@@ -1,4 +1,3 @@
-// next-amp-extension/popup.js
 import { DBManager } from "./db-manager.js";
 import { $, $$, sendMessageWithRetry } from "./assets/js/utils.js";
 import { SessionManager } from "./modules/session-manager.js";
@@ -27,7 +26,7 @@ const PRESETS = {
 
 let isAudioMasterOn = true;
 let isVideoMasterOn = true;
-// Internal EQ Toggle state
+
 let isEqOn = true;
 
 let isNormalizeOn = false;
@@ -70,7 +69,6 @@ async function finalizeInitialization() {
     settingsModal.renderRecordingList();
   } catch (e) {}
 
-  // 1. โหลดค่า Toggle
   const savedToggles = await sessionManager.getSetting([
     "isAudioMasterOn",
     "isVideoMasterOn",
@@ -82,7 +80,6 @@ async function finalizeInitialization() {
     isVideoMasterOn = savedToggles.isVideoMasterOn;
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
 
-  // 2. โหลดค่าจาก Storage (กรณี Shared)
   if (sessionManager.sessionMode === "shared") {
     const sharedParams = await chrome.storage.local.get([
       "volume",
@@ -103,7 +100,6 @@ async function finalizeInitialization() {
     ]);
 
     if (Object.keys(sharedParams).length > 0) {
-      // Audio Params
       if (sharedParams.volume !== undefined) {
         updateSlider(
           "#main-vol",
@@ -145,7 +141,6 @@ async function finalizeInitialization() {
         updateNormalizeButton();
       }
 
-      // Advanced Params
       if (sharedParams.reverbTime)
         $("#adv-rev-time").value = sharedParams.reverbTime;
       if (sharedParams.reverbDecay)
@@ -155,7 +150,6 @@ async function finalizeInitialization() {
       if (sharedParams.dynLimit)
         $("#adv-dyn-limit").value = sharedParams.dynLimit;
 
-      // Video Params
       if (sharedParams.videoZoom)
         $("#video-zoom").value = sharedParams.videoZoom;
       if (sharedParams.videoRotate)
@@ -174,7 +168,6 @@ async function finalizeInitialization() {
     syncVideoTransform();
   }
 
-  // 3. ตรวจสอบ State จริงจาก Offscreen
   const state = await sendMessageWithRetry({
     type: "GET_STATE",
     tabId: currentTabId,
@@ -192,7 +185,6 @@ async function finalizeInitialization() {
   updateMasterTogglesUI();
   updateEqToggleButton();
 
-  // Draw Loop
   let frameCount = 0;
   const loop = () => {
     drawEQGraph(currentEqValues);
@@ -408,7 +400,6 @@ async function handleRecordingSaved() {
 }
 
 function setupListeners() {
-  // 1. MASTER AUDIO SWITCH
   $("#btn-toggle-audio").addEventListener("click", () => {
     isAudioMasterOn = !isAudioMasterOn;
     updateMasterTogglesUI();
@@ -419,7 +410,7 @@ function setupListeners() {
     } else {
       if (currentTabId) {
         sendMessageWithRetry({ type: "STOP_CAPTURE", tabId: currentTabId });
-        // สั่ง Reset Video ด้วยเมื่อปิด Audio
+
         chrome.runtime.sendMessage({
           type: "BG_RESET_DELAY",
           tabId: currentTabId,
@@ -429,7 +420,6 @@ function setupListeners() {
     updateEQVisuals();
   });
 
-  // 2. VIDEO SWITCH
   $("#btn-toggle-video").addEventListener("click", () => {
     isVideoMasterOn = !isVideoMasterOn;
     updateMasterTogglesUI();
@@ -457,7 +447,13 @@ function setupListeners() {
     }
   });
 
-  // 3. INTERNAL EQ TOGGLE
+  $("#btn-open-player").addEventListener("click", () => {
+    chrome.runtime.sendMessage({
+      type: "OPEN_PLAYER_TAB",
+      sourceTabId: currentTabId,
+    });
+  });
+
   $("#btn-eq-toggle").addEventListener("click", () => {
     if (!isAudioMasterOn) return;
     isEqOn = !isEqOn;
@@ -467,7 +463,6 @@ function setupListeners() {
     updateEQVisuals();
   });
 
-  // Controls
   $("#main-vol").addEventListener("input", (e) => {
     if (!isAudioMasterOn) return;
     const v = parseFloat(e.target.value);
@@ -538,7 +533,6 @@ function setupListeners() {
     sendParam("visualMode", visualMode);
   });
 
-  // Video Controls
   const syncDelay = (val) => {
     if (!isVideoMasterOn) return;
     let v = parseFloat(val);
@@ -574,7 +568,6 @@ function setupListeners() {
         .catch(() => {});
   });
 
-  // [แก้ไขตรงนี้] เปลี่ยนจาก .click() เป็น .addEventListener("click")
   const handleTransform = () => {
     if (isVideoMasterOn) syncVideoTransform();
   };
@@ -704,7 +697,6 @@ async function handleReset() {
   updateNormalizeButton();
   sendParam("reset", true);
 
-  // EQ Reset
   currentEqValues = PRESETS.flat.map(() => 0);
   $$(".eq-slider").forEach((i) => (i.value = 0));
   $("#eq-preset").value = "flat";

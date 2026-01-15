@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NextAmp - Audio Output</title>
+    <style>
+      :root {
+        --bg-color: #000000;       /* ดำสนิท */
+        --panel-bg: #050505;       /* ดำรอง */
+        --border-color: #1a1a1a;   /* เส้นขอบจางๆ */
+        --accent-color: #00ff00;   /* สีเขียว */
+        --text-main: #e0e0e0;
+        --text-dim: #555555;
+      }
+
+      body {
+        background-color: var(--bg-color);
+        color: var(--text-main);
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      /* Main Container: กรอบหลัก */
+      .container {
+        background-color: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 2px; /* มุมมนนิดเดียวให้ดูแข็ง */
+        box-shadow: 0 0 50px rgba(0, 0, 0, 1);
+        display: flex;
+        flex-direction: row;
+        width: 850px;
+        max-width: 95vw;
+        height: 400px;
+        position: relative;
+      }
+
+      /* Tech Line: เส้นเขียวคาดหัว */
+      .container::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 2px;
+        background: var(--accent-color);
+        box-shadow: 0 0 15px var(--accent-color);
+        opacity: 0.8;
+        z-index: 10;
+      }
+
+      /* --- LEFT PANEL: Visualizer & Status --- */
+      .left-panel {
+        flex: 1.8;
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between; /* จัดบนล่าง */
+        border-right: 1px solid var(--border-color);
+        background: radial-gradient(circle at bottom left, #0a0a0a, #000);
+      }
+
+      .header-group {
+        text-align: left;
+      }
+
+      h1 {
+        margin: 0;
+        font-weight: 700;
+        letter-spacing: 2px;
+        font-size: 1.8rem;
+        text-transform: uppercase;
+        color: #fff;
+      }
+
+      h2 {
+        font-size: 0.75rem;
+        color: var(--accent-color);
+        margin: 5px 0 0 2px;
+        font-weight: 600;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        opacity: 0.8;
+      }
+
+      /* Visualizer Box */
+      #visualizer {
+        display: flex;
+        gap: 2px;
+        height: 180px;
+        width: 100%;
+        align-items: flex-end;
+        background: #000; 
+        border: 1px solid #111;
+        padding: 0 5px;
+        box-sizing: border-box;
+        margin-top: 20px;
+      }
+      
+      .bar {
+        flex: 1;
+        background: #1a1a1a;
+        transition: height 0.05s ease;
+      }
+
+      /* --- RIGHT PANEL: Controls --- */
+      .right-panel {
+        flex: 1.2;
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        background-color: #020202;
+        position: relative;
+      }
+
+      /* Decorative corner line */
+      .right-panel::after {
+        content: '';
+        position: absolute;
+        bottom: 0; right: 0;
+        width: 20px;
+        height: 20px;
+        border-bottom: 2px solid #333;
+        border-right: 2px solid #333;
+      }
+
+      .control-group {
+        margin-bottom: 40px;
+        text-align: left;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 12px;
+        font-size: 0.7rem;
+        color: var(--text-dim);
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+      }
+
+      .select-wrapper {
+        position: relative;
+      }
+
+      /* Hard Tech Select Box */
+      select {
+        width: 100%;
+        background-color: #000;
+        color: #fff;
+        padding: 16px;
+        border: 1px solid #222;
+        border-radius: 0; /* เหลี่ยมจัด */
+        font-size: 0.85rem;
+        font-family: "Segoe UI", monospace;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      
+      select:hover {
+        border-color: #444;
+        background-color: #080808;
+      }
+      
+      select:focus {
+        border-color: var(--accent-color);
+        box-shadow: 0 0 8px rgba(0, 255, 0, 0.15);
+      }
+
+      .select-wrapper::after {
+        content: "▼";
+        font-size: 0.6em;
+        color: var(--accent-color);
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+      }
+
+      .note {
+        font-size: 0.7em;
+        color: #444;
+        margin-top: 10px;
+        font-family: monospace;
+      }
+
+      /* Cast Info */
+      .cast-info {
+        display: flex;
+        align-items: flex-start;
+        padding-top: 25px;
+        border-top: 1px solid #111;
+        font-size: 0.8em;
+        color: #666;
+        line-height: 1.5;
+      }
+
+      .cast-icon {
+        width: 16px;
+        height: 16px;
+        background-color: #444;
+        mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.92-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>') no-repeat center;
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.92-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>') no-repeat center;
+        margin-right: 12px;
+        margin-top: 2px;
+      }
+
+      .cast-info strong {
+        display: block;
+        color: #888;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+      }
+
+      audio { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      
+      <div class="left-panel">
+        <div class="header-group">
+          <h1>AUDIO OUTPUT</h1>
+          <h2 id="status-text">INITIALIZING...</h2>
+        </div>
+        <div id="visualizer"></div>
+      </div>
+
+      <div class="right-panel">
+        <div class="control-group">
+          <label for="audio-output-select">TARGET DEVICE</label>
+          <div class="select-wrapper">
+            <select id="audio-output-select">
+              <option value="default" disabled selected>SCANNING...</option>
+            </select>
+          </div>
+          <div class="note">SELECT EXTERNAL SPEAKER / BLUETOOTH</div>
+        </div>
+
+        <div class="cast-info">
+          <div class="cast-icon"></div>
+          <div>
+            <strong>CAST / AIRPLAY SUPPORTED</strong>
+            Use browser options to cast this tab.
+          </div>
+        </div>
+      </div>
+
+      <audio id="main-audio" autoplay controls></audio>
+    </div>
+
+    <script type="module" src="player.js"></script>
+  </body>
+</html>
