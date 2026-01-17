@@ -73,6 +73,27 @@ const UI_CONFIG = {
       color: "#c084fc",
     }, // Purple-400
   ],
+  // [NEW] Config Position X/Y
+  videoPos: [
+    {
+      id: "posX",
+      label: "POS X",
+      min: -50,
+      max: 50,
+      step: 0.5,
+      value: 0,
+      color: "#fb923c", // Orange-400
+    },
+    {
+      id: "posY",
+      label: "POS Y",
+      min: -50,
+      max: 50,
+      step: 0.5,
+      value: 0,
+      color: "#fb923c",
+    },
+  ],
 };
 
 function generateControlHTML(c) {
@@ -115,6 +136,8 @@ function initUI() {
   render("audio-grid", UI_CONFIG.audio);
   render("video-full-width-container", UI_CONFIG.videoFull);
   render("video-grid", UI_CONFIG.videoGrid);
+  // [NEW] Render Position
+  render("video-pos-grid", UI_CONFIG.videoPos);
 }
 
 // เรียกใช้งานทันทีเพื่อสร้าง HTML ก่อนที่ Logic อื่นจะหา Element ไม่เจอ
@@ -159,6 +182,10 @@ const els = {
   delay: document.getElementById("remote-delay"),
   zoom: document.getElementById("remote-zoom"),
   rotate: document.getElementById("remote-rotate"),
+  // [NEW] Elements
+  posX: document.getElementById("remote-posX"),
+  posY: document.getElementById("remote-posY"),
+
   videoQuality: document.getElementById("remote-video-quality"),
   eqPreset: document.getElementById("remote-eq-preset"),
   eqToggle: document.getElementById("btn-eq-toggle"),
@@ -172,6 +199,9 @@ const els = {
   txtDelay: document.getElementById("txt-delay"),
   txtZoom: document.getElementById("txt-zoom"),
   txtRotate: document.getElementById("txt-rotate"),
+  // [NEW] Text Elements
+  txtPosX: document.getElementById("txt-posX"),
+  txtPosY: document.getElementById("txt-posY"),
 };
 
 let conn = null;
@@ -229,6 +259,10 @@ function applyState(s) {
   updateSingleUI("videoDelay", s.videoDelay);
   updateSingleUI("videoZoom", s.videoZoom);
   updateSingleUI("videoRotate", s.videoRotate);
+  // [NEW] Apply Position
+  updateSingleUI("videoPosX", s.videoPosX || 0);
+  updateSingleUI("videoPosY", s.videoPosY || 0);
+
   updateSingleUI("videoQuality", s.videoQuality);
   updateSingleUI("eqPreset", s.eqPreset);
   updateSingleUI("isEqOn", s.isEqOn);
@@ -288,6 +322,15 @@ function handleStandardUI(key, val) {
     el = els.rotate;
     txtEl = els.txtRotate;
     format = (v) => v + "°";
+    // [NEW] Handle Pos X/Y
+  } else if (key === "videoPosX") {
+    el = els.posX;
+    txtEl = els.txtPosX;
+    format = (v) => v;
+  } else if (key === "videoPosY") {
+    el = els.posY;
+    txtEl = els.txtPosY;
+    format = (v) => v;
   } else if (key === "videoQuality") {
     el = els.videoQuality;
   } else if (key === "eqPreset") {
@@ -418,6 +461,9 @@ function setBtnState(el, isActive, textOn, textOff, activeBg, activeText) {
   els.delay,
   els.zoom,
   els.rotate,
+  // [NEW] Add to listener
+  els.posX,
+  els.posY,
 ].forEach((el) => {
   if (!el) return; // Guard clause in case element is missing
   el.oninput = (e) => {
@@ -436,6 +482,10 @@ function setBtnState(el, isActive, textOn, textOff, activeBg, activeText) {
       key = "videoRotate";
       val = parseInt(val);
     }
+    // [NEW] Keys
+    if (el === els.posX) key = "videoPosX";
+    if (el === els.posY) key = "videoPosY";
+
     handleStandardUI(key, val);
     sendParam(key, val);
   };
@@ -500,8 +550,12 @@ function setupStepper(sliderId, minusId, plusId) {
 }
 
 // วนลูป Setup ปุ่ม +- ให้ทุกตัวใน Config
-[...UI_CONFIG.audio, ...UI_CONFIG.videoFull, ...UI_CONFIG.videoGrid].forEach(
-  (c) => {
-    setupStepper(`remote-${c.id}`, `btn-${c.id}-minus`, `btn-${c.id}-plus`);
-  }
-);
+// [NEW] include videoPos
+[
+  ...UI_CONFIG.audio,
+  ...UI_CONFIG.videoFull,
+  ...UI_CONFIG.videoGrid,
+  ...UI_CONFIG.videoPos,
+].forEach((c) => {
+  setupStepper(`remote-${c.id}`, `btn-${c.id}-minus`, `btn-${c.id}-plus`);
+});

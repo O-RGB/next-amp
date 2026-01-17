@@ -2,6 +2,7 @@ class VideoZoomer {
   constructor() {
     this.scale = 1.0;
     this.translateY = 0;
+    this.translateX = 0; // [NEW] เพิ่มแกน X
     this.rotate = 0;
     this.observedElements = new WeakSet();
 
@@ -13,8 +14,13 @@ class VideoZoomer {
     chrome.runtime.onMessage.addListener((message) => {
       if (message.type === "SET_VIDEO_ZOOM") {
         if (message.scale !== undefined) this.scale = parseFloat(message.scale);
+
+        // [NEW] รับค่า Position X และ Y
         if (message.translateY !== undefined)
           this.translateY = parseFloat(message.translateY);
+        if (message.translateX !== undefined)
+          this.translateX = parseFloat(message.translateX);
+
         if (message.rotate !== undefined)
           this.rotate = parseFloat(message.rotate);
 
@@ -67,7 +73,13 @@ class VideoZoomer {
   }
 
   shouldApply() {
-    return !(this.scale === 1.0 && this.translateY === 0 && this.rotate === 0);
+    // [NEW] เช็ค translateX ด้วย
+    return !(
+      this.scale === 1.0 &&
+      this.translateY === 0 &&
+      this.translateX === 0 &&
+      this.rotate === 0
+    );
   }
 
   updateVideoStyle(video) {
@@ -90,7 +102,8 @@ class VideoZoomer {
 
     const finalScale = this.scale * autoFitScale;
 
-    const transformValue = `scale(${finalScale}) translateY(${this.translateY}%) rotate(${this.rotate}deg)`;
+    // [NEW] เพิ่ม translate(${this.translateX}%, ${this.translateY}%)
+    const transformValue = `scale(${finalScale}) translate(${this.translateX}%, ${this.translateY}%) rotate(${this.rotate}deg)`;
 
     if (video.style.transform !== transformValue) {
       video.style.transform = transformValue;

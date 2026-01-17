@@ -86,6 +86,7 @@ async function finalizeInitialization() {
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
 
   if (sessionManager.sessionMode === "shared") {
+    // [NEW] เพิ่ม videoPosX และ videoPosY ในการโหลด
     const sharedParams = await chrome.storage.local.get([
       "volume",
       "pan",
@@ -97,6 +98,8 @@ async function finalizeInitialization() {
       "videoZoom",
       "videoRotate",
       "videoDelay",
+      "videoPosX",
+      "videoPosY",
       "isEqOn",
       "reverbTime",
       "reverbDecay",
@@ -159,6 +162,13 @@ async function finalizeInitialization() {
         $("#video-zoom").value = sharedParams.videoZoom;
       if (sharedParams.videoRotate)
         $("#video-rotate").value = sharedParams.videoRotate;
+
+      // [NEW] Load Position
+      if (sharedParams.videoPosX)
+        $("#video-pos-x").value = sharedParams.videoPosX;
+      if (sharedParams.videoPosY)
+        $("#video-pos-y").value = sharedParams.videoPosY;
+
       if (sharedParams.videoDelay) {
         $("#video-delay").value = sharedParams.videoDelay;
         $("#num-video-delay").value = parseFloat(
@@ -170,6 +180,8 @@ async function finalizeInitialization() {
   } else if (sessionManager.sessionMode === "temp") {
     $("#video-zoom").value = sessionManager.tempStorage.videoZoom || 1;
     $("#video-rotate").value = sessionManager.tempStorage.videoRotate || 0;
+    $("#video-pos-x").value = sessionManager.tempStorage.videoPosX || 0;
+    $("#video-pos-y").value = sessionManager.tempStorage.videoPosY || 0;
     syncVideoTransform();
   }
 
@@ -445,6 +457,14 @@ function updateUIFromExternal(key, value, index) {
   } else if (key === "videoRotate") {
     $("#video-rotate").value = value;
     $("#txt-rotate").textContent = value + "°";
+  } else if (key === "videoPosX") {
+    // [NEW] Update UI from Remote
+    $("#video-pos-x").value = value;
+    syncVideoTransform();
+  } else if (key === "videoPosY") {
+    // [NEW] Update UI from Remote
+    $("#video-pos-y").value = value;
+    syncVideoTransform();
   } else if (key === "videoQuality") {
     const el = $("#video-quality");
     if (el) el.value = value;
@@ -563,6 +583,8 @@ function setupListeners() {
             type: "SET_VIDEO_ZOOM",
             scale: 1,
             rotate: 0,
+            translateX: 0, // [NEW] Reset X
+            translateY: 0, // [NEW] Reset Y
           })
           .catch(() => {});
         chrome.tabs
@@ -699,27 +721,55 @@ function setupListeners() {
   $("#video-zoom").addEventListener("input", handleTransform);
   $("#video-rotate").addEventListener("input", handleTransform);
 
+  // [NEW] Add Listeners for Position
+  $("#video-pos-x").addEventListener("input", (e) => {
+    if (isVideoMasterOn) {
+      syncVideoTransform();
+      sendParam("videoPosX", parseFloat(e.target.value));
+    }
+  });
+  $("#video-pos-y").addEventListener("input", (e) => {
+    if (isVideoMasterOn) {
+      syncVideoTransform();
+      sendParam("videoPosY", parseFloat(e.target.value));
+    }
+  });
+
+  // [NEW] Reset Position Button
+  $("#btn-pos-reset").addEventListener("click", () => {
+    $("#video-pos-x").value = 0;
+    $("#video-pos-y").value = 0;
+    handleTransform();
+    sendParam("videoPosX", 0);
+    sendParam("videoPosY", 0);
+  });
+
   $("#btn-zoom-fit").addEventListener("click", () => {
     $("#video-zoom").value = 1.0;
     handleTransform();
+    sendParam("videoZoom", 1.0);
   });
   $("#btn-zoom-ultra").addEventListener("click", () => {
     $("#video-zoom").value = 1.34;
     handleTransform();
+    sendParam("videoZoom", 1.34);
   });
   $("#btn-zoom-fill").addEventListener("click", () => {
     $("#video-zoom").value = 1.5;
     handleTransform();
+    sendParam("videoZoom", 1.5);
   });
   $("#btn-rotate-0").addEventListener("click", () => {
     $("#video-rotate").value = 0;
     handleTransform();
+    sendParam("videoRotate", 0);
   });
   $("#btn-rotate-90").addEventListener("click", () => {
     let n = parseFloat($("#video-rotate").value) + 90;
     if (n >= 360) n = 0;
     $("#video-rotate").value = n;
     handleTransform();
+    sendParam("videoRotate", n);
   });
 
   $("#btn-rec-top").onclick = toggleRecording;
@@ -795,15 +845,31 @@ function updateMasterTogglesUI() {
 function syncVideoTransform() {
   let zoomVal = parseFloat($("#video-zoom").value);
   let rotateVal = parseFloat($("#video-rotate").value);
+
+  // [NEW] Get Position Values
+  let posX = parseFloat($("#video-pos-x").value);
+  let posY = parseFloat($("#video-pos-y").value);
+
   $("#txt-zoom").textContent = Math.round(zoomVal * 100) + "%";
   $("#txt-rotate").textContent = rotateVal + "°";
-  sessionManager.setSetting({ videoZoom: zoomVal, videoRotate: rotateVal });
+  // [NEW] Update Pos Text
+  $("#txt-pos").textContent = `${posX},${posY}`;
+
+  // [NEW] Save Params
+  sessionManager.setSetting({
+    videoZoom: zoomVal,
+    videoRotate: rotateVal,
+    videoPosX: posX,
+    videoPosY: posY,
+  });
+
   if (currentTabId)
     chrome.tabs
       .sendMessage(currentTabId, {
         type: "SET_VIDEO_ZOOM",
         scale: zoomVal,
-        translateY: 0,
+        translateX: posX, // [NEW] Send X
+        translateY: posY, // [NEW] Send Y
         rotate: rotateVal,
       })
       .catch(() => {});
@@ -838,7 +904,19 @@ async function handleReset() {
   $("#txt-zoom").textContent = "100%";
   $("#video-rotate").value = 0;
   $("#txt-rotate").textContent = "0°";
-  sessionManager.setSetting({ videoZoom: 1, videoRotate: 0 });
+
+  // [NEW] Reset Position UI
+  $("#video-pos-x").value = 0;
+  $("#video-pos-y").value = 0;
+  $("#txt-pos").textContent = "0,0";
+
+  sessionManager.setSetting({
+    videoZoom: 1,
+    videoRotate: 0,
+    videoPosX: 0,
+    videoPosY: 0,
+  });
+
   if (currentTabId) {
     chrome.tabs
       .sendMessage(currentTabId, { type: "SET_VIDEO_DELAY", value: 0 })
@@ -847,12 +925,15 @@ async function handleReset() {
       .sendMessage(currentTabId, {
         type: "SET_VIDEO_ZOOM",
         scale: 1,
+        translateX: 0,
+        translateY: 0,
         rotate: 0,
       })
       .catch(() => {});
   }
 }
 
+// ... (Rest of functions like updateNormalizeButton, renderNewEQSystem, etc. remain unchanged) ...
 function updateNormalizeButton() {
   const btn = $("#btn-normalize");
   const indicator = $("#norm-indicator");
@@ -1001,8 +1082,15 @@ function loadAudioState(state) {
     isEqOn = state.isEqOn;
   }
 
+  // [NEW] Load Position State from Remote/Background
+  if (state.videoPosX !== undefined) $("#video-pos-x").value = state.videoPosX;
+  if (state.videoPosY !== undefined) $("#video-pos-y").value = state.videoPosY;
+
   updateEqToggleButton();
   updateEQVisuals();
+
+  // Trigger UI Update for Position
+  syncVideoTransform();
 }
 
 function drawVisualizer(data, mode) {

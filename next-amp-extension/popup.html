@@ -605,7 +605,47 @@
             style="margin: 0"
           />
         </div>
-      </div>
+
+        <div class="win-border-in bg-[#1a1a1a] p-1 relative col-span-2">
+            <div
+              class="flex justify-between items-center text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
+            >
+              <div class="flex items-center gap-1">
+                <span>POS</span><span id="txt-pos" class="text-orange-400">0,0</span>
+              </div>
+              <button id="btn-pos-reset" class="win-btn h-3 text-[7px] px-1">
+                RESET
+              </button>
+            </div>
+            
+            <div class="flex items-center gap-1 mb-0.5">
+              <span class="text-[7px] font-pixel text-gray-500 w-2">X</span>
+              <input
+                type="range"
+                id="video-pos-x"
+                min="-50"
+                max="50"
+                step="0.5"
+                value="0"
+                class="h-slider w-full"
+                style="margin: 0"
+              />
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="text-[7px] font-pixel text-gray-500 w-2">Y</span>
+              <input
+                type="range"
+                id="video-pos-y"
+                min="-50"
+                max="50"
+                step="0.5"
+                value="0"
+                class="h-slider w-full"
+                style="margin: 0"
+              />
+            </div>
+        </div>
+        </div>
     </div>
 
     <script type="module" src="popup.js"></script>

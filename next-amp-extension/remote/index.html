@@ -42,94 +42,7 @@
             <span class="text-label text-gray-300">AUDIO CONTROL</span>
           </div>
 
-          <div class="grid-2">
-            <div class="control-card">
-              <div class="flex justify-between items-end mb-1">
-                <div class="flex items-center gap-2">
-                  <span class="text-label">VOL</span>
-                  <button
-                    id="btn-dyn-toggle"
-                    class="win-btn px-1 text-[10px] h-4 min-w-[30px] leading-none"
-                  >
-                    DYN
-                  </button>
-                </div>
-                <span id="txt-vol" class="text-value text-[#00ff00]">100%</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <button id="btn-vol-minus" class="win-btn btn-step">-</button>
-                <input
-                  type="range"
-                  id="remote-vol"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  class="retro-slider flex-1"
-                />
-                <button id="btn-vol-plus" class="win-btn btn-step">+</button>
-              </div>
-            </div>
-
-            <div class="control-card">
-              <div class="flex justify-between items-end mb-1">
-                <span class="text-label">BAL</span>
-                <span id="txt-pan" class="text-value text-[#ffcc00]">C</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <button id="btn-pan-minus" class="win-btn btn-step">-</button>
-                <input
-                  type="range"
-                  id="remote-pan"
-                  min="-1"
-                  max="1"
-                  step="0.1"
-                  value="0"
-                  class="retro-slider flex-1"
-                />
-                <button id="btn-pan-plus" class="win-btn btn-step">+</button>
-              </div>
-            </div>
-
-            <div class="control-card">
-              <div class="flex justify-between items-end mb-1">
-                <span class="text-label">PITCH</span>
-                <span id="txt-pitch" class="text-value text-[#ffcc00]">0</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <button id="btn-pitch-minus" class="win-btn btn-step">-</button>
-                <input
-                  type="range"
-                  id="remote-pitch"
-                  min="-12"
-                  max="12"
-                  step="1"
-                  value="0"
-                  class="retro-slider flex-1"
-                />
-                <button id="btn-pitch-plus" class="win-btn btn-step">+</button>
-              </div>
-            </div>
-
-            <div class="control-card">
-              <div class="flex justify-between items-end mb-1">
-                <span class="text-label">REVERB</span>
-                <span id="txt-verb" class="text-value text-[#00ff00]">0.0</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <button id="btn-verb-minus" class="win-btn btn-step">-</button>
-                <input
-                  type="range"
-                  id="remote-verb"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  value="0"
-                  class="retro-slider flex-1"
-                />
-                <button id="btn-verb-plus" class="win-btn btn-step">+</button>
-              </div>
-            </div>
-          </div>
+          <div class="grid-2" id="audio-grid"></div>
         </div>
 
         <div class="win-border-in flex flex-col">
@@ -178,71 +91,11 @@
             </select>
           </div>
 
-          <div class="control-card">
-            <div class="flex justify-between text-label mb-1">
-              <span>DELAY</span>
-              <span id="txt-delay" class="text-value text-white">0.00s</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <button id="btn-delay-minus" class="win-btn btn-step">-</button>
-              <input
-                type="range"
-                id="remote-delay"
-                min="0"
-                max="5"
-                step="0.05"
-                value="0"
-                class="retro-slider flex-1"
-              />
-              <button id="btn-delay-plus" class="win-btn btn-step">+</button>
-            </div>
-          </div>
+          <div id="video-full-width-container"></div>
 
-          <div class="grid-2">
-            <div class="control-card">
-              <div class="flex justify-between items-end mb-1">
-                <span class="text-label">ZOOM</span>
-                <span id="txt-zoom" class="text-value text-blue-400">100%</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <button id="btn-zoom-minus" class="win-btn btn-step">-</button>
-                <input
-                  type="range"
-                  id="remote-zoom"
-                  min="1"
-                  max="3"
-                  step="0.01"
-                  value="1"
-                  class="retro-slider flex-1"
-                />
-                <button id="btn-zoom-plus" class="win-btn btn-step">+</button>
-              </div>
-            </div>
+          <div class="grid-2" id="video-grid"></div>
 
-            <div class="control-card">
-              <div class="flex justify-between items-end mb-1">
-                <span class="text-label">ROT</span>
-                <span id="txt-rotate" class="text-value text-purple-400"
-                  >0°</span
-                >
-              </div>
-              <div class="flex items-center gap-2">
-                <button id="btn-rotate-minus" class="win-btn btn-step">
-                  -
-                </button>
-                <input
-                  type="range"
-                  id="remote-rotate"
-                  min="0"
-                  max="360"
-                  step="5"
-                  value="0"
-                  class="retro-slider flex-1"
-                />
-                <button id="btn-rotate-plus" class="win-btn btn-step">+</button>
-              </div>
-            </div>
-          </div>
+          <div class="grid-2" id="video-pos-grid"></div>
         </div>
       </div>
     </div>
