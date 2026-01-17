@@ -37,7 +37,10 @@ body {
 .theme-bar {
   background-color: var(--theme-window);
   color: white;
-  padding: 0 12px;
+  padding-left: 8px; 
+  padding-right: 8px; 
+  padding-top: 4px; 
+  padding-bottom: 4px; 
   font-family: "Chakra Petch", sans-serif;
   font-size: 16px;
   font-weight: 700;
@@ -46,7 +49,7 @@ body {
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
-  height: 44px; /* ลดความสูงลงนิดนึง */
+
 }
 
 .win-border-in {
@@ -83,9 +86,9 @@ body {
   font-weight: bold;
   font-size: 12px;
   padding: 0 6px;
-  height: 32px; /* ลดความสูงปุ่ม */
+  height: 28px; /* ลดความสูงปุ่ม */
   user-select: none;
-  min-width: 32px;
+  min-width: 28px;
 }
 .win-btn:active, .win-btn.pressed {
   border-top: 2px solid #000;
@@ -165,7 +168,6 @@ input[type="range"].retro-slider::-webkit-slider-thumb {
   width: 18px; /* ลดจาก 26px เหลือ 18px ทำให้ดูห่างกันมากขึ้น */
   height: calc(100% - 20px);
   background: linear-gradient(to top, var(--eq-col-1) 0%, var(--eq-col-2) 50%, var(--eq-col-3) 100%);
-  border: 1px solid #333;
   z-index: 1;
 }
 
