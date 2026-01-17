@@ -291,19 +291,6 @@ function setBtnState(el, isActive, textOn, textOff, activeBg, activeText) {
   };
 });
 
-document.getElementById("btn-delay-minus").onclick = () => {
-  let v = parseFloat(els.delay.value) - 0.1;
-  if (v < 0) v = 0;
-  els.delay.value = v;
-  els.delay.dispatchEvent(new Event("input"));
-};
-document.getElementById("btn-delay-plus").onclick = () => {
-  let v = parseFloat(els.delay.value) + 0.1;
-  if (v > 5) v = 5;
-  els.delay.value = v;
-  els.delay.dispatchEvent(new Event("input"));
-};
-
 els.btnVideo.onclick = () => {
   const newState = !els.btnVideo.className.includes("pressed");
   updateSingleUI("isVideoMasterOn", newState);
@@ -329,3 +316,46 @@ els.eqPreset.onchange = (e) => {
   });
   sendParam("eqPreset", preset);
 };
+
+// --- New Stepper Logic ---
+function setupStepper(sliderId, minusId, plusId) {
+  const slider = document.getElementById(sliderId);
+  const btnMinus = document.getElementById(minusId);
+  const btnPlus = document.getElementById(plusId);
+
+  if (!slider || !btnMinus || !btnPlus) return;
+
+  const update = (increment) => {
+    const step = parseFloat(slider.step) || 1;
+    const current = parseFloat(slider.value);
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+
+    let newValue = current + (increment ? step : -step);
+
+    // Clamp values
+    if (newValue < min) newValue = min;
+    if (newValue > max) newValue = max;
+
+    // Fix floating point precision
+    if (step < 1) {
+      const decimals = step.toString().split(".")[1]?.length || 2;
+      newValue = parseFloat(newValue.toFixed(decimals));
+    }
+
+    slider.value = newValue;
+    slider.dispatchEvent(new Event("input"));
+  };
+
+  btnMinus.onclick = () => update(false);
+  btnPlus.onclick = () => update(true);
+}
+
+// Setup steppers for all controls
+setupStepper("remote-vol", "btn-vol-minus", "btn-vol-plus");
+setupStepper("remote-pan", "btn-pan-minus", "btn-pan-plus");
+setupStepper("remote-pitch", "btn-pitch-minus", "btn-pitch-plus");
+setupStepper("remote-verb", "btn-verb-minus", "btn-verb-plus");
+setupStepper("remote-delay", "btn-delay-minus", "btn-delay-plus");
+setupStepper("remote-zoom", "btn-zoom-minus", "btn-zoom-plus");
+setupStepper("remote-rotate", "btn-rotate-minus", "btn-rotate-plus");
