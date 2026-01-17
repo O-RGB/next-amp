@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v2026-01-17-8501";
+const CACHE_VERSION = "v2026-01-17-1025";
 const CACHE_NAME = `nextamp-${CACHE_VERSION}`;
 
 const ASSETS_TO_CACHE = [
@@ -18,35 +18,31 @@ const ASSETS_TO_CACHE = [
   "https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;600&family=Sarabun:wght@300;400;600&display=swap",
 ];
 
-// ===== INSTALL =====
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
   );
 
-  self.skipWaiting(); // 🔥 บังคับใช้ SW ใหม่ทันที
+  self.skipWaiting();
 });
 
-// ===== ACTIVATE =====
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            return caches.delete(key); // 🔥 ลบ cache เก่า
+            return caches.delete(key);
           }
         })
       )
     )
   );
 
-  self.clients.claim(); // 🔥 คุมหน้าเดี๋ยวนี้
+  self.clients.claim();
 });
 
-// ===== FETCH =====
 self.addEventListener("fetch", (event) => {
-  // HTML → network first (เพื่อ update)
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request)
@@ -62,7 +58,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // ไฟล์อื่น → cache first
   event.respondWith(
     caches.match(event.request).then(
       (cached) =>

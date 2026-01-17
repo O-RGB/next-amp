@@ -17,6 +17,8 @@ body {
   color: white;
   overflow: hidden;
   height: 100vh;
+  /* แก้ปัญหา Safari Address bar บัง */
+  height: 100dvh; 
   width: 100vw;
   touch-action: none;
 }
@@ -35,7 +37,7 @@ body {
 .theme-bar {
   background-color: var(--theme-window);
   color: white;
-  padding: 8px 12px;
+  padding: 0 12px;
   font-family: "Chakra Petch", sans-serif;
   font-size: 16px;
   font-weight: 700;
@@ -44,7 +46,7 @@ body {
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
-  height: 50px;
+  height: 44px; /* ลดความสูงลงนิดนึง */
 }
 
 .win-border-in {
@@ -53,80 +55,80 @@ body {
   border-bottom: 2px solid #a3a3a3;
   box-shadow: inset 2px 2px 0 #000;
   background: #151515;
-  padding: 12px;
-  margin-bottom: 12px;
+  padding: 8px; /* ลด padding ลง */
+  margin-bottom: 8px;
 }
 
 /* GRID LAYOUT UTILITY */
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px; /* ช่องว่างระหว่างคอลัมน์ */
-  align-items: end; /* ให้ Slider อยู่ระนาบเดียวกันด้านล่าง */
+  gap: 8px; /* ลด gap เพื่อให้ slider ยาวขึ้น */
+  align-items: end;
 }
 
-/* --- BUTTONS (BIGGER) --- */
+/* --- BUTTONS --- */
 .win-btn {
   background-color: #c0c0c0;
   color: black;
-  border-top: 3px solid #fff;
-  border-left: 3px solid #fff;
-  border-right: 3px solid #000;
-  border-bottom: 3px solid #000;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  border-right: 2px solid #000;
+  border-bottom: 2px solid #000;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   font-family: "Chakra Petch", sans-serif;
   font-weight: bold;
-  font-size: 14px;
-  padding: 0 10px;
-  height: 40px; /* สูงขึ้น */
+  font-size: 12px;
+  padding: 0 6px;
+  height: 32px; /* ลดความสูงปุ่ม */
   user-select: none;
-  min-width: 44px; /* กว้างขั้นต่ำ */
+  min-width: 32px;
 }
 .win-btn:active, .win-btn.pressed {
-  border-top: 3px solid #000;
-  border-left: 3px solid #000;
-  border-right: 3px solid #fff;
-  border-bottom: 3px solid #fff;
-  transform: translateY(2px);
+  border-top: 2px solid #000;
+  border-left: 2px solid #000;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: translateY(1px);
   background-color: #a0a0a0;
 }
 
-/* --- HORIZONTAL SLIDERS (BIG & CHUNKY) --- */
+/* --- HORIZONTAL SLIDERS (Compact) --- */
 input[type="range"].retro-slider {
   -webkit-appearance: none;
   background: transparent;
   width: 100%;
-  height: 44px; /* พื้นที่สัมผัสใหญ่ */
-  margin: 5px 0;
+  height: 36px; /* ลดความสูง slider */
+  margin: 2px 0;
   position: relative;
   z-index: 10;
 }
 input[type="range"].retro-slider:focus { outline: none; }
 
-/* Track (ราง) */
+/* Track */
 input[type="range"].retro-slider::-webkit-slider-runnable-track {
   width: 100%;
-  height: 14px; /* รางหนา */
+  height: 10px; /* ลดความหนาราง */
   background: #000;
-  border-bottom: 2px solid #555;
+  border-bottom: 1px solid #555;
   margin-top: 0px;
 }
 
-/* Thumb (ตัวจับ - สี่เหลี่ยมสีเงินเหมือน EQ) */
+/* Thumb */
 input[type="range"].retro-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  height: 30px; /* สูง */
-  width: 24px;  /* กว้าง */
+  height: 24px; /* ลดขนาดหัวจับ */
+  width: 18px;  
   background: #c0c0c0;
-  border: 2px solid #000;
-  border-top: 2px solid #fff;
-  border-left: 2px solid #fff;
+  border: 1px solid #000;
+  border-top: 1px solid #fff;
+  border-left: 1px solid #fff;
   cursor: pointer;
-  margin-top: -10px; /* จัดกึ่งกลางราง */
-  box-shadow: 2px 2px 5px rgba(0,0,0,0.7);
+  margin-top: -8px; 
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.7);
 }
 
 /* --- EQ SYSTEM --- */
@@ -134,13 +136,13 @@ input[type="range"].retro-slider::-webkit-slider-thumb {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  height: 240px; 
+  height: 180px; /* ลดความสูง EQ ลงนิดนึง */
   background: #080808;
   border: 2px solid #000;
   border-right: 2px solid #555;
   border-bottom: 2px solid #555;
-  padding: 10px 4px;
-  margin-bottom: 10px;
+  padding: 8px 2px;
+  margin-bottom: 4px;
   position: relative;
 }
 
@@ -151,17 +153,17 @@ input[type="range"].retro-slider::-webkit-slider-thumb {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin: 0 3px;
+  margin: 0 1px; /* ลด margin จริง แต่จะไปลดความกว้าง bar แทนเพื่อให้ดูห่าง */
 }
 
-/* แท่งสี */
+/* แท่งสี (ลดความกว้างลงเพื่อให้มีช่องว่างมากขึ้น) */
 .eq-bar-wrapper {
   position: absolute;
-  bottom: 25px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  width: 26px; /* กว้าง */
-  height: calc(100% - 25px);
+  width: 18px; /* ลดจาก 26px เหลือ 18px ทำให้ดูห่างกันมากขึ้น */
+  height: calc(100% - 20px);
   background: linear-gradient(to top, var(--eq-col-1) 0%, var(--eq-col-2) 50%, var(--eq-col-3) 100%);
   border: 1px solid #333;
   z-index: 1;
@@ -181,31 +183,31 @@ input[type="range"].retro-slider::-webkit-slider-thumb {
 
 /* Visual Thumb (EQ) */
 .eq-thumb-visual {
-  width: 38px;
-  height: 20px;
+  width: 28px; /* ลดขนาดหัวจับ EQ */
+  height: 14px;
   background: #c0c0c0;
-  border: 2px solid #000;
-  border-top: 2px solid #fff;
-  border-left: 2px solid #fff;
+  border: 1px solid #000;
+  border-top: 1px solid #fff;
+  border-left: 1px solid #fff;
   position: absolute;
   left: 50%;
-  transform: translate(-50%, 50%); /* Center on point */
+  transform: translate(-50%, 50%);
   pointer-events: none;
   z-index: 10;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.8);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.8);
   transition: bottom 0.05s linear;
 }
 
 /* Input จริง (EQ) */
 input[type="range"].eq-range-hidden {
   -webkit-appearance: none;
-  writing-mode: vertical-lr; /* แก้ปัญหาเด้ง */
+  writing-mode: vertical-lr; 
   direction: rtl; 
   position: absolute;
-  bottom: 25px; left: 50%;
+  bottom: 20px; left: 50%;
   transform: translateX(-50%);
-  width: 48px; /* พื้นที่กดใหญ่กว่าแท่ง */
-  height: calc(100% - 25px);
+  width: 36px;
+  height: calc(100% - 20px);
   margin: 0;
   opacity: 0;
   z-index: 50;
@@ -214,19 +216,19 @@ input[type="range"].eq-range-hidden {
 
 .eq-label {
   font-family: "Chakra Petch", sans-serif;
-  font-size: 11px;
+  font-size: 9px; /* ลดขนาดฟอนต์ */
   font-weight: bold;
   color: #888;
   text-align: center;
   position: absolute;
   bottom: 0;
   width: 100%;
-  height: 20px;
-  line-height: 20px;
+  height: 16px;
+  line-height: 16px;
 }
 
 /* Utils */
 .font-pixel { font-family: "Chakra Petch", monospace; }
-.text-label { font-size: 12px; font-weight: bold; color: #aaa; letter-spacing: 0.5px; white-space: nowrap; }
-.text-value { font-size: 14px; font-weight: bold; font-family: "Chakra Petch", monospace; }
+.text-label { font-size: 11px; font-weight: bold; color: #aaa; letter-spacing: 0.5px; white-space: nowrap; }
+.text-value { font-size: 13px; font-weight: bold; font-family: "Chakra Petch", monospace; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
