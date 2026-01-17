@@ -1,4 +1,6 @@
-const CACHE_NAME = "nextamp-remote-v5";
+const CACHE_VERSION = "v2026-01-17-1811";
+const CACHE_NAME = `nextamp-${CACHE_VERSION}`;
+
 const ASSETS = [
   "./",
   "./index.html",
@@ -10,37 +12,49 @@ const ASSETS = [
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
+
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log("[SW] Caching assets");
+      console.log(`[SW] Installing new version: ${CACHE_VERSION}`);
       return cache.addAll(ASSETS);
-    })
-  );
-});
-
-self.addEventListener("fetch", (e) => {
-  e.respondWith(
-    caches.match(e.request).then((response) => {
-      return (
-        response ||
-        fetch(e.request).then((fetchRes) => {
-          return caches.open(CACHE_NAME).then((cache) => {
-            if (e.request.url.startsWith("http")) {
-              cache.put(e.request, fetchRes.clone());
-            }
-            return fetchRes;
-          });
-        })
-      );
     })
   );
 });
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+    caches
+      .keys()
+      .then((keys) => {
+        return Promise.all(
+          keys.map((key) => {
+            if (key !== CACHE_NAME) {
+              console.log(`[SW] Deleting old cache: ${key}`);
+              return caches.delete(key);
+            }
+          })
+        );
+      })
+      .then(() => {
+        console.log(`[SW] ${CACHE_VERSION} is now controlling the page.`);
+        return self.clients.claim();
+      })
+  );
+});
+
+self.addEventListener("fetch", (e) => {
+  if (!e.request.url.startsWith("http")) return;
+
+  e.respondWith(
+    caches.match(e.request).then((response) => {
+      return (
+        response ||
+        fetch(e.request).then((fetchRes) => {
+          return caches.open(CACHE_NAME).then((cache) => {
+            cache.put(e.request, fetchRes.clone());
+            return fetchRes;
+          });
+        })
       );
     })
   );
