@@ -4,7 +4,9 @@ import { SessionManager } from "./modules/session-manager.js";
 import { SettingsModal } from "./modules/settings-modal.js";
 
 const REMOTE_BASE_URL =
-  "https://next-amp-player.vercel.app/next-amp-extension/remote/index.html";
+  "http://localhost:5500/next-amp-extension/remote/index.html";
+// const REMOTE_BASE_URL =
+//   "https://next-amp-player.vercel.app/next-amp-extension/remote/index.html";
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 const LABELS = [
   "60",

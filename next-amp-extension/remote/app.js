@@ -1,3 +1,129 @@
+/* =========================================
+   UI GENERATION SYSTEM (Refactored)
+   ========================================= */
+const UI_CONFIG = {
+  audio: [
+    {
+      id: "vol",
+      label: "VOL",
+      min: 0,
+      max: 1,
+      step: 0.05,
+      value: 1,
+      color: "#00ff00",
+      extraHtml:
+        '<button id="btn-dyn-toggle" class="win-btn px-1 text-[10px] h-4 min-w-[30px] leading-none">DYN</button>',
+    },
+    {
+      id: "pan",
+      label: "BAL",
+      min: -1,
+      max: 1,
+      step: 0.1,
+      value: 0,
+      color: "#ffcc00",
+    },
+    {
+      id: "pitch",
+      label: "PITCH",
+      min: -12,
+      max: 12,
+      step: 1,
+      value: 0,
+      color: "#ffcc00",
+    },
+    {
+      id: "verb",
+      label: "REVERB",
+      min: 0,
+      max: 2,
+      step: 0.1,
+      value: 0,
+      color: "#00ff00",
+    },
+  ],
+  videoFull: [
+    {
+      id: "delay",
+      label: "DELAY",
+      min: 0,
+      max: 5,
+      step: 0.05,
+      value: 0,
+      color: "white",
+    },
+  ],
+  videoGrid: [
+    {
+      id: "zoom",
+      label: "ZOOM",
+      min: 1,
+      max: 3,
+      step: 0.01,
+      value: 1,
+      color: "#60a5fa",
+    }, // Blue-400
+    {
+      id: "rotate",
+      label: "ROT",
+      min: 0,
+      max: 360,
+      step: 5,
+      value: 0,
+      color: "#c084fc",
+    }, // Purple-400
+  ],
+};
+
+function generateControlHTML(c) {
+  // สร้าง HTML สำหรับ Control Card 1 อัน (ใช้ดีไซน์ Slider Well)
+  return `
+    <div class="control-card">
+      <div class="flex justify-between items-end mb-1">
+        <div class="flex items-center gap-2">
+          <span class="text-label">${c.label}</span>
+          ${c.extraHtml || ""}
+        </div>
+        <span id="txt-${c.id}" class="text-value" style="color: ${c.color}">
+          ${c.value}
+        </span>
+      </div>
+      <div class="slider-well">
+        <button id="btn-${c.id}-minus" class="win-btn btn-step">-</button>
+        <input
+          type="range"
+          id="remote-${c.id}"
+          min="${c.min}"
+          max="${c.max}"
+          step="${c.step}"
+          value="${c.value}"
+          class="retro-slider flex-1"
+        />
+        <button id="btn-${c.id}-plus" class="win-btn btn-step">+</button>
+      </div>
+    </div>
+  `;
+}
+
+function initUI() {
+  const render = (containerId, items) => {
+    const container = document.getElementById(containerId);
+    if (container)
+      container.innerHTML = items.map(generateControlHTML).join("");
+  };
+
+  render("audio-grid", UI_CONFIG.audio);
+  render("video-full-width-container", UI_CONFIG.videoFull);
+  render("video-grid", UI_CONFIG.videoGrid);
+}
+
+// เรียกใช้งานทันทีเพื่อสร้าง HTML ก่อนที่ Logic อื่นจะหา Element ไม่เจอ
+initUI();
+
+/* =========================================
+   CORE APPLICATION LOGIC
+   ========================================= */
+
 const urlParams = new URLSearchParams(window.location.search);
 const HOST_ID = urlParams.get("id");
 const SESSION_TOKEN = urlParams.get("token");
@@ -230,22 +356,29 @@ function setBtnState(el, isActive, textOn, textOff, activeBg, activeText) {
   }
 }
 
+// สร้าง EQ
 (function generateEQ() {
   els.eqContainer.innerHTML = "";
   FREQUENCIES.forEach((f, i) => {
     const col = document.createElement("div");
     col.className = "eq-col";
+
     col.innerHTML = `
-            <div class="eq-bar-wrapper">
-                <div class="eq-bar-mask" id="mask-visual-${i}"></div>
-                <div class="eq-thumb-visual" id="thumb-visual-${i}" style="bottom: 50%"></div>
+            <button class="win-btn eq-btn-step" id="btn-eq-plus-${i}">+</button>
+            <div class="eq-bar-area">
+                <div class="eq-bar-wrapper">
+                    <div class="eq-bar-mask" id="mask-visual-${i}"></div>
+                    <div class="eq-thumb-visual" id="thumb-visual-${i}" style="bottom: 50%"></div>
+                </div>
+                <input type="range" class="eq-range-hidden" min="-12" max="12" step="1" value="0" data-idx="${i}" id="eq-range-${i}">
             </div>
-            <input type="range" class="eq-range-hidden" min="-12" max="12" step="1" value="0" data-idx="${i}">
             <div class="eq-label">${f}</div>
+            <button class="win-btn eq-btn-step" id="btn-eq-minus-${i}">-</button>
         `;
     els.eqContainer.appendChild(col);
 
     const inp = col.querySelector("input");
+
     inp.oninput = (e) => {
       const val = parseFloat(e.target.value);
       updateEQVisual(i, val);
@@ -258,6 +391,22 @@ function setBtnState(el, isActive, textOn, textOff, activeBg, activeText) {
       updateEQVisual(i, 0);
       sendParam("eq", 0, i);
     };
+
+    const btnPlus = col.querySelector(`#btn-eq-plus-${i}`);
+    const btnMinus = col.querySelector(`#btn-eq-minus-${i}`);
+
+    const updateEqStep = (increment) => {
+      let val = parseInt(inp.value);
+      val += increment ? 1 : -1;
+      if (val > 12) val = 12;
+      if (val < -12) val = -12;
+
+      inp.value = val;
+      inp.dispatchEvent(new Event("input"));
+    };
+
+    btnPlus.onclick = () => updateEqStep(true);
+    btnMinus.onclick = () => updateEqStep(false);
   });
 })();
 
@@ -270,6 +419,7 @@ function setBtnState(el, isActive, textOn, textOff, activeBg, activeText) {
   els.zoom,
   els.rotate,
 ].forEach((el) => {
+  if (!el) return; // Guard clause in case element is missing
   el.oninput = (e) => {
     let key = "";
     let val = parseFloat(e.target.value);
@@ -317,7 +467,7 @@ els.eqPreset.onchange = (e) => {
   sendParam("eqPreset", preset);
 };
 
-// --- New Stepper Logic ---
+// Stepper Logic Auto-Setup
 function setupStepper(sliderId, minusId, plusId) {
   const slider = document.getElementById(sliderId);
   const btnMinus = document.getElementById(minusId);
@@ -333,11 +483,9 @@ function setupStepper(sliderId, minusId, plusId) {
 
     let newValue = current + (increment ? step : -step);
 
-    // Clamp values
     if (newValue < min) newValue = min;
     if (newValue > max) newValue = max;
 
-    // Fix floating point precision
     if (step < 1) {
       const decimals = step.toString().split(".")[1]?.length || 2;
       newValue = parseFloat(newValue.toFixed(decimals));
@@ -351,11 +499,9 @@ function setupStepper(sliderId, minusId, plusId) {
   btnPlus.onclick = () => update(true);
 }
 
-// Setup steppers for all controls
-setupStepper("remote-vol", "btn-vol-minus", "btn-vol-plus");
-setupStepper("remote-pan", "btn-pan-minus", "btn-pan-plus");
-setupStepper("remote-pitch", "btn-pitch-minus", "btn-pitch-plus");
-setupStepper("remote-verb", "btn-verb-minus", "btn-verb-plus");
-setupStepper("remote-delay", "btn-delay-minus", "btn-delay-plus");
-setupStepper("remote-zoom", "btn-zoom-minus", "btn-zoom-plus");
-setupStepper("remote-rotate", "btn-rotate-minus", "btn-rotate-plus");
+// วนลูป Setup ปุ่ม +- ให้ทุกตัวใน Config
+[...UI_CONFIG.audio, ...UI_CONFIG.videoFull, ...UI_CONFIG.videoGrid].forEach(
+  (c) => {
+    setupStepper(`remote-${c.id}`, `btn-${c.id}-minus`, `btn-${c.id}-plus`);
+  }
+);

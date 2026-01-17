@@ -7,7 +7,7 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
     <title>NextAmp Remote</title>
-    <link href="styles.css" rel="stylesheet" />
+    <link href="./styles.css" rel="stylesheet" />
     <script src="../assets/js/tailwindcss.js"></script>
     <script src="../assets/js/peerjs.min.js"></script>
   </head>
@@ -37,19 +37,19 @@
       >
         <div class="win-border-in">
           <div
-            class="flex justify-between items-center mb-2 border-b border-[#333] pb-1"
+            class="flex justify-between items-center border-b border-[#333] pb-1"
           >
             <span class="text-label text-gray-300">AUDIO CONTROL</span>
           </div>
 
-          <div class="grid-2 gap-y-4">
-            <div>
+          <div class="grid-2">
+            <div class="control-card">
               <div class="flex justify-between items-end mb-1">
                 <div class="flex items-center gap-2">
                   <span class="text-label">VOL</span>
                   <button
                     id="btn-dyn-toggle"
-                    class="win-btn px-1 text-[10px] h-5 min-w-[40px] leading-none"
+                    class="win-btn px-1 text-[10px] h-4 min-w-[30px] leading-none"
                   >
                     DYN
                   </button>
@@ -70,7 +70,7 @@
               </div>
             </div>
 
-            <div>
+            <div class="control-card">
               <div class="flex justify-between items-end mb-1">
                 <span class="text-label">BAL</span>
                 <span id="txt-pan" class="text-value text-[#ffcc00]">C</span>
@@ -90,7 +90,7 @@
               </div>
             </div>
 
-            <div>
+            <div class="control-card">
               <div class="flex justify-between items-end mb-1">
                 <span class="text-label">PITCH</span>
                 <span id="txt-pitch" class="text-value text-[#ffcc00]">0</span>
@@ -110,7 +110,7 @@
               </div>
             </div>
 
-            <div>
+            <div class="control-card">
               <div class="flex justify-between items-end mb-1">
                 <span class="text-label">REVERB</span>
                 <span id="txt-verb" class="text-value text-[#00ff00]">0.0</span>
@@ -134,7 +134,7 @@
 
         <div class="win-border-in flex flex-col">
           <div
-            class="flex justify-between items-center mb-2 border-b border-[#333] pb-1"
+            class="flex justify-between items-center border-b border-[#333] pb-1"
           >
             <span class="text-label text-green-500 text-base">EQUALIZER</span>
 
@@ -162,9 +162,9 @@
           <div id="remote-eq-container"></div>
         </div>
 
-        <div class="win-border-in mb-8">
+        <div class="win-border-in">
           <div
-            class="flex justify-between items-center mb-2 border-b border-[#333] pb-1"
+            class="flex justify-between items-center border-b border-[#333] pb-1"
           >
             <span class="text-label text-blue-400 text-base">VIDEO</span>
             <select
@@ -178,18 +178,13 @@
             </select>
           </div>
 
-          <div class="mb-3">
+          <div class="control-card">
             <div class="flex justify-between text-label mb-1">
               <span>DELAY</span>
               <span id="txt-delay" class="text-value text-white">0.00s</span>
             </div>
             <div class="flex items-center gap-2">
-              <button
-                id="btn-delay-minus"
-                class="win-btn btn-step"
-              >
-                -
-              </button>
+              <button id="btn-delay-minus" class="win-btn btn-step">-</button>
               <input
                 type="range"
                 id="remote-delay"
@@ -199,17 +194,12 @@
                 value="0"
                 class="retro-slider flex-1"
               />
-              <button
-                id="btn-delay-plus"
-                class="win-btn btn-step"
-              >
-                +
-              </button>
+              <button id="btn-delay-plus" class="win-btn btn-step">+</button>
             </div>
           </div>
 
           <div class="grid-2">
-            <div>
+            <div class="control-card">
               <div class="flex justify-between items-end mb-1">
                 <span class="text-label">ZOOM</span>
                 <span id="txt-zoom" class="text-value text-blue-400">100%</span>
@@ -229,7 +219,7 @@
               </div>
             </div>
 
-            <div>
+            <div class="control-card">
               <div class="flex justify-between items-end mb-1">
                 <span class="text-label">ROT</span>
                 <span id="txt-rotate" class="text-value text-purple-400"
@@ -237,7 +227,9 @@
                 >
               </div>
               <div class="flex items-center gap-2">
-                <button id="btn-rotate-minus" class="win-btn btn-step">-</button>
+                <button id="btn-rotate-minus" class="win-btn btn-step">
+                  -
+                </button>
                 <input
                   type="range"
                   id="remote-rotate"
