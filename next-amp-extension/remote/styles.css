@@ -1,0 +1,232 @@
+@import url("https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;600;700&family=Inter:wght@300;400;600&family=Sarabun:wght@300;400;600&display=swap");
+
+:root {
+  --theme-window: #000080;
+  --theme-text: #00ff00;
+  --theme-text-sec: #ffcc00;
+  --eq-col-1: #00ff00;
+  --eq-col-2: #ffff00;
+  --eq-col-3: #ff0000;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #111;
+  font-family: "Sarabun", sans-serif;
+  color: white;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  touch-action: none;
+}
+
+/* --- Layout --- */
+.remote-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  background: #292929;
+  border: 2px solid #444;
+}
+
+.theme-bar {
+  background-color: var(--theme-window);
+  color: white;
+  padding: 8px 12px;
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  border-bottom: 2px solid #000;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  height: 50px;
+}
+
+.win-border-in {
+  border: 2px solid #444;
+  border-right: 2px solid #a3a3a3;
+  border-bottom: 2px solid #a3a3a3;
+  box-shadow: inset 2px 2px 0 #000;
+  background: #151515;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+/* GRID LAYOUT UTILITY */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px; /* ช่องว่างระหว่างคอลัมน์ */
+  align-items: end; /* ให้ Slider อยู่ระนาบเดียวกันด้านล่าง */
+}
+
+/* --- BUTTONS (BIGGER) --- */
+.win-btn {
+  background-color: #c0c0c0;
+  color: black;
+  border-top: 3px solid #fff;
+  border-left: 3px solid #fff;
+  border-right: 3px solid #000;
+  border-bottom: 3px solid #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: bold;
+  font-size: 14px;
+  padding: 0 10px;
+  height: 40px; /* สูงขึ้น */
+  user-select: none;
+  min-width: 44px; /* กว้างขั้นต่ำ */
+}
+.win-btn:active, .win-btn.pressed {
+  border-top: 3px solid #000;
+  border-left: 3px solid #000;
+  border-right: 3px solid #fff;
+  border-bottom: 3px solid #fff;
+  transform: translateY(2px);
+  background-color: #a0a0a0;
+}
+
+/* --- HORIZONTAL SLIDERS (BIG & CHUNKY) --- */
+input[type="range"].retro-slider {
+  -webkit-appearance: none;
+  background: transparent;
+  width: 100%;
+  height: 44px; /* พื้นที่สัมผัสใหญ่ */
+  margin: 5px 0;
+  position: relative;
+  z-index: 10;
+}
+input[type="range"].retro-slider:focus { outline: none; }
+
+/* Track (ราง) */
+input[type="range"].retro-slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 14px; /* รางหนา */
+  background: #000;
+  border-bottom: 2px solid #555;
+  margin-top: 0px;
+}
+
+/* Thumb (ตัวจับ - สี่เหลี่ยมสีเงินเหมือน EQ) */
+input[type="range"].retro-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 30px; /* สูง */
+  width: 24px;  /* กว้าง */
+  background: #c0c0c0;
+  border: 2px solid #000;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  cursor: pointer;
+  margin-top: -10px; /* จัดกึ่งกลางราง */
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.7);
+}
+
+/* --- EQ SYSTEM --- */
+#remote-eq-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 240px; 
+  background: #080808;
+  border: 2px solid #000;
+  border-right: 2px solid #555;
+  border-bottom: 2px solid #555;
+  padding: 10px 4px;
+  margin-bottom: 10px;
+  position: relative;
+}
+
+.eq-col {
+  position: relative;
+  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 3px;
+}
+
+/* แท่งสี */
+.eq-bar-wrapper {
+  position: absolute;
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px; /* กว้าง */
+  height: calc(100% - 25px);
+  background: linear-gradient(to top, var(--eq-col-1) 0%, var(--eq-col-2) 50%, var(--eq-col-3) 100%);
+  border: 1px solid #333;
+  z-index: 1;
+}
+
+/* Mask */
+.eq-bar-mask {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 50%;
+  background: #151515;
+  opacity: 0.95;
+  pointer-events: none;
+  border-bottom: 1px solid #000;
+  z-index: 2;
+  transition: height 0.05s linear;
+}
+
+/* Visual Thumb (EQ) */
+.eq-thumb-visual {
+  width: 38px;
+  height: 20px;
+  background: #c0c0c0;
+  border: 2px solid #000;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 50%); /* Center on point */
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.8);
+  transition: bottom 0.05s linear;
+}
+
+/* Input จริง (EQ) */
+input[type="range"].eq-range-hidden {
+  -webkit-appearance: none;
+  writing-mode: vertical-lr; /* แก้ปัญหาเด้ง */
+  direction: rtl; 
+  position: absolute;
+  bottom: 25px; left: 50%;
+  transform: translateX(-50%);
+  width: 48px; /* พื้นที่กดใหญ่กว่าแท่ง */
+  height: calc(100% - 25px);
+  margin: 0;
+  opacity: 0;
+  z-index: 50;
+  cursor: pointer;
+}
+
+.eq-label {
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 11px;
+  font-weight: bold;
+  color: #888;
+  text-align: center;
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 20px;
+  line-height: 20px;
+}
+
+/* Utils */
+.font-pixel { font-family: "Chakra Petch", monospace; }
+.text-label { font-size: 12px; font-weight: bold; color: #aaa; letter-spacing: 0.5px; white-space: nowrap; }
+.text-value { font-size: 14px; font-weight: bold; font-family: "Chakra Petch", monospace; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }

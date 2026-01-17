@@ -102,6 +102,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         });
       }
     }
+  } else if (msg.type === "BG_RELAY_TO_TAB") {
+    // New handler for Remote Control to Content Script Relay
+    if (msg.tabId && msg.payload) {
+      chrome.tabs.sendMessage(msg.tabId, msg.payload).catch(() => {});
+    }
   } else if (
     msg.type === "RTC_OFFER" ||
     msg.type === "RTC_ANSWER" ||

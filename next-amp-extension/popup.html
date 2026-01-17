@@ -15,6 +15,27 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="app-bg">
+    <div id="qr-overlay" class="z-[200000] hidden fixed inset-0 bg-black/90 flex items-center justify-center">
+      <div class="win-border-out session-dialog shadow-2xl bg-[#292929]">
+        <div class="theme-bar justify-between mb-2">
+          <span>REMOTE CONNECT</span>
+          <button id="btn-close-qr" class="win-btn text-red-900 font-bold bg-[#e0e0e0]">X</button>
+        </div>
+        <div class="p-4 flex flex-col gap-4 items-center bg-[#222]">
+          <div class="bg-white p-2">
+            <img id="qr-image" src="" alt="Scan QR" class="w-[150px] h-[150px] object-contain" />
+          </div>
+          <p class="text-[9px] text-gray-400 font-pixel text-center">
+            Scan with your phone to control
+          </p>
+          <div class="flex flex-col gap-1 w-full">
+            <input type="text" id="remote-url-display" class="bg-black text-[#00ff00] text-[8px] p-1 border border-gray-600 font-mono w-full text-center outline-none" readonly />
+            <button id="btn-copy-url" class="win-btn w-full py-1 h-6 text-[9px]">COPY URL</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="session-mode-overlay" class="z-[100000]">
       <div class="win-border-out session-dialog shadow-2xl">
         <div class="theme-bar justify-center mb-2">
@@ -53,7 +74,7 @@
     </div>
 
     <div id="modal-overlay">
-      <div class="win-border-out modal-window shadow-2xl">
+       <div class="win-border-out modal-window shadow-2xl">
         <div class="theme-bar">
           <span>SETTINGS & TOOLS</span
           ><button
@@ -71,7 +92,7 @@
         </div>
         <div class="win-border-in flex-1 m-2 flex flex-col min-h-0">
           <div id="tab-general" class="tab-content active">
-            <div class="setting-row">
+             <div class="setting-row">
               <span>Startup Volume</span
               ><select
                 id="sel-startup-vol"
@@ -113,7 +134,7 @@
             </div>
           </div>
           <div id="tab-advanced" class="tab-content">
-            <div
+             <div
               class="text-[9px] font-bold text-green-500 mb-0.5 border-b border-gray-700"
             >
               REVERB SETTINGS
@@ -193,12 +214,6 @@
               UTILITIES
             </div>
             <div class="flex flex-col gap-1 mt-0.5">
-              <!-- <button
-                id="btn-open-player"
-                class="win-btn w-full py-0.5 text-blue-900 font-bold bg-[#e0e0ff] mb-1"
-              >
-                OPEN CAST PLAYER
-              </button> -->
               <div class="flex items-center gap-1">
                 <span class="text-[8px] text-gray-500 w-8">ID:</span
                 ><input
@@ -220,7 +235,7 @@
             </div>
           </div>
           <div id="tab-record" class="tab-content">
-            <div
+             <div
               class="flex justify-between items-center mb-2 p-1 bg-black border border-gray-700"
             >
               <span class="text-[9px] font-pixel text-gray-400"
@@ -239,7 +254,7 @@
             <div class="flex flex-col gap-1" id="rec-list"></div>
           </div>
           <div id="tab-about" class="tab-content">
-            <div
+             <div
               class="flex flex-col items-center justify-center h-full text-center gap-2"
             >
               <div
@@ -282,6 +297,9 @@
           <button id="btn-open-player" class="win-btn text-green-900 font-bold">
             OUT
           </button>
+          <button id="btn-remote-connect" class="win-btn text-purple-900 font-bold bg-[#f0e0ff]">
+            RMT
+          </button>
           <button id="btn-rec-top" class="win-btn text-red-900 font-bold">
             REC
           </button>
@@ -297,7 +315,6 @@
           </button>
         </div>
       </div>
-
       <div class="p-1 flex flex-col gap-1 bg-[#222]">
         <div class="win-border-in p-1 flex gap-1 h-[76px] bg-[#1a1a1a]">
           <div
@@ -456,9 +473,9 @@
         </div>
       </div>
     </div>
-
+    
     <div class="win-border-out flex-none" id="block-video">
-      <div class="theme-bar cursor-default select-none border-t border-black">
+        <div class="theme-bar cursor-default select-none border-t border-black">
         <div class="flex items-center gap-2">
           <button
             id="btn-toggle-video"

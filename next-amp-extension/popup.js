@@ -3,6 +3,8 @@ import { $, $$, sendMessageWithRetry } from "./assets/js/utils.js";
 import { SessionManager } from "./modules/session-manager.js";
 import { SettingsModal } from "./modules/settings-modal.js";
 
+const REMOTE_BASE_URL =
+  "https://next-amp-player.vercel.app/next-amp-extension/remote/index.html";
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 const LABELS = [
   "60",
@@ -55,6 +57,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderNewEQSystem();
   setupListeners();
   setupStorageListener();
+  setupRemoteUI();
 
   await sessionManager.init(async () => {
     settingsModal.init();
@@ -240,6 +243,61 @@ function setupStorageListener() {
   });
 }
 
+async function setupRemoteUI() {
+  const btnConnect = $("#btn-remote-connect");
+  const qrOverlay = $("#qr-overlay");
+  const qrImage = $("#qr-image");
+  const urlDisplay = $("#remote-url-display");
+  const btnCloseQr = $("#btn-close-qr");
+  const btnCopyUrl = $("#btn-copy-url");
+
+  btnConnect.addEventListener("click", async () => {
+    try {
+      let hasOffscreen = await sendMessageWithRetry({
+        type: "CHECK_OFFSCREEN",
+      });
+      if (!hasOffscreen) {
+        await sendMessageWithRetry({ type: "INIT_OFFSCREEN" });
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
+      const res = await sendMessageWithRetry({
+        type: "GET_REMOTE_TOKEN",
+        tabId: currentTabId,
+      });
+
+      if (res && res.hostId && res.token) {
+        const fullUrl = `${REMOTE_BASE_URL}?id=${res.hostId}&token=${res.token}`;
+
+        const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
+          fullUrl
+        )}`;
+
+        qrImage.src = qrApi;
+        urlDisplay.value = fullUrl;
+        qrOverlay.classList.remove("hidden");
+      } else {
+        alert("Remote ID not ready. Please turn Audio Master ON first.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to connect remote.");
+    }
+  });
+
+  btnCloseQr.addEventListener("click", () => {
+    qrOverlay.classList.add("hidden");
+  });
+
+  btnCopyUrl.addEventListener("click", () => {
+    urlDisplay.select();
+    document.execCommand("copy");
+    const oldText = btnCopyUrl.textContent;
+    btnCopyUrl.textContent = "COPIED!";
+    setTimeout(() => (btnCopyUrl.textContent = oldText), 1000);
+  });
+}
+
 function updateSlider(selector, textSelector, value, textFormatter) {
   const el = $(selector);
   if (el) {
@@ -332,12 +390,70 @@ async function initCapture(mode) {
 }
 
 chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === "PARAM_UPDATE") {
+    if (currentTabId && msg.tabId === currentTabId) {
+      updateUIFromExternal(msg.key, msg.value, msg.index);
+    }
+  }
   if (msg.type === "VISUALIZER_DATA") {
     if (currentTabId && msg.tabId === currentTabId)
       drawVisualizer(msg.data, msg.mode);
   } else if (msg.type === "RECORDING_SAVED") handleRecordingSaved();
 });
 
+function updateUIFromExternal(key, value, index) {
+  if (key === "volume") {
+    updateSlider(
+      "#main-vol",
+      "#txt-vol",
+      value,
+      (v) => Math.round(v * 100) + "%"
+    );
+  } else if (key === "pan") {
+    updateSlider("#main-pan", "#txt-pan", value, (v) =>
+      v > 0 ? "R " + v : v < 0 ? "L " + Math.abs(v) : "C"
+    );
+  } else if (key === "pitch") {
+    updateSlider(
+      "#main-pitch",
+      "#txt-pitch",
+      value,
+      (v) => (v > 0 ? "+" : "") + v
+    );
+  } else if (key === "reverb") {
+    updateSlider("#main-verb", "#txt-verb", value, (v) =>
+      parseFloat(v).toFixed(1)
+    );
+  } else if (key === "eq" && index !== null) {
+    currentEqValues[index] = value;
+    const slider = document.querySelector(`.eq-slider[data-idx="${index}"]`);
+    if (slider) slider.value = value;
+    updateEQVisuals();
+  } else if (key === "eqPreset") {
+    $("#eq-preset").value = value;
+  } else if (key === "isEqOn") {
+    isEqOn = value;
+    updateEqToggleButton();
+  } else if (key === "videoDelay") {
+    $("#video-delay").value = value;
+    $("#num-video-delay").value = parseFloat(value).toFixed(2);
+  } else if (key === "videoZoom") {
+    $("#video-zoom").value = value;
+    $("#txt-zoom").textContent = Math.round(value * 100) + "%";
+  } else if (key === "videoRotate") {
+    $("#video-rotate").value = value;
+    $("#txt-rotate").textContent = value + "°";
+  } else if (key === "videoQuality") {
+    const el = $("#video-quality");
+    if (el) el.value = value;
+  } else if (key === "isVideoMasterOn") {
+    isVideoMasterOn = value;
+    updateMasterTogglesUI();
+  } else if (key === "normalize") {
+    isNormalizeOn = value;
+    updateNormalizeButton();
+  }
+}
 function sendParam(key, value, index = null) {
   const isShared = sessionManager.sessionMode === "shared";
   chrome.runtime

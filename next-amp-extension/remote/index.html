@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>NextAmp Remote</title>
+    <link href="styles.css" rel="stylesheet" />
+    <script src="../assets/js/tailwindcss.js"></script>
+    <script src="../assets/js/peerjs.min.js"></script>
+  </head>
+  <body>
+    <div class="remote-container">
+      
+      <div class="theme-bar">
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-[#00ff00] border border-white"></div>
+          <span class="tracking-widest text-lg">REMOTE</span>
+        </div>
+        <div class="flex items-center gap-3">
+           <div id="status-indicator" class="w-3 h-3 rounded-full bg-red-600 border border-white/50 shadow-[0_0_5px_red]"></div>
+           <button id="btn-video-toggle" class="win-btn bg-[#e0f0ff] text-blue-900 min-w-[90px]">
+             VIDEO ON
+           </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-3 space-y-3 bg-[#222] scrollbar-hide">
+        
+        <div class="win-border-in">
+           <div class="flex justify-between items-center mb-2 pb-2 border-b border-[#333]">
+              <span class="text-label text-gray-300">MASTER AUDIO</span>
+              <button id="btn-dyn-toggle" class="win-btn px-4 text-xs text-gray-500 h-8">DYN</button>
+           </div>
+           
+           <div class="grid-2">
+              <div>
+                  <div class="flex justify-between items-end mb-1">
+                      <span class="text-label">VOL</span>
+                      <span id="txt-vol" class="text-value text-[#00ff00]">100%</span>
+                  </div>
+                  <input type="range" id="remote-vol" min="0" max="1" step="0.05" class="retro-slider" />
+              </div>
+
+              <div>
+                  <div class="flex justify-between items-end mb-1">
+                      <span class="text-label">BAL</span>
+                      <span id="txt-pan" class="text-value text-[#ffcc00]">C</span>
+                  </div>
+                  <input type="range" id="remote-pan" min="-1" max="1" step="0.1" value="0" class="retro-slider" />
+              </div>
+           </div>
+        </div>
+
+        <div class="win-border-in">
+           <div class="text-label text-yellow-500 mb-2 border-b border-[#333] pb-1">AUDIO EFFECTS</div>
+           
+           <div class="grid-2">
+              <div>
+                  <div class="flex justify-between items-end mb-1">
+                      <span class="text-label">PITCH</span>
+                      <span id="txt-pitch" class="text-value text-[#ffcc00]">0</span>
+                  </div>
+                  <input type="range" id="remote-pitch" min="-12" max="12" step="1" value="0" class="retro-slider" />
+              </div>
+              
+              <div>
+                  <div class="flex justify-between items-end mb-1">
+                      <span class="text-label">REVERB</span>
+                      <span id="txt-verb" class="text-value text-[#00ff00]">0.0</span>
+                  </div>
+                  <input type="range" id="remote-verb" min="0" max="2" step="0.1" value="0" class="retro-slider" />
+              </div>
+           </div>
+        </div>
+
+        <div class="win-border-in flex flex-col">
+           <div class="flex justify-between items-center mb-2 border-b border-[#333] pb-1">
+              <span class="text-label text-green-500 text-base">EQUALIZER</span>
+              <button id="btn-eq-toggle" class="win-btn bg-[#e0ffe0] text-green-900 w-16">ON</button>
+           </div>
+           
+           <div id="remote-eq-container"></div>
+
+           <select id="remote-eq-preset" class="bg-black text-gray-300 border border-gray-600 outline-none h-10 px-2 mt-3 font-pixel text-sm focus:border-green-500 w-full rounded-none">
+                <option value="flat">PRESET: FLAT</option>
+                <option value="bass">PRESET: BASS</option>
+                <option value="rock">PRESET: ROCK</option>
+                <option value="pop">PRESET: POP</option>
+                <option value="voice">PRESET: VOICE</option>
+                <option value="custom">PRESET: USER</option>
+           </select>
+        </div>
+
+        <div class="win-border-in mb-8">
+           <div class="flex justify-between items-center mb-3 border-b border-[#333] pb-1">
+              <span class="text-label text-blue-400 text-base">VIDEO CONTROL</span>
+              <select id="remote-video-quality" class="bg-black text-[#00ff00] text-sm border border-gray-600 outline-none h-8 px-2 font-pixel w-24">
+                  <option value="max">MAX</option>
+                  <option value="high">1080P</option>
+                  <option value="mid">720P</option>
+                  <option value="low">360P</option>
+              </select>
+           </div>
+           
+           <div class="mb-4">
+               <div class="flex justify-between text-label mb-1">
+                  <span>DELAY (SEC)</span>
+                  <span id="txt-delay" class="text-value text-white">0.00</span>
+               </div>
+               <div class="flex items-center gap-3">
+                  <button id="btn-delay-minus" class="win-btn w-12 text-xl font-bold">-</button>
+                  <input type="range" id="remote-delay" min="0" max="5" step="0.05" value="0" class="retro-slider flex-1" />
+                  <button id="btn-delay-plus" class="win-btn w-12 text-xl font-bold">+</button>
+               </div>
+           </div>
+
+           <div class="grid-2">
+               <div>
+                   <div class="flex justify-between items-end mb-1">
+                      <span class="text-label">ZOOM</span>
+                      <span id="txt-zoom" class="text-value text-blue-400">100%</span>
+                   </div>
+                   <input type="range" id="remote-zoom" min="1" max="3" step="0.01" value="1" class="retro-slider" />
+               </div>
+               
+               <div>
+                   <div class="flex justify-between items-end mb-1">
+                      <span class="text-label">ROTATION</span>
+                      <span id="txt-rotate" class="text-value text-purple-400">0°</span>
+                   </div>
+                   <input type="range" id="remote-rotate" min="0" max="360" step="5" value="0" class="retro-slider" />
+               </div>
+           </div>
+        </div>
+
+      </div>
+    </div>
+    
+    <div id="conn-overlay" class="fixed inset-0 bg-black/95 z-[9999] flex items-center justify-center p-6">
+        <div class="win-border-in w-full max-w-[300px] flex flex-col items-center p-8 gap-8 border-4 border-[#444]">
+             <div class="text-[#00ff00] font-bold text-2xl tracking-widest animate-pulse">CONNECTING</div>
+             <div class="w-16 h-16 border-8 border-t-[#00ff00] border-r-[#00ff00] border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+             <p id="conn-msg" class="text-sm text-gray-500 font-pixel">Initializing...</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("sw.js").catch(console.error);
+      }
+    </script>
+  </body>
+</html>

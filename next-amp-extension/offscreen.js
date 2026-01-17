@@ -2,10 +2,91 @@ import { PitchProcessor } from "./pitch-processor.js";
 import { AudioEffects } from "./audio-effects.js";
 import { DBManager } from "./db-manager.js";
 import { RTCServer } from "./modules/rtc-server.js";
+import "./assets/js/peerjs.min.js";
 
 const sessions = new Map();
 const db = new DBManager();
 const rtcServer = new RTCServer();
+
+// --- PEERJS SETUP ---
+let hostPeer = null;
+let hostPeerId = null;
+
+function initHostPeer() {
+  if (hostPeer) return;
+  hostPeer = new Peer(null, { debug: 1 });
+
+  hostPeer.on("open", (id) => {
+    console.log("[PeerJS] Host Ready. ID:", id);
+    hostPeerId = id;
+  });
+
+  hostPeer.on("connection", (conn) => {
+    conn.on("data", (data) => {
+      if (data.type === "HANDSHAKE" && data.token) {
+        mapConnectionToSession(conn, data.token);
+      } else {
+        handleRemoteCommand(conn, data);
+      }
+    });
+    conn.on("close", () => cleanupConnection(conn));
+    conn.on("error", () => cleanupConnection(conn));
+  });
+}
+
+function mapConnectionToSession(conn, token) {
+  for (const [tabId, session] of sessions.entries()) {
+    if (session.remoteToken === token) {
+      if (!session.remoteConns) session.remoteConns = [];
+      session.remoteConns.push(conn);
+      conn._targetTabId = tabId;
+      syncStateToRemote(session, conn);
+      return;
+    }
+  }
+  conn.close();
+}
+
+function cleanupConnection(conn) {
+  if (conn._targetTabId) {
+    const session = sessions.get(conn._targetTabId);
+    if (session && session.remoteConns) {
+      session.remoteConns = session.remoteConns.filter((c) => c !== conn);
+    }
+  }
+}
+
+function handleRemoteCommand(conn, data) {
+  const tabId = conn._targetTabId;
+  if (!tabId || !sessions.has(tabId)) return;
+
+  if (data.type === "SET_PARAM") {
+    // อัปเดต Params และ Broadcast
+    updateParams({
+      ...data,
+      tabId: tabId,
+      isShared: false,
+      source: "remote",
+    });
+  } else if (data.type === "GET_STATE") {
+    const session = sessions.get(tabId);
+    if (session) syncStateToRemote(session, conn);
+  }
+}
+
+function syncStateToRemote(session, conn) {
+  if (!session || !conn.open) return;
+  const currentEq = session.effects
+    ? session.effects.getEQNodes().map((n) => n.gain.value)
+    : session.params.eq;
+
+  conn.send({
+    type: "SYNC_STATE",
+    state: { ...session.params, eq: currentEq },
+  });
+}
+
+// --- AUDIO LOGIC ---
 
 const createDefaultParams = () => ({
   pitch: 0,
@@ -14,8 +95,12 @@ const createDefaultParams = () => ({
   volume: 1.0,
   visualMode: 0,
   isEqOn: true,
+  isAudioMasterOn: true, // เพิ่มสถานะ Master
+  isVideoMasterOn: true, // เพิ่มสถานะ Video
   videoDelay: 0,
   videoQuality: "max",
+  videoZoom: 1.0, // เก็บค่า Zoom
+  videoRotate: 0, // เก็บค่า Rotate
   normalize: false,
   eq: new Array(10).fill(0),
   eqPreset: "flat",
@@ -29,6 +114,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = msg.tabId;
 
   if (msg.type === "START_CAPTURE") {
+    initHostPeer();
     startAudio(
       msg.streamId,
       tabId,
@@ -39,43 +125,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     );
     return true;
   } else if (msg.type === "START_RECORDING") {
-    console.log(
-      `[Message Received] Requesting START_RECORDING for Tab: ${tabId}`
-    );
-
     const result = startRecording(tabId);
-
-    if (result.success) {
-      console.log("[Status] Recording Started Successfully");
-      sendResponse(true);
-    } else {
-      console.error("[Error] Failed to start recording:", result.reason);
-
-      sendResponse(false);
-    }
+    sendResponse(result.success);
     return true;
   } else if (msg.type === "STOP_RECORDING") {
     stopRecording(tabId);
     sendResponse(true);
   } else if (msg.type === "SET_PARAM") {
     if (msg.key === "reset") resetParams(tabId, msg.isShared);
-    else updateParams(msg);
-  } else if (msg.type === "SET_MODE") {
-    const session = sessions.get(tabId);
-    if (session) {
-      session.mode = msg.mode;
-      sendResponse(true);
-    }
+    else updateParams({ ...msg, source: "popup" });
   } else if (msg.type === "GET_STATE") {
     const session = sessions.get(tabId);
     if (session) {
       const currentEq = session.effects
         ? session.effects.getEQNodes().map((n) => n.gain.value)
         : session.params.eq;
-
       const isRec =
         session.mediaRecorder && session.mediaRecorder.state === "recording";
-
       sendResponse({
         ...session.params,
         eqGains: currentEq,
@@ -100,14 +166,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     );
     sendResponse({
       hasActiveSession: otherSessions.length > 0,
-      count: otherSessions.length,
-      activeTabs: otherSessions,
     });
+  } else if (msg.type === "GET_REMOTE_TOKEN") {
+    const session = sessions.get(tabId);
+    if (session && hostPeerId) {
+      if (!session.remoteToken) {
+        session.remoteToken = `tab-${tabId}-${Date.now().toString(36)}`;
+      }
+      sendResponse({ hostId: hostPeerId, token: session.remoteToken });
+    } else {
+      sendResponse({ error: "Session not ready" });
+    }
+    return true;
   } else if (msg.type === "START_WEBRTC_STREAM") {
     startWebRTC(msg.sourceTabId, msg.playerTabId);
   } else if (msg.type === "STOP_WEBRTC_STREAM") {
     rtcServer.stopSession(msg.sourceTabId);
-
     unmuteLocal(msg.sourceTabId);
   } else if (msg.type === "RTC_ANSWER") {
     rtcServer.handleAnswer(msg.sourceTabId, msg.answer);
@@ -119,19 +193,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 async function startWebRTC(sourceTabId, playerTabId) {
   const session = sessions.get(sourceTabId);
   if (!session) return;
-
   await rtcServer.startSession(
     sourceTabId,
     playerTabId,
     session.recordingStreamDest.stream,
     session.audioCtx
   );
-
   if (session.masterNode) {
     try {
       session.masterNode.disconnect(session.audioCtx.destination);
     } catch (e) {}
-
     session.masterNode.connect(session.recordingStreamDest);
     session.masterNode.connect(session.analyser);
   }
@@ -149,14 +220,12 @@ function unmuteLocal(tabId) {
 async function startAudio(
   streamId,
   tabId,
-  latencyHint = "interactive",
-  initialMode = "shared",
-  initialPreset = "flat",
+  latencyHint,
+  initialMode,
+  initialPreset,
   sendResponse
 ) {
-  if (sessions.has(tabId)) {
-    stopAudio(tabId);
-  }
+  if (sessions.has(tabId)) stopAudio(tabId);
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -188,7 +257,6 @@ async function startAudio(
 
     const recordingStreamDest = audioCtx.createMediaStreamDestination();
     recordingStreamDest.channelCount = 2;
-
     master.connect(recordingStreamDest);
 
     const defaultP = createDefaultParams();
@@ -207,13 +275,14 @@ async function startAudio(
       params: defaultP,
       visualLoopId: null,
       mode: initialMode,
+      remoteToken: null,
+      remoteConns: [],
     };
 
     setupRecorder(newSession, recordingStreamDest.stream);
     sessions.set(tabId, newSession);
 
     applyAllParams(newSession);
-
     startVisualizerLoop(tabId);
     sendResponse({ success: true });
   } catch (e) {
@@ -221,6 +290,7 @@ async function startAudio(
     sendResponse({ success: false, error: e.message });
   }
 }
+
 function setupRecorder(session, stream) {
   try {
     const options = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -228,72 +298,31 @@ function setupRecorder(session, stream) {
       : {};
     const mediaRecorder = new MediaRecorder(stream, options);
     session.mediaRecorder = mediaRecorder;
-
     mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        session.recordedChunks.push(e.data);
-        console.log(`[Recorder] Chunk received: ${e.data.size} bytes`);
-      }
+      if (e.data.size > 0) session.recordedChunks.push(e.data);
     };
-
     mediaRecorder.onstop = async () => {
-      console.log(
-        `[Recorder] Stopping. Total chunks: ${session.recordedChunks.length}`
-      );
-
       const blob = new Blob(session.recordedChunks, { type: "audio/webm" });
-      console.log(
-        `[Recorder] Blob created. Size: ${blob.size}, Type: ${blob.type}`
-      );
-
       session.recordedChunks = [];
-      try {
-        if (blob.size === 0) {
-          console.error("[Recorder Error] Blob size is 0. Nothing recorded.");
-          return;
-        }
+      if (blob.size > 0) {
         await db.saveRecording(blob);
-        console.log("[Recorder] Saved to DB successfully");
         chrome.runtime.sendMessage({ type: "RECORDING_SAVED" }).catch(() => {});
-      } catch (err) {
-        console.error("Save Error:", err);
       }
     };
-  } catch (e) {
-    console.error("Recorder Setup Failed:", e);
-  }
+  } catch (e) {}
 }
+
 function startRecording(tabId) {
-  console.log(`[Function] startRecording called for tab ${tabId}`);
-
   const session = sessions.get(tabId);
-
-  if (!session) {
-    console.warn(
-      `[Fail] No session found for tab ${tabId}. Did you start Audio Capture?`
-    );
-    return { success: false, reason: "NO_SESSION" };
-  }
-
-  if (!session.mediaRecorder) {
-    console.warn(`[Fail] MediaRecorder not initialized for tab ${tabId}`);
+  if (!session || !session.mediaRecorder)
     return { success: false, reason: "NO_RECORDER" };
-  }
-
-  if (session.mediaRecorder.state !== "inactive") {
-    console.warn(
-      `[Fail] Recorder is busy. State: ${session.mediaRecorder.state}`
-    );
+  if (session.mediaRecorder.state !== "inactive")
     return { success: false, reason: "RECORDER_BUSY" };
-  }
-
   try {
     session.recordedChunks = [];
     session.mediaRecorder.start(1000);
-    console.log(`[Success] MediaRecorder started with 1000ms timeslice`);
     return { success: true };
   } catch (e) {
-    console.error("[Exception] Error starting MediaRecorder:", e);
     return { success: false, reason: e.message };
   }
 }
@@ -311,9 +340,9 @@ function stopRecording(tabId) {
 
 function stopAudio(tabId) {
   rtcServer.stopSession(tabId);
-
   const session = sessions.get(tabId);
   if (!session) return;
+  if (session.remoteConns) session.remoteConns.forEach((c) => c.close());
 
   chrome.runtime
     .sendMessage({ type: "BG_RESET_DELAY", tabId: tabId })
@@ -330,23 +359,66 @@ function stopAudio(tabId) {
 }
 
 function updateParams(msg) {
-  const { key, value, index, tabId, isShared } = msg;
+  const { key, value, index, tabId, isShared, source } = msg;
   if (isShared) {
     sessions.forEach((session) => {
       if (session.mode === "shared")
-        applyParamToSession(session, key, value, index);
+        applyParamToSession(session, key, value, index, source);
     });
   } else {
     const session = sessions.get(tabId);
-    if (session) applyParamToSession(session, key, value, index);
+    if (session) applyParamToSession(session, key, value, index, source);
   }
 }
 
-function applyParamToSession(session, key, value, index) {
+function getKeyByValue(map, searchValue) {
+  for (let [key, value] of map.entries()) {
+    if (value === searchValue) return key;
+  }
+  return null;
+}
+
+function applyParamToSession(session, key, value, index, source) {
   const { params, effects, pitchProc } = session;
   if (key === "eq" && index !== null) params.eq[index] = value;
   else if (key in params) params[key] = value;
 
+  // -- LOGIC การรวม VIDEO TRANSFORM --
+  // (แก้ปัญหา ปรับ zoom แล้วไม่ได้ผล หรือ rotate แล้ว zoom หาย)
+  const tId = getKeyByValue(sessions, session);
+
+  if (key === "videoZoom" || key === "videoRotate") {
+    if (tId && params.isVideoMasterOn) {
+      chrome.runtime.sendMessage({
+        type: "BG_RELAY_TO_TAB",
+        tabId: tId,
+        payload: {
+          type: "SET_VIDEO_ZOOM",
+          scale: params.videoZoom,
+          rotate: params.videoRotate,
+          translateY: 0,
+        },
+      });
+    }
+  } else if (key === "videoDelay") {
+    if (tId && params.isVideoMasterOn) {
+      chrome.runtime.sendMessage({
+        type: "BG_RELAY_TO_TAB",
+        tabId: tId,
+        payload: { type: "SET_VIDEO_DELAY", value: params.videoDelay },
+      });
+    }
+  } else if (key === "videoQuality") {
+    if (tId) {
+      chrome.runtime.sendMessage({
+        type: "BG_RELAY_TO_TAB",
+        tabId: tId,
+        payload: { type: "SET_VIDEO_QUALITY", value: params.videoQuality },
+      });
+    }
+  }
+
+  // -- AUDIO & TOGGLES --
   switch (key) {
     case "pitch":
       if (pitchProc) pitchProc.setPitch(value);
@@ -391,21 +463,84 @@ function applyParamToSession(session, key, value, index) {
     case "visualMode":
       params.visualMode = value;
       break;
+    // Master On/Off = Mute/Unmute output (เพื่อให้ Session ยังอยู่ แต่เสียงดับ)
+    case "isAudioMasterOn":
+      if (value) {
+        // Unmute: connect master -> destination
+        try {
+          session.masterNode.connect(session.audioCtx.destination);
+        } catch (e) {}
+      } else {
+        // Mute: disconnect master -> destination
+        try {
+          session.masterNode.disconnect(session.audioCtx.destination);
+        } catch (e) {}
+      }
+      break;
+    // Video On/Off = Reset Transform / Restore
+    case "isVideoMasterOn":
+      if (tId) {
+        if (value) {
+          // Restore Values
+          chrome.runtime.sendMessage({
+            type: "BG_RELAY_TO_TAB",
+            tabId: tId,
+            payload: {
+              type: "SET_VIDEO_ZOOM",
+              scale: params.videoZoom,
+              rotate: params.videoRotate,
+              translateY: 0,
+            },
+          });
+          chrome.runtime.sendMessage({
+            type: "BG_RELAY_TO_TAB",
+            tabId: tId,
+            payload: { type: "SET_VIDEO_DELAY", value: params.videoDelay },
+          });
+        } else {
+          // Reset but don't clear params
+          chrome.runtime.sendMessage({
+            type: "BG_RELAY_TO_TAB",
+            tabId: tId,
+            payload: {
+              type: "SET_VIDEO_ZOOM",
+              scale: 1,
+              rotate: 0,
+              translateY: 0,
+            },
+          });
+          chrome.runtime.sendMessage({
+            type: "BG_RELAY_TO_TAB",
+            tabId: tId,
+            payload: { type: "SET_VIDEO_DELAY", value: 0 },
+          });
+        }
+      }
+      break;
   }
-}
 
-function applyAllParams(session) {
-  const { params, effects, pitchProc } = session;
-  if (!effects) return;
-  effects.setVolume(params.volume);
-  effects.setPan(params.pan);
-  effects.setReverb(params.reverb);
-  effects.updateNormalize(params.normalize);
-  params.eq.forEach((val, i) => effects.setEQ(i, val));
-  effects.setEQEnabled(params.isEqOn);
-  effects.setReverbParams(params.reverbTime, params.reverbDecay);
-  effects.setDynamicsParams(params.dynBoost, params.dynLimit);
-  if (pitchProc) pitchProc.setPitch(params.pitch);
+  // --- BROADCAST ---
+  // 1. Popup
+  if (source !== "popup") {
+    if (tId) {
+      chrome.runtime
+        .sendMessage({
+          type: "PARAM_UPDATE",
+          tabId: tId,
+          key,
+          value,
+          index,
+        })
+        .catch(() => {});
+    }
+  }
+  // 2. Remote
+  if (session.remoteConns && session.remoteConns.length > 0) {
+    const updateMsg = { type: "UPDATE_PARAM", key, value, index };
+    session.remoteConns.forEach((conn) => {
+      if (conn.open) conn.send(updateMsg);
+    });
+  }
 }
 
 function resetParams(tabId, isShared) {
@@ -422,6 +557,20 @@ function resetParams(tabId, isShared) {
     session.params = createDefaultParams();
     applyAllParams(session);
   }
+}
+
+function applyAllParams(session) {
+  const { params, effects, pitchProc } = session;
+  if (!effects) return;
+  effects.setVolume(params.volume);
+  effects.setPan(params.pan);
+  effects.setReverb(params.reverb);
+  effects.updateNormalize(params.normalize);
+  params.eq.forEach((val, i) => effects.setEQ(i, val));
+  effects.setEQEnabled(params.isEqOn);
+  effects.setReverbParams(params.reverbTime, params.reverbDecay);
+  effects.setDynamicsParams(params.dynBoost, params.dynLimit);
+  if (pitchProc) pitchProc.setPitch(params.pitch);
 }
 
 function startVisualizerLoop(tabId) {

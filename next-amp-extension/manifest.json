@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Nextamp Extension",
-  "version": "4.5",
+  "version": "4.6",
   "permissions": [
     "tabCapture",
     "offscreen",
@@ -24,7 +24,8 @@
       "resources": [
         "assets/libs/mjs/SignalsmithStretch.mjs",
         "assets/libs/js/tailwindcss.js",
-        "assets/libs/js/phosphor.js"
+        "assets/libs/js/phosphor.js",
+        "assets/libs/js/peerjs.min.js"
       ],
       "matches": ["<all_urls>"]
     }
@@ -38,6 +39,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://*.peerjs.com wss://*.peerjs.com"
   }
 }
