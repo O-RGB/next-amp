@@ -159,6 +159,8 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
           type: "START_CAPTURE",
           streamId: streamId,
           tabId: sender.tab.id,
+          latencyHint: msg.latencyHint,
+          sampleRate: msg.sampleRate,
         });
         sendResponse({ success: true });
       }

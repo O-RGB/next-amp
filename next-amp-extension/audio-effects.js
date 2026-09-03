@@ -42,6 +42,9 @@ export class AudioEffects {
 
     this.refreshEQChain();
     this.refreshOutputChain();
+    // ConvolverNode is off by default — disconnect it immediately so it doesn't
+    // waste CPU doing FFT convolution before the user turns reverb on.
+    this.setReverb(0);
   }
 
   refreshEQChain() {
@@ -76,24 +79,36 @@ export class AudioEffects {
     this.nodes.makeup.disconnect();
     this.nodes.limiter.disconnect();
 
-    this.nodes.pan.connect(this.nodes.reverbConv);
-    this.nodes.reverbConv.connect(this.nodes.reverbGain);
+    // Only wire ConvolverNode when reverb is active.
+    // If reverb=0, it was disconnected by setReverb() and must stay out of the graph.
+    const reverbActive = this.nodes.reverbGain.gain.value > 0;
+    this.isReverbConnected = reverbActive;
+    if (reverbActive) {
+      this.nodes.pan.connect(this.nodes.reverbConv);
+      this.nodes.reverbConv.connect(this.nodes.reverbGain);
+    }
 
     if (this.isNormalizeOn) {
       this.nodes.pan.connect(this.nodes.compressor);
-      this.nodes.reverbGain.connect(this.nodes.compressor);
+      if (reverbActive) this.nodes.reverbGain.connect(this.nodes.compressor);
 
       this.nodes.compressor.connect(this.nodes.makeup);
       this.nodes.makeup.connect(this.nodes.limiter);
       this.nodes.limiter.connect(this.nodes.masterGain);
     } else {
       this.nodes.pan.connect(this.nodes.masterGain);
-      this.nodes.reverbGain.connect(this.nodes.masterGain);
+      if (reverbActive) this.nodes.reverbGain.connect(this.nodes.masterGain);
     }
   }
 
   setInput(sourceNode) {
     sourceNode.connect(this.nodes.input);
+  }
+
+  // Expose the internal input GainNode so callers can bypass SignalsmithStretch
+  // by connecting source directly when pitch=0.
+  getInputNode() {
+    return this.nodes.input;
   }
 
   connectOutput(destinationNode) {
@@ -110,6 +125,20 @@ export class AudioEffects {
 
   setReverb(val) {
     this.nodes.reverbGain.gain.value = val;
+
+    // ConvolverNode is very expensive (FFT convolution every render quantum).
+    // Disconnect it entirely when reverb=0 so the browser stops scheduling it.
+    if (val === 0) {
+      if (this.isReverbConnected) {
+        try { this.nodes.pan.disconnect(this.nodes.reverbConv); } catch (_) {}
+        this.isReverbConnected = false;
+      }
+    } else {
+      if (!this.isReverbConnected) {
+        try { this.nodes.pan.connect(this.nodes.reverbConv); } catch (_) {}
+        this.isReverbConnected = true;
+      }
+    }
   }
 
   setEQEnabled(enabled) {

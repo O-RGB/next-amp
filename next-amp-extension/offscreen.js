@@ -121,7 +121,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       msg.latencyHint,
       msg.mode,
       msg.initialPreset,
-      sendResponse
+      sendResponse,
+      msg.sampleRate
     );
     return true;
   } else if (msg.type === "START_RECORDING") {
@@ -149,6 +150,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         activeTabId: tabId,
         isRecording: isRec,
         mode: session.mode,
+        currentSampleRate: session.audioCtx ? session.audioCtx.sampleRate : null,
       });
     } else {
       sendResponse({
@@ -223,7 +225,8 @@ async function startAudio(
   latencyHint,
   initialMode,
   initialPreset,
-  sendResponse
+  sendResponse,
+  requestedSampleRate
 ) {
   if (sessions.has(tabId)) stopAudio(tabId);
 
@@ -234,18 +237,42 @@ async function startAudio(
       },
     });
 
-    const audioCtx = new AudioContext({ latencyHint: latencyHint });
+    // "interactive" latencyHint = tiny ~3ms buffers → audio thread runs 300+ times/sec.
+    // "balanced" = ~20ms buffers → ~50 times/sec. Same perceived quality for pitch shift use case.
+    // Cap at "balanced" minimum — "playback" is fine too but user-chosen; never allow "interactive".
+    const safeLatency = latencyHint === "interactive" ? "balanced" : (latencyHint || "balanced");
+
+    const ctxOptions = { latencyHint: safeLatency };
+    if (requestedSampleRate && requestedSampleRate !== "auto") {
+      const sr = parseInt(requestedSampleRate, 10);
+      if (sr && !isNaN(sr) && sr > 0) {
+        ctxOptions.sampleRate = sr;
+      }
+    } else if (!requestedSampleRate) {
+      // Default to 44100 if unspecified (CD quality / lower CPU)
+      ctxOptions.sampleRate = 44100;
+    }
+    // If requestedSampleRate === "auto", sampleRate is omitted so browser uses system default.
+
+    const audioCtx = new AudioContext(ctxOptions);
     const source = audioCtx.createMediaStreamSource(stream);
     const pitchProc = new PitchProcessor(audioCtx);
     await pitchProc.init();
     const effects = new AudioEffects(audioCtx);
+    const effectsInput = effects.getInputNode(); // the GainNode at the start of the effects chain
 
-    let head = source;
-    if (pitchProc.getNode()) {
-      source.connect(pitchProc.getNode());
-      head = pitchProc.getNode();
+    const defaultP = createDefaultParams();
+    defaultP.eqPreset = initialPreset;
+
+    // Initial graph: if pitch is 0, bypass stretchNode completely right away
+    const isPitchBypassed = defaultP.pitch === 0;
+    const stretchNode = pitchProc.getNode();
+    if (stretchNode && !isPitchBypassed) {
+      source.connect(stretchNode);
+      stretchNode.connect(effectsInput);
+    } else {
+      source.connect(effectsInput);
     }
-    effects.setInput(head);
 
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
@@ -259,12 +286,12 @@ async function startAudio(
     recordingStreamDest.channelCount = 2;
     master.connect(recordingStreamDest);
 
-    const defaultP = createDefaultParams();
-    defaultP.eqPreset = initialPreset;
-
     const newSession = {
       audioCtx,
       stream,
+      source,        // needed for pitch bypass rewiring
+      effectsInput,  // the GainNode at the start of effects chain
+      isPitchBypassed,
       pitchProc,
       effects,
       analyser,
@@ -284,7 +311,7 @@ async function startAudio(
 
     applyAllParams(newSession);
     startVisualizerLoop(tabId);
-    sendResponse({ success: true });
+    sendResponse({ success: true, sampleRate: audioCtx.sampleRate });
   } catch (e) {
     console.error(`[Tab ${tabId}] Start Error:`, e);
     sendResponse({ success: false, error: e.message });
@@ -421,7 +448,30 @@ function applyParamToSession(session, key, value, index, source) {
   // -- AUDIO & TOGGLES --
   switch (key) {
     case "pitch":
-      if (pitchProc) pitchProc.setPitch(value);
+      if (pitchProc && session.effectsInput) {
+        const stretchNode = pitchProc.getNode();
+        if (!stretchNode) break;
+
+        if (value === 0) {
+          // TRUE BYPASS: remove SignalsmithStretch from the render graph.
+          // Browser stops scheduling the WASM worklet → CPU for pitch ≈ 0%.
+          if (!session.isPitchBypassed) {
+            session.isPitchBypassed = true;
+            try { session.source.disconnect(stretchNode); } catch (_) {}
+            try { stretchNode.disconnect(session.effectsInput); } catch (_) {}
+            try { session.source.connect(session.effectsInput); } catch (_) {}
+          }
+        } else {
+          // Restore path through pitch node
+          if (session.isPitchBypassed) {
+            session.isPitchBypassed = false;
+            try { session.source.disconnect(session.effectsInput); } catch (_) {}
+            try { session.source.connect(stretchNode); } catch (_) {}
+            try { stretchNode.connect(session.effectsInput); } catch (_) {}
+          }
+          pitchProc.setPitch(value);
+        }
+      }
       break;
     case "volume":
       effects.setVolume(value);
@@ -466,15 +516,18 @@ function applyParamToSession(session, key, value, index, source) {
     // Master On/Off = Mute/Unmute output (เพื่อให้ Session ยังอยู่ แต่เสียงดับ)
     case "isAudioMasterOn":
       if (value) {
-        // Unmute: connect master -> destination
+        // Unmute: resume AudioContext (restarts all audio processing) then reconnect output
+        session.audioCtx.resume().catch(() => {});
         try {
           session.masterNode.connect(session.audioCtx.destination);
         } catch (e) {}
       } else {
-        // Mute: disconnect master -> destination
+        // Mute: disconnect output first, then suspend AudioContext entirely.
+        // suspend() stops the Web Audio render thread → CPU ≈ 0% for all audio nodes.
         try {
           session.masterNode.disconnect(session.audioCtx.destination);
         } catch (e) {}
+        session.audioCtx.suspend().catch(() => {});
       }
       break;
     // Video On/Off = Reset Transform / Restore
@@ -570,18 +623,50 @@ function applyAllParams(session) {
   effects.setEQEnabled(params.isEqOn);
   effects.setReverbParams(params.reverbTime, params.reverbDecay);
   effects.setDynamicsParams(params.dynBoost, params.dynLimit);
-  if (pitchProc) pitchProc.setPitch(params.pitch);
+
+  // Apply pitch with bypass: same logic as applyParamToSession("pitch")
+  if (pitchProc && session.effectsInput) {
+    const stretchNode = pitchProc.getNode();
+    if (stretchNode) {
+      if (params.pitch === 0) {
+        if (!session.isPitchBypassed) {
+          session.isPitchBypassed = true;
+          try { session.source.disconnect(stretchNode); } catch (_) {}
+          try { stretchNode.disconnect(session.effectsInput); } catch (_) {}
+          try { session.source.connect(session.effectsInput); } catch (_) {}
+        }
+      } else {
+        if (session.isPitchBypassed) {
+          session.isPitchBypassed = false;
+          try { session.source.disconnect(session.effectsInput); } catch (_) {}
+          try { session.source.connect(stretchNode); } catch (_) {}
+          try { stretchNode.connect(session.effectsInput); } catch (_) {}
+        }
+        pitchProc.setPitch(params.pitch);
+      }
+    }
+  } else if (pitchProc) {
+    pitchProc.setPitch(params.pitch);
+  }
 }
 
 function startVisualizerLoop(tabId) {
+  // Track consecutive sendMessage failures — if popup is closed, back off to avoid
+  // wasting CPU on 33 failed IPC calls/second.
+  let failStreak = 0;
+  const FAIL_LIMIT = 3;         // failures before backing off
+  const BACKOFF_MS = 3000;      // pause duration when popup appears closed
+
   const loop = () => {
     const session = sessions.get(tabId);
     if (!session) return;
     const { analyser, params, audioCtx } = session;
+
     if (params.visualMode !== 3 && audioCtx.state === "running") {
       const data = new Uint8Array(analyser.frequencyBinCount);
       if (params.visualMode === 2) analyser.getByteTimeDomainData(data);
       else analyser.getByteFrequencyData(data);
+
       chrome.runtime
         .sendMessage({
           type: "VISUALIZER_DATA",
@@ -589,9 +674,25 @@ function startVisualizerLoop(tabId) {
           mode: params.visualMode,
           tabId: tabId,
         })
-        .catch(() => {});
+        .then(() => {
+          failStreak = 0; // popup is open, reset
+          session.visualLoopId = setTimeout(loop, 30);
+        })
+        .catch(() => {
+          failStreak++;
+          if (failStreak >= FAIL_LIMIT) {
+            // Popup appears closed — back off for 3s then retry
+            failStreak = 0;
+            session.visualLoopId = setTimeout(loop, BACKOFF_MS);
+          } else {
+            session.visualLoopId = setTimeout(loop, 30);
+          }
+        });
+    } else {
+      // visualMode=3 (off) or audioCtx not running — idle, check again in 500ms
+      session.visualLoopId = setTimeout(loop, 500);
     }
-    session.visualLoopId = setTimeout(loop, 30);
   };
   loop();
 }
+

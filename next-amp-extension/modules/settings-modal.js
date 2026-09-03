@@ -43,6 +43,17 @@ const MODAL_HTML = `
           </select>
         </div>
         <div class="setting-row">
+          <div class="flex items-center gap-1">
+            <span>Sample Rate</span>
+            <span id="txt-active-sr" class="text-[7px] text-green-400 font-pixel"></span>
+          </div>
+          <select id="sel-sample-rate" class="bg-black border border-gray-600 text-[8px] text-white h-4 outline-none">
+            <option value="44100">44,100 Hz (Low CPU)</option>
+            <option value="48000">48,000 Hz (Standard)</option>
+            <option value="auto">Auto (Device Default)</option>
+          </select>
+        </div>
+        <div class="setting-row">
           <span>Show FPS / Stats</span>
           <input type="checkbox" id="chk-show-stats" class="accent-green-500" />
         </div>
@@ -189,6 +200,8 @@ export class SettingsModal {
       this.callbacks.onSettingChange({ startupVol: e.target.value });
     $("#sel-latency").onchange = (e) =>
       this.callbacks.onSettingChange({ latencyHint: e.target.value });
+    $("#sel-sample-rate").onchange = (e) =>
+      this.callbacks.onSettingChange({ sampleRate: e.target.value });
     $("#chk-show-stats").onchange = (e) => {
       this.callbacks.onSettingChange({ showStats: e.target.checked });
       // toggleStats logic if needed
@@ -335,8 +348,15 @@ export class SettingsModal {
     }
     if (state.startupVol) $("#sel-startup-vol").value = state.startupVol;
     if (state.latencyHint) $("#sel-latency").value = state.latencyHint;
+    if (state.sampleRate) $("#sel-sample-rate").value = state.sampleRate;
+    if (state.currentSampleRate) this.updateActiveSampleRate(state.currentSampleRate);
     if (state.showStats !== undefined) {
       $("#chk-show-stats").checked = state.showStats;
     }
+  }
+
+  updateActiveSampleRate(sr) {
+    const el = $("#txt-active-sr");
+    if (el) el.textContent = sr ? `[${sr}Hz]` : "";
   }
 }

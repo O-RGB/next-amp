@@ -50,7 +50,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   sessionManager = new SessionManager(currentTabId);
   settingsModal = new SettingsModal(db, {
     onThemeChange: applyTheme,
-    onSettingChange: (obj) => sessionManager.setSetting(obj),
+    onSettingChange: (obj) => {
+      sessionManager.setSetting(obj);
+      if (obj.sampleRate !== undefined || obj.latencyHint !== undefined) {
+        if (isAudioMasterOn && currentTabId) {
+          initCapture(sessionManager.sessionMode);
+        }
+      }
+    },
     onReset: handleReset,
     onSendParam: (k, v) => sendParam(k, v),
     onToggleRecord: toggleRecording,
@@ -325,6 +332,7 @@ async function loadUserPreferences() {
     "theme",
     "startupVol",
     "latencyHint",
+    "sampleRate",
     "showStats",
   ]);
   if (data.theme) applyTheme(data.theme);
@@ -368,7 +376,8 @@ async function initCapture(mode) {
     await sendMessageWithRetry({ type: "INIT_OFFSCREEN" });
     await new Promise((r) => setTimeout(r, 1000));
   }
-  const latencyHint = $("#sel-latency").value || "interactive";
+  const latencyHint = $("#sel-latency")?.value || "balanced";
+  const sampleRate = $("#sel-sample-rate")?.value || "44100";
   const preset = $("#eq-preset").value || "flat";
 
   chrome.tabCapture.getMediaStreamId(
@@ -381,10 +390,14 @@ async function initCapture(mode) {
           streamId,
           tabId: currentTabId,
           latencyHint: latencyHint,
+          sampleRate: sampleRate,
           mode: mode,
           initialPreset: preset,
         })
-        .then(() => {
+        .then((res) => {
+          if (res && res.sampleRate) {
+            settingsModal.updateActiveSampleRate(res.sampleRate);
+          }
           sendParam("volume", parseFloat($("#main-vol").value));
           sendParam("pan", parseFloat($("#main-pan").value));
           sendParam("pitch", parseInt($("#main-pitch").value));
@@ -1071,6 +1084,9 @@ function loadAudioState(state) {
   }
 
   settingsModal.setValues(state);
+  if (state.currentSampleRate) {
+    settingsModal.updateActiveSampleRate(state.currentSampleRate);
+  }
   isNormalizeOn = state.normalize || false;
   updateNormalizeButton();
 
