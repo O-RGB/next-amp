@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NextAmp AI Vocal Engine — Dedicated Web Worker Player</title>
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,700&family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/bold/style.css" />
+
+  <style>
+    :root {
+      --bg-dark: #080a0f;
+      --bg-card: #11151e;
+      --bg-panel: #161b27;
+      --border-color: #21293a;
+      --accent-cyan: #00f0ff;
+      --accent-green: #00ff66;
+      --accent-purple: #c084fc;
+      --accent-amber: #ffb703;
+      --text-main: #f3f4f6;
+      --text-dim: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* HEADER */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .brand-title {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--accent-cyan);
+      text-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+    }
+
+    .badge-stream {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      background: #064e3b;
+      color: #34d399;
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid #059669;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-stream .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 8px #34d399;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* DROPZONE */
+    .dropzone {
+      background: var(--bg-card);
+      border: 2px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 24px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent-cyan);
+      background: rgba(0, 240, 255, 0.03);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+    }
+
+    .dropzone i {
+      font-size: 36px;
+      color: var(--accent-cyan);
+    }
+
+    .dropzone-title {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .dropzone-sub {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* CONTROL PANEL */
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    /* MODE SELECTOR BUTTONS */
+    .mode-group {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .mode-btn {
+      background: var(--bg-panel);
+      border: 1.5px solid var(--border-color);
+      color: var(--text-dim);
+      padding: 12px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'Chakra Petch', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+
+    .mode-btn i {
+      font-size: 20px;
+    }
+
+    .mode-btn:hover {
+      border-color: #4b5563;
+      color: #fff;
+    }
+
+    .mode-btn.active-original {
+      background: #1e3a8a !important;
+      border-color: #60a5fa !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+    }
+
+    .mode-btn.active-karaoke {
+      background: #064e3b !important;
+      border-color: #34d399 !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    }
+
+    .mode-btn.active-acapella {
+      background: #581c87 !important;
+      border-color: #c084fc !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
+    }
+
+    /* SLIDER & STRENGTH */
+    .slider-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 7px;
+      background: #1e2433;
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      box-shadow: 0 0 8px var(--accent-cyan);
+      cursor: pointer;
+    }
+
+    /* TRANSPORT BAR */
+    .transport-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .play-btn {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      border: none;
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.2s ease;
+    }
+
+    .play-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 18px var(--accent-cyan);
+    }
+
+    .time-readout {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-dim);
+      min-width: 110px;
+      text-align: right;
+    }
+
+    /* DIAGNOSTIC HUD */
+    .hud-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+
+    .hud-item {
+      background: var(--bg-panel);
+      padding: 10px;
+      border-radius: 4px;
+      border: 1px solid #1f2533;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .hud-label {
+      color: var(--text-dim);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+
+    .hud-val {
+      font-weight: 700;
+      color: var(--accent-amber);
+    }
+
+    #status-msg {
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent-cyan);
+      text-align: center;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <header class="header">
+    <div class="brand-title">
+      <i class="ph-bold ph-waveform"></i>
+      <span>NEXTAMP WORKER AI PLAYER</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="badge-stream">
+        <span class="dot"></span>
+        <span id="badge-backend">WORKER: Initializing...</span>
+      </span>
+    </div>
+  </header>
+
+  <!-- Drop Zone -->
+  <div id="dropzone" class="dropzone">
+    <i class="ph-bold ph-music-notes"></i>
+    <div class="dropzone-title" id="txt-file-name">Drop an audio file here (MP3, WAV, FLAC, M4A)</div>
+    <div class="dropzone-sub">AI runs 100% in a Dedicated Web Worker — Main UI & Audio Never Lag!</div>
+    <input type="file" id="file-input" accept="audio/*" style="display: none;" />
+  </div>
+
+  <!-- Player Controls -->
+  <div class="panel">
+    <!-- Mode Buttons -->
+    <div class="mode-group">
+      <button id="btn-orig" class="mode-btn active-original" onclick="setMode('bypass')">
+        <i class="ph-bold ph-speaker-high"></i>
+        <span>ORIGINAL</span>
+      </button>
+      <button id="btn-karaoke" class="mode-btn" onclick="setMode('karaoke')">
+        <i class="ph-bold ph-microphone-slash"></i>
+        <span>KARAOKE (CUT VOCAL)</span>
+      </button>
+      <button id="btn-acapella" class="mode-btn" onclick="setMode('acapella')">
+        <i class="ph-bold ph-microphone"></i>
+        <span>ACAPELLA (ISOLATE)</span>
+      </button>
+    </div>
+
+    <!-- Transport Bar -->
+    <div class="transport-bar">
+      <button id="btn-play" class="play-btn" onclick="togglePlay()">
+        <i id="icon-play" class="ph-bold ph-play"></i>
+      </button>
+      <div class="slider-container" style="flex: 1;">
+        <input type="range" id="seek-bar" min="0" max="100" step="0.1" value="0" oninput="seekTo(+this.value)" />
+      </div>
+      <div id="time-display" class="time-readout">00:00 / 00:00</div>
+    </div>
+
+    <!-- Diagnostic HUD -->
+    <div class="hud-grid">
+      <div class="hud-item">
+        <span class="hud-label">AI Execution</span>
+        <span class="hud-val" style="color:#38bdf8">Dedicated Worker</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">Chunk Step</span>
+        <span class="hud-val" style="color:#34d399">7,680 spl (~174ms)</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">Worker Latency</span>
+        <span class="hud-val" id="hud-latency" style="color:#ffcc00">-- ms</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">Lookahead Buffer</span>
+        <span class="hud-val" id="hud-buffer" style="color:#00ff66">0.0s ahead</span>
+      </div>
+    </div>
+
+    <div id="status-msg">Initializing Worker...</div>
+  </div>
+</div>
+
+<script>
+  // State
+  let worker = null;
+  let audioCtx = null;
+  let decodedAudio = null;
+  let streamBuffer = null;
+  let isPlaying = false;
+  let playheadSample = 0;
+  let producerSample = 0;
+  let currentMode = "bypass"; // "bypass", "karaoke", "acapella"
+  let currentStrength = 1.0;
+  let isWorkerBusy = false;
+  let isWorkerReady = false;
+
+  const CHUNK_SIZE = 7680;
+  const LOOKAHEAD_TARGET_SEC = 2.5; // Maintain 2.5 seconds cushion in background
+
+  // 1. Initialize Web Worker
+  window.addEventListener("DOMContentLoaded", () => {
+    setStatus("Initializing Background Web Worker...");
+    worker = new Worker("ai-worker.js");
+
+    worker.onmessage = (e) => {
+      const data = e.data;
+      if (data.type === "READY") {
+        isWorkerReady = true;
+        document.getElementById("badge-backend").textContent = `WORKER: ${data.backend.toUpperCase()} + WASM`;
+        setStatus("AI Engine Ready in Background Worker! Drop a file to begin.");
+      } else if (data.type === "CHUNK_PROCESSED") {
+        handleChunkProcessed(data);
+      } else if (data.type === "ERROR") {
+        console.error("Worker error:", data.error);
+        setStatus("Worker Error: " + data.error);
+      }
+    };
+
+    worker.postMessage({ type: "INIT" });
+  });
+
+  function setStatus(txt) {
+    document.getElementById("status-msg").textContent = txt;
+  }
+
+  // 2. Drag & Drop
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("file-input");
+
+  dropzone.addEventListener("click", () => fileInput.click());
+  dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("dragover"); });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+  dropzone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", e => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+
+  async function handleFile(file) {
+    setStatus("Decoding Audio: " + file.name + "...");
+    document.getElementById("txt-file-name").textContent = "File: " + file.name;
+
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+    if (audioCtx.state === "suspended") await audioCtx.resume();
+
+    const arr = await file.arrayBuffer();
+    decodedAudio = await audioCtx.decodeAudioData(arr);
+
+    // Create stream buffer matching full audio length
+    streamBuffer = audioCtx.createBuffer(2, decodedAudio.length, decodedAudio.sampleRate);
+    
+    playheadSample = 0;
+    producerSample = 0;
+    isWorkerBusy = false;
+    if (worker) worker.postMessage({ type: "RESET" });
+
+    document.getElementById("seek-bar").max = decodedAudio.duration;
+    updateTimeDisplay(0, decodedAudio.duration);
+
+    setStatus("Loaded: " + file.name + " (" + formatTime(decodedAudio.duration) + "). Ready!");
+    playAudio();
+  }
+
+  // 3. Dispatch Chunks to Web Worker (Hysteresis Burst & Deep Sleep)
+  let isBuffering = false;
+  let isRefilling = true;
+  const INITIAL_CUSHION_SEC = 1.0; // Fast 1.0s startup cushion (starts in ~100ms)
+  const HIGH_WATERMARK_SEC = 2.5;  // Top of cushion: AI enters deep sleep
+  const LOW_WATERMARK_SEC = 1.0;   // Wakeup threshold: AI refills in a quick burst
+
+  function pumpWorker() {
+    if (!decodedAudio || !isWorkerReady || isWorkerBusy) return;
+
+    const totalSamples = decodedAudio.length;
+    const sampleRate = decodedAudio.sampleRate;
+    const bufferedAheadSec = (producerSample - playheadSample) / sampleRate;
+
+    // Hysteresis State Machine:
+    if (bufferedAheadSec >= HIGH_WATERMARK_SEC) {
+      isRefilling = false; // Cushion is full -> AI sleeps!
+    } else if (bufferedAheadSec <= LOW_WATERMARK_SEC || isBuffering) {
+      isRefilling = true;  // Cushion low -> Wake up and burst!
+    }
+
+    // Update HUD
+    const hudBuf = document.getElementById("hud-buffer");
+    if (currentMode === "bypass") {
+      hudBuf.textContent = "Bypassed (Original)";
+      hudBuf.style.color = "#38bdf8";
+    } else if (isBuffering) {
+      hudBuf.textContent = `Buffering: ${Math.max(0, bufferedAheadSec).toFixed(1)}s / ${INITIAL_CUSHION_SEC}s`;
+      hudBuf.style.color = "#ffb703";
+      setStatus(`⏳ Pre-calculating AI cushion (${Math.max(0, bufferedAheadSec).toFixed(1)}s)...`);
+    } else if (!isRefilling) {
+      hudBuf.textContent = `${Math.max(0, bufferedAheadSec).toFixed(1)}s (AI Deep Sleep 💤)`;
+      hudBuf.style.color = "#00ff66";
+      setStatus("▶ Playing (AI Sleeping - Zero CPU / Zero GPU)");
+    } else {
+      hudBuf.textContent = `${Math.max(0, bufferedAheadSec).toFixed(1)}s (Refilling ⚡)`;
+      hudBuf.style.color = "#38bdf8";
+      setStatus("▶ Playing (Fast burst refill)");
+    }
+
+    if (currentMode === "bypass") return;
+
+    // Only dispatch when in refilling state or initial buffering
+    if (producerSample < totalSamples && (isRefilling || isBuffering)) {
+      isWorkerBusy = true;
+      const rawL = new Float32Array(CHUNK_SIZE);
+      const rawR = new Float32Array(CHUNK_SIZE);
+      const len = Math.min(CHUNK_SIZE, totalSamples - producerSample);
+      rawL.set(decodedAudio.getChannelData(0).subarray(producerSample, producerSample + len));
+      if (decodedAudio.numberOfChannels > 1) {
+        rawR.set(decodedAudio.getChannelData(1).subarray(producerSample, producerSample + len));
+      } else {
+        rawR.set(rawL);
+      }
+
+      worker.postMessage(
+        {
+          type: "PROCESS_CHUNK",
+          chunkIndex: producerSample,
+          rawL,
+          rawR,
+          mode: currentMode,
+          strength: currentStrength
+        },
+        [rawL.buffer, rawR.buffer]
+      );
+    }
+  }
+
+  function handleChunkProcessed(data) {
+    isWorkerBusy = false;
+    const { chunkIndex, outL, outR, latency } = data;
+
+    if (streamBuffer) {
+      streamBuffer.getChannelData(0).set(outL, chunkIndex);
+      streamBuffer.getChannelData(1).set(outR, chunkIndex);
+    }
+
+    producerSample = chunkIndex + outL.length;
+    document.getElementById("hud-latency").textContent = latency.toFixed(1) + " ms";
+
+    if (decodedAudio) {
+      const bufferedAheadSec = (producerSample - playheadSample) / decodedAudio.sampleRate;
+      if (isBuffering && (bufferedAheadSec >= INITIAL_CUSHION_SEC || producerSample >= decodedAudio.length)) {
+        isBuffering = false;
+      }
+    }
+
+    // Pump next chunk
+    pumpWorker();
+  }
+
+  // 4. Web Audio Real-Time Output Callback (Zero Work -> 100% Stutter Free)
+  let scriptNode = null;
+  function setupStreamingNode() {
+    if (scriptNode) return;
+
+    scriptNode = audioCtx.createScriptProcessor(4096, 2, 2);
+
+    scriptNode.onaudioprocess = (e) => {
+      const outL = e.outputBuffer.getChannelData(0);
+      const outR = e.outputBuffer.getChannelData(1);
+      const numSamples = outL.length;
+
+      if (!isPlaying || !decodedAudio || isBuffering) {
+        outL.fill(0);
+        outR.fill(0);
+        return;
+      }
+
+      // In AI mode, ALWAYS read from streamBuffer without strobing back to decodedAudio!
+      const activeBuf = (currentMode === "bypass" || !streamBuffer) ? decodedAudio : streamBuffer;
+      const srcL = activeBuf.getChannelData(0);
+      const srcR = activeBuf.getChannelData(1);
+
+      const remain = activeBuf.length - playheadSample;
+      if (remain >= numSamples) {
+        outL.set(srcL.subarray(playheadSample, playheadSample + numSamples));
+        outR.set(srcR.subarray(playheadSample, playheadSample + numSamples));
+      } else if (remain > 0) {
+        outL.fill(0);
+        outR.fill(0);
+        outL.set(srcL.subarray(playheadSample, activeBuf.length));
+        outR.set(srcR.subarray(playheadSample, activeBuf.length));
+      } else {
+        outL.fill(0);
+        outR.fill(0);
+      }
+
+      playheadSample += numSamples;
+
+      // Pump worker ahead
+      pumpWorker();
+
+      // Update seek bar and time readout (throttled to 4 times per second to save CPU)
+      const now = performance.now();
+      if (now - lastUiTime > 250 && decodedAudio) {
+        lastUiTime = now;
+        const curSec = playheadSample / decodedAudio.sampleRate;
+        updateTimeDisplay(curSec, decodedAudio.duration);
+        document.getElementById("seek-bar").value = curSec;
+
+        if (playheadSample >= decodedAudio.length) {
+          pauseAudio();
+          playheadSample = 0;
+          producerSample = 0;
+        }
+      }
+    };
+
+    scriptNode.connect(audioCtx.destination);
+  }
+
+  let lastUiTime = 0;
+
+  // 5. Controls
+  function setMode(mode) {
+    currentMode = mode;
+    document.getElementById("btn-orig").className = "mode-btn" + (mode === "bypass" ? " active-original" : "");
+    document.getElementById("btn-karaoke").className = "mode-btn" + (mode === "karaoke" ? " active-karaoke" : "");
+    document.getElementById("btn-acapella").className = "mode-btn" + (mode === "acapella" ? " active-acapella" : "");
+
+    if (decodedAudio && currentMode !== "bypass") {
+      producerSample = playheadSample;
+      isBuffering = true;
+      isWorkerBusy = false;
+      if (worker) worker.postMessage({ type: "RESET" });
+      pumpWorker();
+    }
+  }
+
+  function togglePlay() {
+    if (!decodedAudio) return;
+    if (isPlaying) {
+      pauseAudio();
+    } else {
+      playAudio();
+    }
+  }
+
+  function playAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    setupStreamingNode();
+    isPlaying = true;
+    pumpWorker();
+    document.getElementById("icon-play").className = "ph-bold ph-pause";
+  }
+
+  function pauseAudio() {
+    isPlaying = false;
+    document.getElementById("icon-play").className = "ph-bold ph-play";
+  }
+
+  function seekTo(sec) {
+    if (!decodedAudio) return;
+    playheadSample = Math.floor(sec * decodedAudio.sampleRate);
+    producerSample = playheadSample;
+    isWorkerBusy = false;
+    if (worker) worker.postMessage({ type: "RESET" });
+    pumpWorker();
+  }
+
+  function formatTime(s) {
+    const mins = Math.floor(s / 60);
+    const secs = Math.floor(s % 60);
+    return (mins < 10 ? "0" : "") + mins + ":" + (secs < 10 ? "0" : "") + secs;
+  }
+
+  function updateTimeDisplay(cur, total) {
+    document.getElementById("time-display").textContent = formatTime(cur) + " / " + formatTime(total);
+  }
+</script>
+
+</body>
+</html>
