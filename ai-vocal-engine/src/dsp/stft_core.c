@@ -22,13 +22,10 @@ static float g_twiddle_sin[FFT_SIZE / 2];
 static int g_initialized = 0;
 
 // Internal Ring Buffers (Stereo: 2 channels)
-// We need FFT_SIZE + CHUNK_SAMPLES of history to slide
 #define BUFFER_CAPACITY (FFT_SIZE + (MAX_FRAMES * HOP_SIZE))
 
 static float g_input_pcm[2][BUFFER_CAPACITY];
 static float g_output_pcm[2][BUFFER_CAPACITY];
-static int g_input_write_pos = 0;
-static int g_output_read_pos = 0;
 
 // Frame Magnitudes: [2 channels][MAX_FRAMES][NUM_BINS]
 static float g_magnitudes[2][MAX_FRAMES * NUM_BINS];
@@ -36,9 +33,14 @@ static float g_magnitudes[2][MAX_FRAMES * NUM_BINS];
 // Mask from Neural Network: [2 channels][MAX_FRAMES][NUM_BINS]
 static float g_mask[2][MAX_FRAMES * NUM_BINS];
 
-// Complex Spectrum Storage: [2 channels][MAX_FRAMES][FFT_SIZE] (real and imag)
+// Complex Spectrum Storage for current chunk
 static float g_spec_real[2][MAX_FRAMES][NUM_BINS];
 static float g_spec_imag[2][MAX_FRAMES][NUM_BINS];
+
+// Zero-Copy Internal Lookahead Ring Buffer for Complex Spectra (16 frames per chunk)
+static float g_queue_real[2][QUEUE_CAPACITY][DEFAULT_CHUNK_FRAMES][NUM_BINS];
+static float g_queue_imag[2][QUEUE_CAPACITY][DEFAULT_CHUNK_FRAMES][NUM_BINS];
+static int g_queue_head = 0;
 
 // Working buffer for in-place FFT
 static float g_work_real[FFT_SIZE];
@@ -56,7 +58,6 @@ static unsigned short reverse_bits(unsigned short x, int bits) {
 
 // In-place Radix-2 Complex FFT
 static void fft_radix2(float* real, float* imag, int n, int inverse) {
-    // 1. Bit-reversal permutation
     for (int i = 0; i < n; i++) {
         int j = g_bit_reverse[i];
         if (i < j) {
@@ -65,7 +66,6 @@ static void fft_radix2(float* real, float* imag, int n, int inverse) {
         }
     }
 
-    // 2. Cooley-Tukey Butterflies
     for (int len = 2; len <= n; len <<= 1) {
         int half_len = len >> 1;
         int step = n / len;
@@ -94,14 +94,15 @@ static void fft_radix2(float* real, float* imag, int n, int inverse) {
         }
     }
 
-    // 3. Scale on inverse
     if (inverse) {
         float inv_n = 1.0f / (float)n;
 #if USE_SIMD
-        v128_t scale_vec = wasm_f32x4_splat(inv_n);
+        v128_t vinv = wasm_f32x4_splat(inv_n);
         for (int i = 0; i < n; i += 4) {
-            wasm_v128_store(&real[i], wasm_f32x4_mul(wasm_v128_load(&real[i]), scale_vec));
-            wasm_v128_store(&imag[i], wasm_f32x4_mul(wasm_v128_load(&imag[i]), scale_vec));
+            v128_t r = wasm_v128_load(&real[i]);
+            v128_t im = wasm_v128_load(&imag[i]);
+            wasm_v128_store(&real[i], wasm_f32x4_mul(r, vinv));
+            wasm_v128_store(&imag[i], wasm_f32x4_mul(im, vinv));
         }
 #else
         for (int i = 0; i < n; i++) {
@@ -115,21 +116,18 @@ static void fft_radix2(float* real, float* imag, int n, int inverse) {
 void stft_init(void) {
     if (g_initialized) return;
 
-    // 1. Bit-reversal table for N=2048 (11 bits: 2^11 = 2048)
     for (int i = 0; i < FFT_SIZE; i++) {
         g_bit_reverse[i] = reverse_bits(i, 11);
     }
 
-    // 2. Twiddle factor table (cos, sin)
     for (int i = 0; i < FFT_SIZE / 2; i++) {
         double angle = 2.0 * M_PI * (double)i / (double)FFT_SIZE;
         g_twiddle_cos[i] = (float)cos(angle);
         g_twiddle_sin[i] = (float)sin(angle);
     }
 
-    // Pure Half-Sine window (Standard training spec for UVR MDX-Net models)
-    // Satisfies COLA (Constant Overlap-Add) with sum-of-squares = 2.0 at 75% overlap.
-    // Divided by sqrt(2.0), sum of squared analysis*synthesis window is exactly 1.000000!
+    // Pure Half-Sine Window (Standard for UVR MDX-Net models)
+    // Normalized by 1 / sqrt(2.0) for 100.000% perfect Constant Overlap-Add (COLA)
     float norm_factor = 1.0f / sqrtf(2.0f);
     for (int i = 0; i < FFT_SIZE; i++) {
         float sine = sinf((float)M_PI * ((float)i + 0.5f) / (float)FFT_SIZE);
@@ -147,6 +145,9 @@ void stft_reset(void) {
     memset(g_mask, 0, sizeof(g_mask));
     memset(g_spec_real, 0, sizeof(g_spec_real));
     memset(g_spec_imag, 0, sizeof(g_spec_imag));
+    memset(g_queue_real, 0, sizeof(g_queue_real));
+    memset(g_queue_imag, 0, sizeof(g_queue_imag));
+    g_queue_head = 0;
 }
 
 float* stft_get_input_ptr(int ch) {
@@ -204,17 +205,22 @@ void stft_forward(int num_frames) {
             // Run forward FFT
             fft_radix2(g_work_real, g_work_imag, FFT_SIZE, 0);
 
-            // Store complex spectrum and compute magnitudes for first 1024 bins
+            // Store complex spectrum in internal queue and compute magnitudes
             float* mag_out = &g_magnitudes[ch][f * NUM_BINS];
             for (int k = 0; k < NUM_BINS; k++) {
                 float r = g_work_real[k];
                 float im = g_work_imag[k];
                 g_spec_real[ch][f][k] = r;
                 g_spec_imag[ch][f][k] = im;
+                g_queue_real[ch][g_queue_head][f][k] = r;
+                g_queue_imag[ch][g_queue_head][f][k] = im;
                 mag_out[k] = sqrtf(r * r + im * im + 1e-9f);
             }
         }
     }
+
+    // Advance circular queue
+    g_queue_head = (g_queue_head + 1) % QUEUE_CAPACITY;
 }
 
 void stft_apply_mask(int num_frames, int mode, float strength) {
@@ -233,19 +239,53 @@ void stft_apply_mask(int num_frames, int mode, float strength) {
                 float gain = 1.0f;
 
                 if (mode == 0) {
-                    // Karaoke / Vocal Remover: Multiply by (1.0 - mask * strength)
                     gain = 1.0f - (mask_val * strength);
                     if (gain < 0.0f) gain = 0.0f;
                 } else if (mode == 1) {
-                    // Acapella / Vocal Isolation: Multiply by (mask * strength)
                     gain = mask_val * strength;
                 } else {
-                    // Bypass
                     gain = 1.0f;
                 }
 
                 sr[k] *= gain;
                 si[k] *= gain;
+            }
+        }
+    }
+}
+
+// Zero-Copy: Apply mask directly to delayed lookahead spectrum (e.g. 1 chunk lookahead)
+void stft_apply_mask_delayed(int delay_chunks, int num_frames, int mode, float strength) {
+    if (num_frames <= 0 || num_frames > MAX_FRAMES) num_frames = DEFAULT_CHUNK_FRAMES;
+    if (strength < 0.0f) strength = 0.0f;
+    if (strength > 1.0f) strength = 1.0f;
+
+    // Target queue index (delay_chunks ago)
+    int target_idx = (g_queue_head - 1 - delay_chunks + (QUEUE_CAPACITY * 4)) % QUEUE_CAPACITY;
+
+    for (int ch = 0; ch < 2; ch++) {
+        for (int f = 0; f < num_frames; f++) {
+            float* m = &g_mask[ch][f * NUM_BINS];
+            float* target_r = g_queue_real[ch][target_idx][f];
+            float* target_i = g_queue_imag[ch][target_idx][f];
+            float* sr = g_spec_real[ch][f];
+            float* si = g_spec_imag[ch][f];
+
+            for (int k = 0; k < NUM_BINS; k++) {
+                float mask_val = m[k];
+                float gain = 1.0f;
+
+                if (mode == 0) {
+                    gain = 1.0f - (mask_val * strength);
+                    if (gain < 0.0f) gain = 0.0f;
+                } else if (mode == 1) {
+                    gain = mask_val * strength;
+                } else {
+                    gain = 1.0f;
+                }
+
+                sr[k] = target_r[k] * gain;
+                si[k] = target_i[k] * gain;
             }
         }
     }
@@ -261,29 +301,23 @@ void stft_backward(int num_frames) {
 
     for (int ch = 0; ch < 2; ch++) {
         for (int f = 0; f < num_frames; f++) {
-            // Reconstruct conjugate symmetric spectrum for real iFFT
             float* sr = g_spec_real[ch][f];
             float* si = g_spec_imag[ch][f];
 
-            // DC and positive frequencies (0 to 1023)
             for (int k = 0; k < NUM_BINS; k++) {
                 g_work_real[k] = sr[k];
                 g_work_imag[k] = si[k];
             }
-            // Nyquist bin (k = 1024)
             g_work_real[NUM_BINS] = 0.0f;
             g_work_imag[NUM_BINS] = 0.0f;
 
-            // Conjugate symmetry for negative frequencies (1025 to 2047)
             for (int k = 1; k < NUM_BINS; k++) {
                 g_work_real[FFT_SIZE - k] = sr[k];
                 g_work_imag[FFT_SIZE - k] = -si[k];
             }
 
-            // Run inverse FFT
             fft_radix2(g_work_real, g_work_imag, FFT_SIZE, 1);
 
-            // Apply synthesis window and overlap-add into output buffer
             int offset = f * HOP_SIZE;
 #if USE_SIMD
             for (int i = 0; i < FFT_SIZE; i += 4) {
@@ -300,4 +334,21 @@ void stft_backward(int num_frames) {
 #endif
         }
     }
+}
+
+// Smart Energy Gating / Vocal Activity Detection (VAD)
+// Calculates average energy in the human vocal formant band (300 Hz - 3500 Hz)
+float stft_get_vocal_energy(int num_frames) {
+    if (num_frames <= 0 || num_frames > MAX_FRAMES) num_frames = DEFAULT_CHUNK_FRAMES;
+    // Bins for 300 Hz - 3500 Hz: (300 / (44100/2048) ≈ 14, 3500 / 21.53 ≈ 162)
+    float total = 0.0f;
+    for (int ch = 0; ch < 2; ch++) {
+        for (int f = 0; f < num_frames; f++) {
+            float* mag = &g_magnitudes[ch][f * NUM_BINS];
+            for (int k = 14; k < 162; k++) {
+                total += mag[k];
+            }
+        }
+    }
+    return total / (float)(2 * num_frames * (162 - 14));
 }

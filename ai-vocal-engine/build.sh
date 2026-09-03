@@ -24,7 +24,7 @@ fi
 mkdir -p "${DIST_DIR}"
 mkdir -p "${EXT_MODULES_DIR}"
 
-EXPORTED_FUNCS="['_stft_init','_stft_reset','_stft_get_input_ptr','_stft_get_output_ptr','_stft_get_magnitudes_ptr','_stft_get_mask_ptr','_stft_get_spec_real_ptr','_stft_get_spec_imag_ptr','_stft_forward','_stft_apply_mask','_stft_backward']"
+EXPORTED_FUNCS="['_stft_init','_stft_reset','_stft_get_input_ptr','_stft_get_output_ptr','_stft_get_magnitudes_ptr','_stft_get_mask_ptr','_stft_get_spec_real_ptr','_stft_get_spec_imag_ptr','_stft_forward','_stft_apply_mask','_stft_apply_mask_delayed','_stft_backward','_stft_get_vocal_energy']"
 
 # 1. Build High-Performance SIMD128 WASM Module
 echo "1. Compiling stft_simd.wasm with Wasm SIMD128 & LTO..."
@@ -32,7 +32,7 @@ emcc -O3 -msimd128 -flto --no-entry \
     -s STANDALONE_WASM=1 \
     -s "EXPORTED_FUNCTIONS=${EXPORTED_FUNCS}" \
     -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
-    -s INITIAL_MEMORY=4194304 \
+    -s INITIAL_MEMORY=16777216 \
     -o "${DIST_DIR}/stft_simd.wasm" \
     "${SCRIPT_DIR}/src/dsp/stft_core.c"
 
@@ -42,7 +42,7 @@ emcc -O3 -flto --no-entry \
     -s STANDALONE_WASM=1 \
     -s "EXPORTED_FUNCTIONS=${EXPORTED_FUNCS}" \
     -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
-    -s INITIAL_MEMORY=4194304 \
+    -s INITIAL_MEMORY=16777216 \
     -o "${DIST_DIR}/stft_scalar.wasm" \
     "${SCRIPT_DIR}/src/dsp/stft_core.c"
 
