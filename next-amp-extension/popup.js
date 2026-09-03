@@ -491,17 +491,18 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (currentTabId && msg.tabId === currentTabId) {
       updateUIFromExternal(msg.key, msg.value, msg.index);
     }
-  }
-  if (msg.type === "VISUALIZER_DATA") {
+  } else if (msg.type === "VISUALIZER_DATA") {
     if (currentTabId && msg.tabId === currentTabId)
       drawVisualizer(msg.data, msg.mode);
-  if (msg.type === "AI_VOCAL_STATUS") {
+  } else if (msg.type === "AI_VOCAL_STATUS") {
     const txtStatus = $("#txt-vocal-status");
     if (txtStatus) {
       txtStatus.textContent = msg.status;
       txtStatus.title = "AI Vocal: " + msg.status;
     }
-  } else if (msg.type === "RECORDING_SAVED") handleRecordingSaved();
+  } else if (msg.type === "RECORDING_SAVED") {
+    handleRecordingSaved();
+  }
 });
 
 function updateVocalUI(mode) {
