@@ -29,6 +29,10 @@ export class AIVocalManager {
       const workerUrl = chrome.runtime.getURL("modules/ai-vocal/vocal-worker.js");
       this.worker = new Worker(workerUrl);
 
+      this.worker.onerror = (err) => {
+        console.error("[NextAmp AI] Worker uncaught exception:", err);
+      };
+
       // 4. Wire worklet -> worker and worker -> worklet
       this.workletNode.port.onmessage = (e) => {
         const data = e.data;
@@ -64,12 +68,16 @@ export class AIVocalManager {
             [data.outL.buffer, data.outR.buffer]
           );
         } else if (data.type === "ERROR") {
-          console.error("[NextAmp AI] Worker error:", data.error);
+          console.error("[NextAmp AI] Worker reported error:", data.error);
         }
       };
 
-      // Start initialization in worker
-      this.worker.postMessage({ type: "INIT" });
+      // Start initialization in worker with absolute URLs
+      this.worker.postMessage({
+        type: "INIT",
+        wasmUrl: chrome.runtime.getURL("modules/ai-vocal/stft_simd.wasm"),
+        modelUrl: chrome.runtime.getURL("model/model.json")
+      });
 
       return this.workletNode;
     } catch (err) {

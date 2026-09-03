@@ -38,14 +38,16 @@ const outTailR = new Float32Array(TAIL);
 // VAD threshold for human vocal formant energy (300Hz - 3500Hz)
 const VOCAL_ENERGY_THRESHOLD = 0.005;
 
-async function init() {
+async function init(wasmUrl, modelUrl) {
   try {
     // 1. Load our in-house stft_simd.wasm (with scalar fallback)
     let wasmRes;
+    const targetWasmUrl = wasmUrl || "stft_simd.wasm";
     try {
-      wasmRes = await fetch("stft_simd.wasm");
+      wasmRes = await fetch(targetWasmUrl);
     } catch (_) {
-      wasmRes = await fetch("stft_scalar.wasm");
+      const fallbackUrl = targetWasmUrl.replace("stft_simd.wasm", "stft_scalar.wasm");
+      wasmRes = await fetch(fallbackUrl);
     }
     const wasmBuf = await wasmRes.arrayBuffer();
 
@@ -70,7 +72,7 @@ async function init() {
     maskPtr0 = exp.stft_get_mask_ptr(0) / 4;
     maskPtr1 = exp.stft_get_mask_ptr(1) / 4;
 
-    // 2. Hardware-Accelerated Backend Selection (WebGPU -> WebGL Packed)
+    // 2. Hardware-Accelerated Backend Selection (WebGPU -> WebGL Packed -> CPU Fallback)
     let activeBackend = "webgl";
     try {
       if (typeof navigator !== "undefined" && navigator.gpu) {
@@ -82,19 +84,26 @@ async function init() {
     }
 
     if (activeBackend === "webgl") {
-      await tf.setBackend("webgl");
-      tf.env().set("WEBGL_PACK", true);
-      tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
-      tf.env().set("WEBGL_PACK_NORMALIZATION", true);
-      tf.env().set("WEBGL_CPU_FORWARD", false);
-      tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
-      tf.env().set("PROD", true);
+      try {
+        await tf.setBackend("webgl");
+        tf.env().set("WEBGL_PACK", true);
+        tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
+        tf.env().set("WEBGL_PACK_NORMALIZATION", true);
+        tf.env().set("WEBGL_CPU_FORWARD", false);
+        tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
+        tf.env().set("PROD", true);
+      } catch (webglErr) {
+        console.warn("[NextAmp AI] WebGL failed in worker, falling back to CPU:", webglErr);
+        await tf.setBackend("cpu");
+        activeBackend = "cpu";
+      }
     }
 
-    model = await tf.loadGraphModel("../../model/model.json");
+    const targetModelUrl = modelUrl || "../../model/model.json";
+    model = await tf.loadGraphModel(targetModelUrl);
     resetState();
 
-    console.log(`[NextAmp AI] Initialized with backend: ${activeBackend.toUpperCase()}`);
+    console.log(`[NextAmp AI] Initialized successfully with backend: ${activeBackend.toUpperCase()}`);
     self.postMessage({ type: "READY", backend: activeBackend });
   } catch (err) {
     console.error("[NextAmp Worker] Init error:", err);
@@ -115,7 +124,7 @@ function resetState() {
 self.onmessage = async (e) => {
   const data = e.data;
   if (data.type === "INIT") {
-    await init();
+    await init(data.wasmUrl, data.modelUrl);
   } else if (data.type === "RESET") {
     resetState();
   } else if (data.type === "PROCESS_CHUNK") {

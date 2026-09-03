@@ -697,19 +697,20 @@ function applyAllParams(session) {
   // Apply pitch with bypass: same logic as applyParamToSession("pitch")
   if (pitchProc && session.effectsInput) {
     const stretchNode = pitchProc.getNode();
+    const inputNode = session.aiVocal && session.aiVocal.getNode() ? session.aiVocal.getNode() : session.source;
     if (stretchNode) {
       if (params.pitch === 0) {
         if (!session.isPitchBypassed) {
           session.isPitchBypassed = true;
-          try { session.source.disconnect(stretchNode); } catch (_) {}
+          try { inputNode.disconnect(stretchNode); } catch (_) {}
           try { stretchNode.disconnect(session.effectsInput); } catch (_) {}
-          try { session.source.connect(session.effectsInput); } catch (_) {}
+          try { inputNode.connect(session.effectsInput); } catch (_) {}
         }
       } else {
         if (session.isPitchBypassed) {
           session.isPitchBypassed = false;
-          try { session.source.disconnect(session.effectsInput); } catch (_) {}
-          try { session.source.connect(stretchNode); } catch (_) {}
+          try { inputNode.disconnect(session.effectsInput); } catch (_) {}
+          try { inputNode.connect(stretchNode); } catch (_) {}
           try { stretchNode.connect(session.effectsInput); } catch (_) {}
         }
         pitchProc.setPitch(params.pitch);
@@ -717,6 +718,11 @@ function applyAllParams(session) {
     }
   } else if (pitchProc) {
     pitchProc.setPitch(params.pitch);
+  }
+
+  // Apply AI Vocal mode on initialization / reset
+  if (session.aiVocal && params.vocalMode) {
+    session.aiVocal.setMode(params.vocalMode);
   }
 }
 

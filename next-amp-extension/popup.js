@@ -507,21 +507,18 @@ function updateVocalUI(mode) {
   if (!btnBypass || !btnKaraoke || !btnAcapella) return;
 
   [btnBypass, btnKaraoke, btnAcapella].forEach((btn) => {
-    btn.classList.remove("pressed", "text-white");
-    btn.classList.add("text-gray-300");
+    btn.classList.remove("pressed");
+    btn.classList.add("text-black", "font-bold");
   });
 
   if (mode === "karaoke") {
-    btnKaraoke.classList.add("pressed", "text-white");
-    btnKaraoke.classList.remove("text-gray-300");
+    btnKaraoke.classList.add("pressed");
     if (txtStatus) txtStatus.textContent = "KARAOKE (CUT)";
   } else if (mode === "acapella") {
-    btnAcapella.classList.add("pressed", "text-white");
-    btnAcapella.classList.remove("text-gray-300");
+    btnAcapella.classList.add("pressed");
     if (txtStatus) txtStatus.textContent = "ACAPELLA (ISOLATE)";
   } else {
-    btnBypass.classList.add("pressed", "text-white");
-    btnBypass.classList.remove("text-gray-300");
+    btnBypass.classList.add("pressed");
     if (txtStatus) txtStatus.textContent = "ORIGINAL";
   }
 }
