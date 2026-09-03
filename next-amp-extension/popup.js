@@ -495,6 +495,12 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "VISUALIZER_DATA") {
     if (currentTabId && msg.tabId === currentTabId)
       drawVisualizer(msg.data, msg.mode);
+  if (msg.type === "AI_VOCAL_STATUS") {
+    const txtStatus = $("#txt-vocal-status");
+    if (txtStatus) {
+      txtStatus.textContent = msg.status;
+      txtStatus.title = "AI Vocal: " + msg.status;
+    }
   } else if (msg.type === "RECORDING_SAVED") handleRecordingSaved();
 });
 
@@ -513,10 +519,14 @@ function updateVocalUI(mode) {
 
   if (mode === "karaoke") {
     btnKaraoke.classList.add("pressed");
-    if (txtStatus) txtStatus.textContent = "KARAOKE (CUT)";
+    if (txtStatus && !txtStatus.textContent.includes("KARAOKE")) {
+      txtStatus.textContent = "Starting AI...";
+    }
   } else if (mode === "acapella") {
     btnAcapella.classList.add("pressed");
-    if (txtStatus) txtStatus.textContent = "ACAPELLA (ISOLATE)";
+    if (txtStatus && !txtStatus.textContent.includes("ACAPELLA")) {
+      txtStatus.textContent = "Starting AI...";
+    }
   } else {
     btnBypass.classList.add("pressed");
     if (txtStatus) txtStatus.textContent = "ORIGINAL";
@@ -1208,6 +1218,13 @@ function loadAudioState(state) {
   updateNormalizeButton();
   if (state.vocalMode) {
     updateVocalUI(state.vocalMode);
+  }
+  if (state.vocalStatus) {
+    const txtStatus = $("#txt-vocal-status");
+    if (txtStatus) {
+      txtStatus.textContent = state.vocalStatus;
+      txtStatus.title = "AI Vocal: " + state.vocalStatus;
+    }
   }
 
   if (state.eq && state.eq.length > 0) {

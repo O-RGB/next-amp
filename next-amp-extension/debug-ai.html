@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>NextAmp AI Vocal Diagnostics</title>
+  <style>
+    body { font-family: monospace; background: #111; color: #00ff00; padding: 20px; font-size: 13px; line-height: 1.5; }
+    h1 { color: #fff; font-size: 18px; border-bottom: 1px solid #444; padding-bottom: 8px; }
+    .log-ok { color: #00ff66; }
+    .log-warn { color: #ffcc00; }
+    .log-err { color: #ff3333; font-weight: bold; background: #330000; padding: 2px 4px; }
+    .card { background: #1c1c1c; border: 1px solid #333; padding: 12px; margin-top: 12px; border-radius: 4px; }
+    button { background: #333; color: #fff; border: 1px solid #666; padding: 6px 12px; font-family: monospace; cursor: pointer; }
+    button:hover { background: #444; }
+  </style>
+  <script src="assets/libs/js/tf.min.js"></script>
+</head>
+<body>
+  <h1>NextAmp AI Vocal In-Extension Diagnostics</h1>
+  <p>Tests all components of the AI Vocal Separator pipeline directly inside Chrome Extension context.</p>
+  <button id="btn-run" onclick="runDiagnostics()">Rerun Diagnostics</button>
+  <div class="card" id="output">Running diagnostics...</div>
+
+  <script>
+    const out = document.getElementById("output");
+    function log(msg, cls = "") {
+      const div = document.createElement("div");
+      if (cls) div.className = cls;
+      div.textContent = msg;
+      out.appendChild(div);
+    }
+
+    async function runDiagnostics() {
+      out.innerHTML = "";
+      log("[1/5] Testing WebAssembly STFT...");
+      try {
+        const wasmRes = await fetch(chrome.runtime.getURL("modules/ai-vocal/stft_simd.wasm"));
+        const wasmBuf = await wasmRes.arrayBuffer();
+        const { instance } = await WebAssembly.instantiate(wasmBuf, { env: {} });
+        instance.exports.stft_init();
+        log("✓ WASM Loaded & Initialized! Memory bytes: " + instance.exports.memory.buffer.byteLength, "log-ok");
+      } catch (e) {
+        log("✗ WASM Failed: " + e.message, "log-err");
+        return;
+      }
+
+      log("\n[2/5] Testing TensorFlow.js Backend...");
+      try {
+        let be = "webgl";
+        try {
+          if (navigator.gpu) {
+            await tf.setBackend("webgpu");
+            be = "webgpu";
+          }
+        } catch (_) {}
+        if (be === "webgl") {
+          await tf.setBackend("webgl");
+          tf.env().set("WEBGL_PACK", true);
+          tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
+          tf.env().set("WEBGL_PACK_NORMALIZATION", true);
+          tf.env().set("WEBGL_CPU_FORWARD", false);
+          tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
+          tf.env().set("PROD", true);
+        }
+        await tf.ready();
+        log("✓ TFJS Backend Ready: " + tf.getBackend().toUpperCase(), "log-ok");
+      } catch (e) {
+        log("✗ TFJS Backend Failed: " + e.message, "log-err");
+        return;
+      }
+
+      log("\n[3/5] Testing Model Loading...");
+      let model;
+      try {
+        if (tf.io && tf.io.registerLoadRouter) {
+          tf.io.registerLoadRouter((url) => {
+            if (typeof url === "string" && url.startsWith("chrome-extension://")) {
+              return tf.io.browserHTTPRequest(url);
+            }
+            return null;
+          });
+        }
+        const modelUrl = chrome.runtime.getURL("model/model.json");
+        const handler = tf.io.browserHTTPRequest(modelUrl);
+        model = await tf.loadGraphModel(handler);
+        log("✓ U-Net Model Loaded Successfully! Input shape: [1, 1024, 64, 2]", "log-ok");
+      } catch (e) {
+        log("✗ Model Load Failed: " + e.message, "log-err");
+        return;
+      }
+
+      log("\n[4/5] Testing U-Net Inference Execution...");
+      try {
+        const dummyInput = tf.zeros([1, 1024, 64, 2]);
+        const t0 = performance.now();
+        const result = model.execute(dummyInput);
+        const data = await result.data();
+        const duration = (performance.now() - t0).toFixed(1);
+        dummyInput.dispose();
+        result.dispose();
+        log("✓ Inference Success! Output length: " + data.length + " | Time: " + duration + "ms", "log-ok");
+      } catch (e) {
+        log("✗ Inference Failed: " + e.message, "log-err");
+        return;
+      }
+
+      log("\n[5/5] Testing Dedicated Web Worker...");
+      try {
+        const workerUrl = chrome.runtime.getURL("modules/ai-vocal/vocal-worker.js");
+        const worker = new Worker(workerUrl);
+        worker.onmessage = (e) => {
+          log("✓ Worker Message: " + JSON.stringify(e.data), "log-ok");
+        };
+        worker.onerror = (e) => {
+          log("✗ Worker Error: " + (e.message || "Unknown worker error"), "log-err");
+        };
+        worker.postMessage({
+          type: "INIT",
+          wasmUrl: chrome.runtime.getURL("modules/ai-vocal/stft_simd.wasm"),
+          modelUrl: chrome.runtime.getURL("model/model.json")
+        });
+      } catch (e) {
+        log("✗ Worker Spawn Failed: " + e.message, "log-err");
+      }
+    }
+
+    runDiagnostics();
+  </script>
+</body>
+</html>

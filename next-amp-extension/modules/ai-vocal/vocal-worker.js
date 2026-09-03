@@ -8,7 +8,19 @@
  * 4. Smart VAD / Instrumental Energy Gating (bypasses heavy U-Net during instrumental solos)
  */
 
-importScripts("../../assets/libs/js/tf.min.js");
+try {
+  if (typeof tf === "undefined") {
+    try {
+      importScripts(self.location.origin + "/assets/libs/js/tf.min.js");
+    } catch (_) {
+      importScripts("../../assets/libs/js/tf.min.js");
+    }
+  }
+} catch (e) {
+  console.error("[NextAmp Worker] Failed to load tf.min.js:", e);
+  self.postMessage({ type: "ERROR", error: "TFJS Load Failed: " + (e.message || e) });
+  self.postMessage({ type: "STATUS", status: "ERR: TFJS" });
+}
 
 let wasmInstance = null;
 let exp = null;
@@ -40,9 +52,11 @@ const VOCAL_ENERGY_THRESHOLD = 0.005;
 
 async function init(wasmUrl, modelUrl) {
   try {
+    self.postMessage({ type: "STATUS", status: "Loading DSP..." });
+
     // 1. Load our in-house stft_simd.wasm (with scalar fallback)
     let wasmRes;
-    const targetWasmUrl = wasmUrl || "stft_simd.wasm";
+    const targetWasmUrl = wasmUrl || (self.location.origin + "/modules/ai-vocal/stft_simd.wasm");
     try {
       wasmRes = await fetch(targetWasmUrl);
     } catch (_) {
@@ -72,6 +86,8 @@ async function init(wasmUrl, modelUrl) {
     maskPtr0 = exp.stft_get_mask_ptr(0) / 4;
     maskPtr1 = exp.stft_get_mask_ptr(1) / 4;
 
+    self.postMessage({ type: "STATUS", status: "Starting GPU..." });
+
     // 2. Hardware-Accelerated Backend Selection (WebGPU -> WebGL Packed -> CPU Fallback)
     let activeBackend = "webgl";
     try {
@@ -98,6 +114,7 @@ async function init(wasmUrl, modelUrl) {
         activeBackend = "cpu";
       }
     }
+    await tf.ready();
 
     // 3. Register custom IO handler for chrome-extension:// scheme
     if (tf.io && tf.io.registerLoadRouter) {
@@ -109,7 +126,9 @@ async function init(wasmUrl, modelUrl) {
       });
     }
 
-    const targetModelUrl = modelUrl || "../../model/model.json";
+    self.postMessage({ type: "STATUS", status: "Loading Model..." });
+
+    const targetModelUrl = modelUrl || (self.location.origin + "/model/model.json");
     const ioHandler = (tf.io && tf.io.browserHTTPRequest) 
       ? tf.io.browserHTTPRequest(targetModelUrl) 
       : targetModelUrl;
@@ -119,9 +138,11 @@ async function init(wasmUrl, modelUrl) {
 
     console.log(`[NextAmp AI] Initialized successfully with backend: ${activeBackend.toUpperCase()}`);
     self.postMessage({ type: "READY", backend: activeBackend });
+    self.postMessage({ type: "STATUS", status: "READY" });
   } catch (err) {
     console.error("[NextAmp Worker] Init error:", err);
     self.postMessage({ type: "ERROR", error: err.message || err.toString() });
+    self.postMessage({ type: "STATUS", status: "ERR: " + (err.message || err.toString()).substring(0, 18) });
   }
 }
 

@@ -98,9 +98,23 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     }
 
     // 2. Determine target crossfade state
-    // AI audio is considered ready if we have >= 1 chunk buffered in queue
     const hasAiAudio = (this.currChunkL !== null) || (this.outQueueL.length >= 1);
     const targetFade = (this.targetMode !== "bypass" && hasAiAudio) ? 1.0 : 0.0;
+
+    // Report buffer telemetry to manager every ~100ms
+    this.statusCount = (this.statusCount || 0) + 1;
+    if (this.statusCount >= 32) {
+      this.statusCount = 0;
+      const totalBuffered = this.outQueueL.length * CHUNK_SIZE + (this.currChunkL ? this.currChunkL.length - this.currChunkPos : 0);
+      const bufferedSec = (totalBuffered / 44100).toFixed(1);
+      this.port.postMessage({
+        type: "WORKLET_STATUS",
+        mode: this.targetMode,
+        fadeVal: this.fadeVal,
+        bufferedSec: bufferedSec,
+        queueLen: this.outQueueL.length
+      });
+    }
 
     // 3. Playback with smooth crossfading
     for (let i = 0; i < len; i++) {

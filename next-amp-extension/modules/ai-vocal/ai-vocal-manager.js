@@ -10,6 +10,19 @@ export class AIVocalManager {
     this.worker = null;
     this.isReady = false;
     this.currentMode = "bypass";
+    this.currentStatus = "ORIGINAL";
+    this.onStatusChange = null;
+  }
+
+  setStatus(status) {
+    this.currentStatus = status;
+    if (this.onStatusChange) {
+      this.onStatusChange(status);
+    }
+  }
+
+  getStatus() {
+    return this.currentStatus;
   }
 
   async init() {
@@ -31,6 +44,7 @@ export class AIVocalManager {
 
       this.worker.onerror = (err) => {
         console.error("[NextAmp AI] Worker uncaught exception:", err);
+        this.setStatus("ERR: Worker");
       };
 
       // 4. Wire worklet -> worker and worker -> worklet
@@ -49,6 +63,14 @@ export class AIVocalManager {
               [data.rawL.buffer, data.rawR.buffer]
             );
           }
+        } else if (data.type === "WORKLET_STATUS") {
+          if (data.mode === "bypass") {
+            this.setStatus("ORIGINAL");
+          } else if (data.fadeVal < 0.85) {
+            this.setStatus(`Preparing AI: ${data.bufferedSec}s / 0.8s`);
+          } else {
+            this.setStatus(data.mode === "karaoke" ? "KARAOKE (CUT)" : "ACAPELLA (ISO)");
+          }
         }
       };
 
@@ -58,6 +80,7 @@ export class AIVocalManager {
           console.log("[NextAmp AI] Web Worker Ready with backend:", data.backend);
           this.isReady = true;
           this.workletNode.port.postMessage({ type: "WORKER_READY" });
+          if (this.currentMode === "bypass") this.setStatus("ORIGINAL");
         } else if (data.type === "CHUNK_PROCESSED") {
           this.workletNode.port.postMessage(
             {
@@ -67,8 +90,13 @@ export class AIVocalManager {
             },
             [data.outL.buffer, data.outR.buffer]
           );
+        } else if (data.type === "STATUS") {
+          if (this.currentMode !== "bypass") {
+            this.setStatus(data.status);
+          }
         } else if (data.type === "ERROR") {
           console.error("[NextAmp AI] Worker reported error:", data.error);
+          this.setStatus("ERR: " + (data.error || "Unknown"));
         }
       };
 
@@ -82,6 +110,7 @@ export class AIVocalManager {
       return this.workletNode;
     } catch (err) {
       console.error("[NextAmp AI] Initialization failed:", err);
+      this.setStatus("ERR: Init");
       return null;
     }
   }
@@ -90,6 +119,13 @@ export class AIVocalManager {
     this.currentMode = mode;
     if (this.worker && mode !== "bypass") {
       this.worker.postMessage({ type: "RESET" });
+      if (!this.isReady) {
+        this.setStatus("Loading AI...");
+      } else {
+        this.setStatus("Buffering...");
+      }
+    } else {
+      this.setStatus("ORIGINAL");
     }
     if (this.workletNode) {
       this.workletNode.port.postMessage({ type: "SET_MODE", mode });

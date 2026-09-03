@@ -336,11 +336,11 @@
       <div class="p-1 flex flex-col gap-1 bg-[#222]">
         <!-- AI VOCAL SEPARATOR STRIP -->
         <div class="flex items-center justify-between px-1.5 py-0.5 bg-[#c0c0c0] border border-t-[#fff] border-l-[#fff] border-r-[#000] border-b-[#000] text-[8px] font-pixel text-black">
-          <div class="flex items-center gap-1">
-            <span class="text-black font-bold">AI VOCAL:</span>
-            <span id="txt-vocal-status" class="text-black font-bold">ORIGINAL</span>
+          <div class="flex items-center gap-1 overflow-hidden pr-1">
+            <span id="txt-vocal-label" class="text-black font-bold whitespace-nowrap">AI:</span>
+            <span id="txt-vocal-status" class="text-black font-bold whitespace-nowrap truncate max-w-[125px]" title="AI Vocal Status">ORIGINAL</span>
           </div>
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-1 shrink-0">
             <button id="btn-vocal-bypass" class="win-btn h-3.5 px-1.5 text-[7px] font-bold pressed text-black" title="Original Track">ORIG</button>
             <button id="btn-vocal-karaoke" class="win-btn h-3.5 px-1.5 text-[7px] font-bold text-black" title="Remove Vocals (Karaoke)">KARAOKE</button>
             <button id="btn-vocal-acapella" class="win-btn h-3.5 px-1.5 text-[7px] font-bold text-black" title="Isolate Vocals (Acapella)">ACAPELLA</button>

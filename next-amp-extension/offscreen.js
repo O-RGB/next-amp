@@ -170,6 +170,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         isRecording: isRec,
         mode: session.mode,
         currentSampleRate: session.audioCtx ? session.audioCtx.sampleRate : null,
+        vocalStatus: session.aiVocal ? session.aiVocal.getStatus() : "ORIGINAL",
       });
     } else {
       sendResponse({
@@ -278,6 +279,13 @@ async function startAudio(
 
     // NextAmp AI Vocal Separator (UVR-MDX-Net WebGL)
     const aiVocal = new AIVocalManager(audioCtx);
+    aiVocal.onStatusChange = (status) => {
+      chrome.runtime.sendMessage({
+        type: "AI_VOCAL_STATUS",
+        tabId: tabId,
+        status: status
+      }).catch(() => {});
+    };
     const aiVocalNode = await aiVocal.init();
 
     const pitchProc = new PitchProcessor(audioCtx);
@@ -423,14 +431,21 @@ function stopAudio(tabId) {
 
 function updateParams(msg) {
   const { key, value, index, tabId, isShared, source } = msg;
+  const numTabId = Number(tabId);
+  const session = sessions.get(tabId) || sessions.get(numTabId) || (sessions.size === 1 ? sessions.values().next().value : null);
   if (isShared) {
-    sessions.forEach((session) => {
-      if (session.mode === "shared")
-        applyParamToSession(session, key, value, index, source);
+    let applied = false;
+    sessions.forEach((s) => {
+      if (s.mode === "shared") {
+        applyParamToSession(s, key, value, index, source);
+        applied = true;
+      }
     });
-  } else {
-    const session = sessions.get(tabId);
-    if (session) applyParamToSession(session, key, value, index, source);
+    if (!applied && session) {
+      applyParamToSession(session, key, value, index, source);
+    }
+  } else if (session) {
+    applyParamToSession(session, key, value, index, source);
   }
 }
 
