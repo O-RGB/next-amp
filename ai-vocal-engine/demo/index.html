@@ -402,7 +402,7 @@
   let isPlaying = false;
   let playheadSample = 0;
   let producerSample = 0;
-  const CHUNK_SIZE = 7680;
+  const CHUNK_SIZE = 8192;
   let currentMode = "bypass"; // worker generating mode: "bypass", "karaoke", "acapella"
   let requestedMode = "bypass"; // UI button clicked
   let currentAudibleSource = "orig"; // "orig" (decodedAudio) or "ai" (streamBuffer)

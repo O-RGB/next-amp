@@ -24,7 +24,7 @@ fi
 mkdir -p "${DIST_DIR}"
 mkdir -p "${EXT_MODULES_DIR}"
 
-EXPORTED_FUNCS="['_stft_init','_stft_reset','_stft_get_input_ptr','_stft_get_output_ptr','_stft_get_magnitudes_ptr','_stft_get_mask_ptr','_stft_forward','_stft_apply_mask','_stft_backward']"
+EXPORTED_FUNCS="['_stft_init','_stft_reset','_stft_get_input_ptr','_stft_get_output_ptr','_stft_get_magnitudes_ptr','_stft_get_mask_ptr','_stft_get_spec_real_ptr','_stft_get_spec_imag_ptr','_stft_forward','_stft_apply_mask','_stft_backward']"
 
 # 1. Build High-Performance SIMD128 WASM Module
 echo "1. Compiling stft_simd.wasm with Wasm SIMD128 & LTO..."
@@ -50,6 +50,8 @@ emcc -O3 -flto --no-entry \
 echo "3. Synchronizing artifacts to NextAmp Extension modules..."
 cp -v "${DIST_DIR}/stft_simd.wasm" "${EXT_MODULES_DIR}/"
 cp -v "${DIST_DIR}/stft_scalar.wasm" "${EXT_MODULES_DIR}/"
+cp -v "${DIST_DIR}/stft_simd.wasm" "${SCRIPT_DIR}/demo/"
+cp -v "${DIST_DIR}/stft_scalar.wasm" "${SCRIPT_DIR}/demo/"
 if [ -f "${SCRIPT_DIR}/src/runtime/vocal-separator.js" ]; then
     cp -v "${SCRIPT_DIR}/src/runtime/vocal-separator.js" "${EXT_MODULES_DIR}/"
 fi

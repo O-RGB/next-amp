@@ -127,13 +127,13 @@ void stft_init(void) {
         g_twiddle_sin[i] = (float)sin(angle);
     }
 
-    // For 75% overlap (N=2048, HOP=512), sum(hann) = 2.0.
-    // Analysis window = sqrt(hann) / sqrt(2.0), Synthesis window = sqrt(hann) / sqrt(2.0).
-    // The product win_analysis * win_synthesis = hann / 2.0, so sum(win_a * win_s) = 2.0 / 2.0 = 1.0000000!
+    // Pure Half-Sine window (Standard training spec for UVR MDX-Net models)
+    // Satisfies COLA (Constant Overlap-Add) with sum-of-squares = 2.0 at 75% overlap.
+    // Divided by sqrt(2.0), sum of squared analysis*synthesis window is exactly 1.000000!
     float norm_factor = 1.0f / sqrtf(2.0f);
     for (int i = 0; i < FFT_SIZE; i++) {
-        float hann = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * (float)i / (float)FFT_SIZE));
-        g_window[i] = sqrtf(hann) * norm_factor;
+        float sine = sinf((float)M_PI * ((float)i + 0.5f) / (float)FFT_SIZE);
+        g_window[i] = sine * norm_factor;
     }
 
     stft_reset();
@@ -167,6 +167,16 @@ float* stft_get_magnitudes_ptr(int ch) {
 float* stft_get_mask_ptr(int ch) {
     if (ch < 0 || ch > 1) return NULL;
     return g_mask[ch];
+}
+
+float* stft_get_spec_real_ptr(int ch) {
+    if (ch < 0 || ch > 1) return NULL;
+    return (float*)g_spec_real[ch];
+}
+
+float* stft_get_spec_imag_ptr(int ch) {
+    if (ch < 0 || ch > 1) return NULL;
+    return (float*)g_spec_imag[ch];
 }
 
 void stft_forward(int num_frames) {

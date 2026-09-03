@@ -3,6 +3,7 @@ import { AudioEffects } from "./audio-effects.js";
 import { DBManager } from "./db-manager.js";
 import { RTCServer } from "./modules/rtc-server.js";
 import { REMOTE_UI } from "./remote/remote-ui-bundle.js";
+import { AIVocalManager } from "./modules/ai-vocal/ai-vocal-manager.js";
 import "./assets/js/peerjs.min.js";
 
 const sessions = new Map();
@@ -125,6 +126,7 @@ const createDefaultParams = () => ({
   reverbDecay: 2.0,
   dynBoost: 40,
   dynLimit: 60,
+  vocalMode: "bypass", // "bypass", "karaoke", "acapella"
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -273,6 +275,11 @@ async function startAudio(
 
     const audioCtx = new AudioContext(ctxOptions);
     const source = audioCtx.createMediaStreamSource(stream);
+
+    // NextAmp AI Vocal Separator (UVR-MDX-Net WebGL)
+    const aiVocal = new AIVocalManager(audioCtx);
+    const aiVocalNode = await aiVocal.init();
+
     const pitchProc = new PitchProcessor(audioCtx);
     await pitchProc.init();
     const effects = new AudioEffects(audioCtx);
@@ -281,14 +288,22 @@ async function startAudio(
     const defaultP = createDefaultParams();
     defaultP.eqPreset = initialPreset;
 
-    // Initial graph: if pitch is 0, bypass stretchNode completely right away
+    // Initial graph:
+    // source -> [aiVocalNode] -> [stretchNode] -> effectsInput
     const isPitchBypassed = defaultP.pitch === 0;
     const stretchNode = pitchProc.getNode();
+
+    let prePitchNode = source;
+    if (aiVocalNode) {
+      source.connect(aiVocalNode);
+      prePitchNode = aiVocalNode;
+    }
+
     if (stretchNode && !isPitchBypassed) {
-      source.connect(stretchNode);
+      prePitchNode.connect(stretchNode);
       stretchNode.connect(effectsInput);
     } else {
-      source.connect(effectsInput);
+      prePitchNode.connect(effectsInput);
     }
 
     const analyser = audioCtx.createAnalyser();
@@ -307,6 +322,7 @@ async function startAudio(
       audioCtx,
       stream,
       source,        // needed for pitch bypass rewiring
+      aiVocal,       // AI Vocal Separator Manager
       effectsInput,  // the GainNode at the start of effects chain
       isPitchBypassed,
       pitchProc,
@@ -391,6 +407,9 @@ function stopAudio(tabId) {
   chrome.runtime
     .sendMessage({ type: "BG_RESET_DELAY", tabId: tabId })
     .catch(() => {});
+  if (session.aiVocal) {
+    try { session.aiVocal.destroy(); } catch (_) {}
+  }
   if (session.visualLoopId) clearTimeout(session.visualLoopId);
   if (session.stream)
     session.stream.getTracks().forEach((track) => track.stop());
@@ -479,27 +498,33 @@ function applyParamToSession(session, key, value, index, source) {
     case "pitch":
       if (pitchProc && session.effectsInput) {
         const stretchNode = pitchProc.getNode();
-        if (!stretchNode) break;
+        const inputNode = session.aiVocal && session.aiVocal.getNode() ? session.aiVocal.getNode() : session.source;
 
         if (value === 0) {
           // TRUE BYPASS: remove SignalsmithStretch from the render graph.
           // Browser stops scheduling the WASM worklet → CPU for pitch ≈ 0%.
           if (!session.isPitchBypassed) {
             session.isPitchBypassed = true;
-            try { session.source.disconnect(stretchNode); } catch (_) {}
+            try { inputNode.disconnect(stretchNode); } catch (_) {}
             try { stretchNode.disconnect(session.effectsInput); } catch (_) {}
-            try { session.source.connect(session.effectsInput); } catch (_) {}
+            try { inputNode.connect(session.effectsInput); } catch (_) {}
           }
         } else {
           // Restore path through pitch node
           if (session.isPitchBypassed) {
             session.isPitchBypassed = false;
-            try { session.source.disconnect(session.effectsInput); } catch (_) {}
-            try { session.source.connect(stretchNode); } catch (_) {}
+            try { inputNode.disconnect(session.effectsInput); } catch (_) {}
+            try { inputNode.connect(stretchNode); } catch (_) {}
             try { stretchNode.connect(session.effectsInput); } catch (_) {}
           }
           pitchProc.setPitch(value);
         }
+      }
+      break;
+    case "vocalMode":
+      params.vocalMode = value;
+      if (session.aiVocal) {
+        session.aiVocal.setMode(value);
       }
       break;
     case "volume":

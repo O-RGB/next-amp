@@ -5,7 +5,7 @@
  * Features 2-chunk lookahead spectraQueue for peak receptive field fidelity (Frame 31).
  */
 
-importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js");
+importScripts("../../assets/libs/js/tf.min.js");
 
 let wasmInstance = null;
 let exp = null;
@@ -81,7 +81,7 @@ async function init() {
     tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
     tf.env().set("PROD", true);
 
-    model = await tf.loadGraphModel("model/model.json");
+    model = await tf.loadGraphModel("../../model/model.json");
     resetState();
 
     const activeBackend = tf.getBackend();

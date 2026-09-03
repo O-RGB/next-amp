@@ -30,6 +30,12 @@
         "assets/libs/js/tailwindcss.js",
         "assets/libs/js/phosphor.js",
         "assets/libs/js/peerjs.min.js",
+        "assets/libs/js/tf.min.js",
+        "modules/ai-vocal/vocal-worklet.js",
+        "modules/ai-vocal/vocal-worker.js",
+        "modules/ai-vocal/stft_simd.wasm",
+        "model/model.json",
+        "model/group1-shard1of1.bin",
         "remote/dos-remote.html"
       ],
       "matches": ["<all_urls>"]

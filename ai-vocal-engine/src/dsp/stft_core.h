@@ -20,6 +20,8 @@ float* stft_get_input_ptr(int channel);
 float* stft_get_output_ptr(int channel);
 float* stft_get_magnitudes_ptr(int channel);
 float* stft_get_mask_ptr(int channel);
+float* stft_get_spec_real_ptr(int channel);
+float* stft_get_spec_imag_ptr(int channel);
 
 // Processing steps
 void stft_forward(int num_frames);

@@ -334,6 +334,18 @@
         </div>
       </div>
       <div class="p-1 flex flex-col gap-1 bg-[#222]">
+        <!-- AI VOCAL SEPARATOR STRIP -->
+        <div class="flex items-center justify-between px-1.5 py-0.5 bg-[#181818] border border-gray-700 rounded-none text-[8px] font-pixel">
+          <div class="flex items-center gap-1">
+            <span class="text-yellow-400 font-bold">AI VOCAL:</span>
+            <span id="txt-vocal-status" class="text-gray-400">ORIGINAL</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <button id="btn-vocal-bypass" class="win-btn h-3.5 px-1.5 text-[7px] font-bold pressed text-white" title="Original Track">ORIG</button>
+            <button id="btn-vocal-karaoke" class="win-btn h-3.5 px-1.5 text-[7px] font-bold text-gray-300" title="Remove Vocals (Karaoke)">KARAOKE</button>
+            <button id="btn-vocal-acapella" class="win-btn h-3.5 px-1.5 text-[7px] font-bold text-gray-300" title="Isolate Vocals (Acapella)">ACAPELLA</button>
+          </div>
+        </div>
         <div class="win-border-in p-1 flex gap-1 h-[76px] bg-[#1a1a1a]">
           <div
             class="col-span-3 bg-black border border-gray-700 relative cursor-pointer flex-1"
