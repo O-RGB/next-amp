@@ -7,7 +7,44 @@ class VideoZoomer {
     this.observedElements = new WeakSet();
 
     this.setupMessageListener();
+    this.setupStorageListener();
     this.setupPersistence();
+  }
+
+  setupStorageListener() {
+    // Listen to storage changes directly from background / offscreen
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local") return;
+      let changed = false;
+      if (changes.videoZoom !== undefined) {
+        this.scale = parseFloat(changes.videoZoom.newValue || 1.0);
+        changed = true;
+      }
+      if (changes.videoRotate !== undefined) {
+        this.rotate = parseFloat(changes.videoRotate.newValue || 0);
+        changed = true;
+      }
+      if (changes.videoPosX !== undefined) {
+        this.translateX = parseFloat(changes.videoPosX.newValue || 0);
+        changed = true;
+      }
+      if (changes.videoPosY !== undefined) {
+        this.translateY = parseFloat(changes.videoPosY.newValue || 0);
+        changed = true;
+      }
+      if (changed) this.applyZoom();
+    });
+
+    // Load initial values from storage on start
+    chrome.storage.local.get(["videoZoom", "videoRotate", "videoPosX", "videoPosY"], (res) => {
+      if (res) {
+        if (res.videoZoom !== undefined) this.scale = parseFloat(res.videoZoom);
+        if (res.videoRotate !== undefined) this.rotate = parseFloat(res.videoRotate);
+        if (res.videoPosX !== undefined) this.translateX = parseFloat(res.videoPosX);
+        if (res.videoPosY !== undefined) this.translateY = parseFloat(res.videoPosY);
+        if (this.shouldApply()) this.applyZoom();
+      }
+    });
   }
 
   setupMessageListener() {

@@ -3,10 +3,8 @@ import { $, $$, sendMessageWithRetry } from "./assets/js/utils.js";
 import { SessionManager } from "./modules/session-manager.js";
 import { SettingsModal } from "./modules/settings-modal.js";
 
-// const REMOTE_BASE_URL =
-//   "http://localhost:5500/next-amp-extension/remote/index.html";
-const REMOTE_BASE_URL =
-  "https://next-amp-player.vercel.app/next-amp-extension/remote/index.html";
+const ITTY_BITTY_HASH =
+  "NextAmp-DOS/data:text/html;charset=utf-8;bxze64,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";
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 const LABELS = [
   "60",
@@ -264,6 +262,62 @@ function setupStorageListener() {
   });
 }
 
+async function shortenUrl(longUrl) {
+  // 1. Try spoo.me (instant 302 redirect, no interstitial warning)
+  try {
+    const res = await fetch("https://spoo.me/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({ url: longUrl }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.short_url) {
+        return data.short_url.replace(/^http:\/\//, "https://");
+      }
+    }
+  } catch (e) {
+    console.warn("spoo.me failed, trying fallback:", e);
+  }
+
+  // 2. Fallback: da.gd
+  try {
+    const res = await fetch("https://da.gd/s", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ url: longUrl }),
+    });
+    if (res.ok) {
+      const short = (await res.text()).trim();
+      if (short.startsWith("http")) return short;
+    }
+  } catch (e) {
+    console.warn("da.gd fallback failed:", e);
+  }
+
+  // 3. If shortening fails, return raw URL
+  return longUrl;
+}
+
+async function buildMicroBootloaderUrl(hostId, token) {
+  const bootloader = `Loading...<script src=https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js></script><script>let H=${JSON.stringify(hostId)},T=${JSON.stringify(token)},p=new Peer(),c;p.on('open',()=>{c=p.connect(H,{reliable:1});c.on('open',()=>c.send({type:'HANDSHAKE',token:T,needUI:1}));c.on('data',d=>{if(d.type==='MOUNT_UI'){if(d.css)document.head.appendChild(document.createElement('style')).textContent=d.css;document.body.innerHTML=d.html;if(d.js)(new Function('conn','initState','H','T','peer',d.js))(c,d.state,H,T,p);}});});<\/script>`;
+
+  // Compress using native browser CompressionStream("deflate")
+  const stream = new Blob([bootloader]).stream().pipeThrough(new CompressionStream("deflate"));
+  const buf = await new Response(stream).arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const b64 = btoa(binary);
+
+  return `https://itty.bitty.site/#NextAmp/data:text/html;charset=utf-8;format=gz;base64,${b64}`;
+}
+
 async function setupRemoteUI() {
   const btnConnect = $("#btn-remote-connect");
   const qrOverlay = $("#qr-overlay");
@@ -288,15 +342,23 @@ async function setupRemoteUI() {
       });
 
       if (res && res.hostId && res.token) {
-        const fullUrl = `${REMOTE_BASE_URL}?id=${res.hostId}&token=${res.token}`;
+        const elId = $("#remote-id-display");
+        const elTok = $("#remote-token-display");
+        if (elId) elId.textContent = res.hostId;
+        if (elTok) elTok.textContent = res.token;
 
-        const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
-          fullUrl
-        )}`;
-
-        qrImage.src = qrApi;
-        urlDisplay.value = fullUrl;
+        urlDisplay.value = "Generating remote...";
         qrOverlay.classList.remove("hidden");
+
+        const fullUrl = await buildMicroBootloaderUrl(res.hostId, res.token);
+        urlDisplay.value = "Shortening link...";
+        const finalUrl = await shortenUrl(fullUrl);
+
+        urlDisplay.value = finalUrl;
+        const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
+          finalUrl
+        )}`;
+        qrImage.src = qrApi;
       } else {
         alert("Remote ID not ready. Please turn Audio Master ON first.");
       }
@@ -410,6 +472,11 @@ async function initCapture(mode) {
           sendParam("reverbDecay", parseFloat($("#adv-rev-decay").value));
           sendParam("dynBoost", parseFloat($("#adv-dyn-boost").value));
           sendParam("dynLimit", parseFloat($("#adv-dyn-limit").value));
+          sendParam("videoDelay", parseFloat($("#video-delay")?.value || 0));
+          sendParam("videoZoom", parseFloat($("#video-zoom")?.value || 1));
+          sendParam("videoRotate", parseFloat($("#video-rotate")?.value || 0));
+          sendParam("videoQuality", $("#video-quality")?.value || "max");
+          sendParam("isVideoMasterOn", isVideoMasterOn);
         })
         .catch((e) => console.warn(e));
     }
@@ -582,6 +649,7 @@ function setupListeners() {
     isVideoMasterOn = !isVideoMasterOn;
     updateMasterTogglesUI();
     sessionManager.setSetting({ isVideoMasterOn });
+    sendParam("isVideoMasterOn", isVideoMasterOn);
     if (isVideoMasterOn) {
       syncVideoTransform();
       const d = parseFloat($("#video-delay").value);
@@ -702,6 +770,7 @@ function setupListeners() {
     $("#video-delay").value = v;
     $("#num-video-delay").value = v.toFixed(2);
     sessionManager.setSetting({ videoDelay: v });
+    sendParam("videoDelay", v);
     if (currentTabId)
       chrome.tabs
         .sendMessage(currentTabId, { type: "SET_VIDEO_DELAY", value: v })
@@ -875,6 +944,10 @@ function syncVideoTransform() {
     videoPosX: posX,
     videoPosY: posY,
   });
+  sendParam("videoZoom", zoomVal);
+  sendParam("videoRotate", rotateVal);
+  sendParam("videoPosX", posX);
+  sendParam("videoPosY", posY);
 
   if (currentTabId)
     chrome.tabs

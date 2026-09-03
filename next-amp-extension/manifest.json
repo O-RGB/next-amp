@@ -6,8 +6,12 @@
     "tabCapture",
     "offscreen",
     "activeTab",
+    "tabs",
     "scripting",
     "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
@@ -25,7 +29,8 @@
         "assets/libs/mjs/SignalsmithStretch.mjs",
         "assets/libs/js/tailwindcss.js",
         "assets/libs/js/phosphor.js",
-        "assets/libs/js/peerjs.min.js"
+        "assets/libs/js/peerjs.min.js",
+        "remote/dos-remote.html"
       ],
       "matches": ["<all_urls>"]
     }
@@ -39,6 +44,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://*.peerjs.com wss://*.peerjs.com"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://*.peerjs.com wss://*.peerjs.com https://da.gd https://spoo.me; img-src 'self' data: https://api.qrserver.com"
   }
 }

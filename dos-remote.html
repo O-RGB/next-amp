@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>NEXTAMP DOS REMOTE</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Consolas,Monaco,"Lucida Console","Courier New",monospace;font-size:12px}
+body{background:#000;color:#00ff00;padding:8px;user-select:none;-webkit-user-select:none}
+.box{border:1px solid #00aa00;padding:6px;margin-bottom:8px;background:#050505}
+.title{background:#00aa00;color:#000;padding:2px 6px;font-weight:bold;margin-bottom:6px;display:flex;justify-content:space-between;letter-spacing:1px}
+.row{display:flex;justify-content:space-between;align-items:center;margin:5px 0}
+.label{min-width:55px;color:#00ff00;font-weight:bold}
+.val{min-width:45px;text-align:right;color:#ffff00}
+input[type=range]{accent-color:#00ff00;flex:1;height:22px;margin:0 6px;cursor:pointer}
+input[type=text],select{background:#000;color:#00ff00;border:1px solid #00aa00;padding:3px 5px;outline:none}
+select{cursor:pointer}
+button{background:#001100;color:#00ff00;border:1px solid #00aa00;padding:4px 8px;cursor:pointer;font-weight:bold}
+button:active,button.active{background:#00ff00;color:#000}
+.btn-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px}
+.btn-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px}
+#status{color:#ffaa00}
+#status.online{color:#00ff00}
+#status.error{color:#ff3333}
+</style>
+</head>
+<body>
+
+<div class="box">
+  <div class="title">
+    <span>C:\NEXTAMP\REMOTE.COM</span>
+    <span id="status">OFFLINE</span>
+  </div>
+  <div class="row" style="gap:4px">
+    <span class="label">ID:</span>
+    <input type="text" id="hid" placeholder="Host ID" style="flex:1">
+    <span class="label" style="min-width:35px">KEY:</span>
+    <input type="text" id="tok" placeholder="Token" style="width:70px">
+    <button onclick="doConnect()">LINK</button>
+  </div>
+</div>
+
+<div class="box">
+  <div class="title">AUDIO CONTROLLER</div>
+  <div class="row">
+    <span class="label">VOL</span>
+    <input type="range" id="vol" min="0" max="1" step="0.05" value="1" oninput="snd('volume',+this.value)">
+    <span class="val" id="t-vol">100%</span>
+  </div>
+  <div class="row">
+    <span class="label">BAL</span>
+    <input type="range" id="pan" min="-1" max="1" step="0.1" value="0" oninput="snd('pan',+this.value)">
+    <span class="val" id="t-pan">C</span>
+  </div>
+  <div class="row">
+    <span class="label">PITCH</span>
+    <input type="range" id="pitch" min="-12" max="12" step="1" value="0" oninput="snd('pitch',+this.value)">
+    <span class="val" id="t-pitch">0</span>
+  </div>
+  <div class="row">
+    <span class="label">REVERB</span>
+    <input type="range" id="verb" min="0" max="2" step="0.1" value="0" oninput="snd('reverb',+this.value)">
+    <span class="val" id="t-verb">0.0</span>
+  </div>
+  <div class="btn-grid">
+    <button id="btn-mute" onclick="toggleMute()">MUTE</button>
+    <button id="btn-eq" onclick="toggleEQ()">EQ:ON</button>
+    <button id="btn-dyn" onclick="toggleDyn()">NORM</button>
+    <button onclick="resetPitch()">P=0</button>
+  </div>
+</div>
+
+<div class="box">
+  <div class="title">VIDEO CONTROLLER</div>
+  <div class="row">
+    <span class="label">DELAY</span>
+    <input type="range" id="delay" min="0" max="5" step="0.05" value="0" oninput="snd('videoDelay',+this.value)">
+    <span class="val" id="t-delay">0.00s</span>
+  </div>
+  <div class="row">
+    <span class="label">ZOOM</span>
+    <input type="range" id="zoom" min="1" max="3" step="0.1" value="1" oninput="snd('videoZoom',+this.value)">
+    <span class="val" id="t-zoom">1.0x</span>
+  </div>
+  <div class="row">
+    <span class="label">QUAL</span>
+    <select id="v-qual" style="flex:1" onchange="snd('videoQuality',this.value)">
+      <option value="max">MAX (Original)</option>
+      <option value="high">1080P</option>
+      <option value="mid">720P</option>
+      <option value="low">360P</option>
+    </select>
+  </div>
+  <div class="btn-grid-3">
+    <button onclick="rotateVideo()">ROTATE</button>
+    <button id="btn-vid" onclick="toggleVideo()">VID:ON</button>
+    <button onclick="resetVideo()">RST VID</button>
+  </div>
+</div>
+
+<script>
+let G = id => document.getElementById(id);
+let peer = null, conn = null, state = {}, isProgrammatic = false;
+
+function getParam(key) {
+  let val = new URLSearchParams(window.location.search).get(key);
+  if (!val) {
+    try { val = new URLSearchParams(window.parent.location.search).get(key); } catch (_) {}
+  }
+  if (!val) {
+    try {
+      const h = window.location.hash || window.parent.location.hash;
+      const m = h.match(new RegExp('[?&#]' + key + '=([^&]+)'));
+      if (m) val = decodeURIComponent(m[1]);
+    } catch (_) {}
+  }
+  return val;
+}
+
+let initId = getParam("id") || localStorage.getItem("na_hid") || "";
+let initTok = getParam("token") || localStorage.getItem("na_tok") || "";
+G("hid").value = initId;
+G("tok").value = initTok;
+if (initId && initTok) {
+  setTimeout(doConnect, 300);
+}
+
+function setStatus(text, cls) {
+  const el = G("status");
+  el.textContent = text;
+  el.className = cls || "";
+}
+
+function doConnect() {
+  const hid = G("hid").value.trim();
+  const tok = G("tok").value.trim();
+  if (!hid || !tok) {
+    setStatus("NO ID/KEY", "error");
+    return;
+  }
+  localStorage.setItem("na_hid", hid);
+  localStorage.setItem("na_tok", tok);
+
+  setStatus("LINKING...", "");
+  if (conn) { try { conn.close(); } catch (_) {} }
+  if (peer) { try { peer.destroy(); } catch (_) {} }
+
+  peer = new Peer(null, { debug: 1 });
+  peer.on("open", () => {
+    conn = peer.connect(hid, { reliable: true });
+    conn.on("open", () => {
+      setStatus("AUTH...", "");
+      conn.send({ type: "HANDSHAKE", token: tok });
+    });
+    conn.on("data", data => {
+      if (data.type === "SYNC_STATE") {
+        setStatus("ONLINE", "online");
+        state = data.state || {};
+        applyFullState(state);
+      } else if (data.type === "UPDATE_PARAM") {
+        state[data.key] = data.value;
+        syncKey(data.key, data.value);
+      }
+    });
+    conn.on("close", () => {
+      setStatus("DISCONNECTED", "error");
+    });
+    conn.on("error", err => {
+      console.error(err);
+      setStatus("CONN ERR", "error");
+    });
+  });
+  peer.on("error", err => {
+    console.error(err);
+    setStatus("PEER ERR", "error");
+  });
+}
+
+function snd(key, value, index = null) {
+  if (isProgrammatic) return;
+  state[key] = value;
+  syncKey(key, value);
+  if (conn && conn.open) {
+    conn.send({ type: "SET_PARAM", key, value, index });
+  }
+}
+
+function toggleMute() {
+  const now = state.isAudioMasterOn ?? true;
+  snd("isAudioMasterOn", !now);
+}
+
+function toggleEQ() {
+  const now = state.isEqOn ?? true;
+  snd("isEqOn", !now);
+}
+
+function toggleDyn() {
+  const now = state.normalize ?? false;
+  snd("normalize", !now);
+}
+
+function resetPitch() {
+  G("pitch").value = 0;
+  G("t-pitch").textContent = "0";
+  snd("pitch", 0);
+}
+
+function rotateVideo() {
+  const rots = [0, 90, 180, 270];
+  const cur = state.videoRotate || 0;
+  const next = rots[(rots.indexOf(cur) + 1) % 4];
+  snd("videoRotate", next);
+}
+
+function toggleVideo() {
+  const now = state.isVideoMasterOn ?? true;
+  snd("isVideoMasterOn", !now);
+}
+
+function resetVideo() {
+  snd("videoZoom", 1);
+  snd("videoRotate", 0);
+  snd("videoDelay", 0);
+}
+
+function applyFullState(s) {
+  isProgrammatic = true;
+  for (let k in s) syncKey(k, s[k]);
+  isProgrammatic = false;
+}
+
+function syncKey(k, v) {
+  if (k === "volume") {
+    G("vol").value = v;
+    G("t-vol").textContent = Math.round(v * 100) + "%";
+  } else if (k === "pan") {
+    G("pan").value = v;
+    G("t-pan").textContent = v > 0 ? "R" + v : v < 0 ? "L" + Math.abs(v) : "C";
+  } else if (k === "pitch") {
+    G("pitch").value = v;
+    G("t-pitch").textContent = (v > 0 ? "+" : "") + v;
+  } else if (k === "reverb") {
+    G("verb").value = v;
+    G("t-verb").textContent = (+v).toFixed(1);
+  } else if (k === "videoDelay") {
+    G("delay").value = v;
+    G("t-delay").textContent = (+v).toFixed(2) + "s";
+  } else if (k === "videoZoom") {
+    G("zoom").value = v;
+    G("t-zoom").textContent = (+v).toFixed(1) + "x";
+  } else if (k === "videoQuality") {
+    G("v-qual").value = v;
+  } else if (k === "isAudioMasterOn") {
+    G("btn-mute").className = v ? "" : "active";
+    G("btn-mute").textContent = v ? "MUTE" : "MUTED";
+  } else if (k === "isEqOn") {
+    G("btn-eq").className = v ? "active" : "";
+    G("btn-eq").textContent = v ? "EQ:ON" : "EQ:OFF";
+  } else if (k === "normalize") {
+    G("btn-dyn").className = v ? "active" : "";
+    G("btn-dyn").textContent = v ? "NORM:ON" : "NORM";
+  } else if (k === "isVideoMasterOn") {
+    G("btn-vid").className = v ? "active" : "";
+    G("btn-vid").textContent = v ? "VID:ON" : "VID:OFF";
+  }
+}
+</script>
+</body>
+</html>

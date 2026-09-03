@@ -57,6 +57,30 @@ class Monitor {
       return true;
     });
 
+    // Directly listen to storage changes from background / offscreen
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local") return;
+      if (changes.videoDelay !== undefined) {
+        const newDelay = parseFloat(changes.videoDelay.newValue || 0) * 1000;
+        const wasDisabled = this.delay <= 0;
+        this.delay = newDelay;
+        if (this.delay > 0) {
+          if (wasDisabled) {
+            this.setupVideoListeners();
+            document.querySelectorAll("video").forEach((v) => this.waitForVideoFrameRefresh(v));
+          } else {
+            this.updateDelays();
+          }
+        } else {
+          this.updateDelays();
+        }
+      }
+      if (changes.videoQuality !== undefined) {
+        this.quality = changes.videoQuality.newValue;
+        this.delayedVideos.forEach((dv) => dv.updateQuality(this.quality));
+      }
+    });
+
     this.setupVideoListeners();
   }
 

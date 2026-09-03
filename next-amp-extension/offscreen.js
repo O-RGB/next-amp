@@ -2,6 +2,7 @@ import { PitchProcessor } from "./pitch-processor.js";
 import { AudioEffects } from "./audio-effects.js";
 import { DBManager } from "./db-manager.js";
 import { RTCServer } from "./modules/rtc-server.js";
+import { REMOTE_UI } from "./remote/remote-ui-bundle.js";
 import "./assets/js/peerjs.min.js";
 
 const sessions = new Map();
@@ -24,7 +25,7 @@ function initHostPeer() {
   hostPeer.on("connection", (conn) => {
     conn.on("data", (data) => {
       if (data.type === "HANDSHAKE" && data.token) {
-        mapConnectionToSession(conn, data.token);
+        mapConnectionToSession(conn, data.token, data.needUI);
       } else {
         handleRemoteCommand(conn, data);
       }
@@ -34,13 +35,27 @@ function initHostPeer() {
   });
 }
 
-function mapConnectionToSession(conn, token) {
+function mapConnectionToSession(conn, token, needUI = false) {
   for (const [tabId, session] of sessions.entries()) {
     if (session.remoteToken === token) {
       if (!session.remoteConns) session.remoteConns = [];
       session.remoteConns.push(conn);
       conn._targetTabId = tabId;
-      syncStateToRemote(session, conn);
+
+      if (needUI) {
+        const currentEq = session.effects
+          ? session.effects.getEQNodes().map((n) => n.gain.value)
+          : session.params.eq;
+        conn.send({
+          type: "MOUNT_UI",
+          css: REMOTE_UI.css,
+          html: REMOTE_UI.html,
+          js: REMOTE_UI.js,
+          state: { ...session.params, eq: currentEq },
+        });
+      } else {
+        syncStateToRemote(session, conn);
+      }
       return;
     }
   }
@@ -71,6 +86,8 @@ function handleRemoteCommand(conn, data) {
   } else if (data.type === "GET_STATE") {
     const session = sessions.get(tabId);
     if (session) syncStateToRemote(session, conn);
+  } else if (data.type === "PING") {
+    conn.send({ type: "PONG", ts: data.ts });
   }
 }
 
@@ -415,10 +432,16 @@ function applyParamToSession(session, key, value, index, source) {
   const tId = getKeyByValue(sessions, session);
 
   if (key === "videoZoom" || key === "videoRotate") {
+    try {
+      chrome.storage.local.set({
+        videoZoom: params.videoZoom,
+        videoRotate: params.videoRotate,
+      });
+    } catch (_) {}
     if (tId && params.isVideoMasterOn) {
       chrome.runtime.sendMessage({
         type: "BG_RELAY_TO_TAB",
-        tabId: tId,
+        tabId: Number(tId),
         payload: {
           type: "SET_VIDEO_ZOOM",
           scale: params.videoZoom,
@@ -428,18 +451,24 @@ function applyParamToSession(session, key, value, index, source) {
       });
     }
   } else if (key === "videoDelay") {
+    try {
+      chrome.storage.local.set({ videoDelay: params.videoDelay });
+    } catch (_) {}
     if (tId && params.isVideoMasterOn) {
       chrome.runtime.sendMessage({
         type: "BG_RELAY_TO_TAB",
-        tabId: tId,
+        tabId: Number(tId),
         payload: { type: "SET_VIDEO_DELAY", value: params.videoDelay },
       });
     }
   } else if (key === "videoQuality") {
+    try {
+      chrome.storage.local.set({ videoQuality: params.videoQuality });
+    } catch (_) {}
     if (tId) {
       chrome.runtime.sendMessage({
         type: "BG_RELAY_TO_TAB",
-        tabId: tId,
+        tabId: Number(tId),
         payload: { type: "SET_VIDEO_QUALITY", value: params.videoQuality },
       });
     }
@@ -532,12 +561,21 @@ function applyParamToSession(session, key, value, index, source) {
       break;
     // Video On/Off = Reset Transform / Restore
     case "isVideoMasterOn":
+      try { chrome.storage.local.set({ isVideoMasterOn: !!value }); } catch (_) {}
       if (tId) {
+        const targetTab = Number(tId);
         if (value) {
           // Restore Values
+          try {
+            chrome.storage.local.set({
+              videoZoom: params.videoZoom,
+              videoRotate: params.videoRotate,
+              videoDelay: params.videoDelay,
+            });
+          } catch (_) {}
           chrome.runtime.sendMessage({
             type: "BG_RELAY_TO_TAB",
-            tabId: tId,
+            tabId: targetTab,
             payload: {
               type: "SET_VIDEO_ZOOM",
               scale: params.videoZoom,
@@ -547,14 +585,21 @@ function applyParamToSession(session, key, value, index, source) {
           });
           chrome.runtime.sendMessage({
             type: "BG_RELAY_TO_TAB",
-            tabId: tId,
+            tabId: targetTab,
             payload: { type: "SET_VIDEO_DELAY", value: params.videoDelay },
           });
         } else {
           // Reset but don't clear params
+          try {
+            chrome.storage.local.set({
+              videoZoom: 1,
+              videoRotate: 0,
+              videoDelay: 0,
+            });
+          } catch (_) {}
           chrome.runtime.sendMessage({
             type: "BG_RELAY_TO_TAB",
-            tabId: tId,
+            tabId: targetTab,
             payload: {
               type: "SET_VIDEO_ZOOM",
               scale: 1,
@@ -564,7 +609,7 @@ function applyParamToSession(session, key, value, index, source) {
           });
           chrome.runtime.sendMessage({
             type: "BG_RELAY_TO_TAB",
-            tabId: tId,
+            tabId: targetTab,
             payload: { type: "SET_VIDEO_DELAY", value: 0 },
           });
         }
