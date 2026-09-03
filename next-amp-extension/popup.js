@@ -153,6 +153,9 @@ async function finalizeInitialization() {
         isNormalizeOn = sharedParams.normalize;
         updateNormalizeButton();
       }
+      if (sharedParams.vocalMode) {
+        updateVocalUI(sharedParams.vocalMode);
+      }
 
       if (sharedParams.reverbTime)
         $("#adv-rev-time").value = sharedParams.reverbTime;
@@ -495,6 +498,34 @@ chrome.runtime.onMessage.addListener((msg) => {
   } else if (msg.type === "RECORDING_SAVED") handleRecordingSaved();
 });
 
+function updateVocalUI(mode) {
+  const btnBypass = $("#btn-vocal-bypass");
+  const btnKaraoke = $("#btn-vocal-karaoke");
+  const btnAcapella = $("#btn-vocal-acapella");
+  const txtStatus = $("#txt-vocal-status");
+
+  if (!btnBypass || !btnKaraoke || !btnAcapella) return;
+
+  [btnBypass, btnKaraoke, btnAcapella].forEach((btn) => {
+    btn.classList.remove("pressed", "text-white");
+    btn.classList.add("text-gray-300");
+  });
+
+  if (mode === "karaoke") {
+    btnKaraoke.classList.add("pressed", "text-white");
+    btnKaraoke.classList.remove("text-gray-300");
+    if (txtStatus) txtStatus.textContent = "KARAOKE (CUT)";
+  } else if (mode === "acapella") {
+    btnAcapella.classList.add("pressed", "text-white");
+    btnAcapella.classList.remove("text-gray-300");
+    if (txtStatus) txtStatus.textContent = "ACAPELLA (ISOLATE)";
+  } else {
+    btnBypass.classList.add("pressed", "text-white");
+    btnBypass.classList.remove("text-gray-300");
+    if (txtStatus) txtStatus.textContent = "ORIGINAL";
+  }
+}
+
 function updateUIFromExternal(key, value, index) {
   if (key === "volume") {
     updateSlider(
@@ -554,6 +585,8 @@ function updateUIFromExternal(key, value, index) {
   } else if (key === "normalize") {
     isNormalizeOn = value;
     updateNormalizeButton();
+  } else if (key === "vocalMode") {
+    updateVocalUI(value);
   }
 }
 function sendParam(key, value, index = null) {
@@ -721,6 +754,20 @@ function setupListeners() {
     isNormalizeOn = !isNormalizeOn;
     updateNormalizeButton();
     sendParam("normalize", isNormalizeOn);
+  });
+
+  // --- AI VOCAL SEPARATOR CONTROLS ---
+  $("#btn-vocal-bypass")?.addEventListener("click", () => {
+    sendParam("vocalMode", "bypass");
+    updateVocalUI("bypass");
+  });
+  $("#btn-vocal-karaoke")?.addEventListener("click", () => {
+    sendParam("vocalMode", "karaoke");
+    updateVocalUI("karaoke");
+  });
+  $("#btn-vocal-acapella")?.addEventListener("click", () => {
+    sendParam("vocalMode", "acapella");
+    updateVocalUI("acapella");
   });
 
   $("#eq-preset").addEventListener("change", (e) => {
@@ -1162,6 +1209,9 @@ function loadAudioState(state) {
   }
   isNormalizeOn = state.normalize || false;
   updateNormalizeButton();
+  if (state.vocalMode) {
+    updateVocalUI(state.vocalMode);
+  }
 
   if (state.eq && state.eq.length > 0) {
     currentEqValues = state.eq;

@@ -52,12 +52,7 @@ cp -v "${DIST_DIR}/stft_simd.wasm" "${EXT_MODULES_DIR}/"
 cp -v "${DIST_DIR}/stft_scalar.wasm" "${EXT_MODULES_DIR}/"
 cp -v "${DIST_DIR}/stft_simd.wasm" "${SCRIPT_DIR}/demo/"
 cp -v "${DIST_DIR}/stft_scalar.wasm" "${SCRIPT_DIR}/demo/"
-if [ -f "${SCRIPT_DIR}/src/runtime/vocal-separator.js" ]; then
-    cp -v "${SCRIPT_DIR}/src/runtime/vocal-separator.js" "${EXT_MODULES_DIR}/"
-fi
-if [ -f "${SCRIPT_DIR}/src/runtime/vocal-processor.worklet.js" ]; then
-    cp -v "${SCRIPT_DIR}/src/runtime/vocal-processor.worklet.js" "${EXT_MODULES_DIR}/"
-fi
+
 
 echo "============================================================"
 echo "✓ BUILD SUCCESSFUL!"
