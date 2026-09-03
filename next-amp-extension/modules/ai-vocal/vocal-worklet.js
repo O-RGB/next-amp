@@ -35,16 +35,16 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (e) => {
       const data = e.data;
       if (data.type === "SET_MODE") {
-        this.targetMode = data.mode;
-        if (data.mode === "bypass") {
-          // Crossfade smoothly back to original
-        } else {
-          // Clear old mode output chunks so no old audio bleeds
-          this.outQueueL = [];
-          this.outQueueR = [];
-          this.currChunkL = null;
-          this.currChunkR = null;
-          this.currChunkPos = 0;
+        if (this.targetMode !== data.mode) {
+          this.targetMode = data.mode;
+          if (data.mode !== "bypass") {
+            // Clear old mode output chunks so no old audio bleeds
+            this.outQueueL = [];
+            this.outQueueR = [];
+            this.currChunkL = null;
+            this.currChunkR = null;
+            this.currChunkPos = 0;
+          }
         }
       } else if (data.type === "CHUNK_PROCESSED") {
         this.outQueueL.push(new Float32Array(data.outL));

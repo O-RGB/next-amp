@@ -34,6 +34,7 @@
         "modules/ai-vocal/vocal-worklet.js",
         "modules/ai-vocal/vocal-worker.js",
         "modules/ai-vocal/stft_simd.wasm",
+        "modules/ai-vocal/stft_scalar.wasm",
         "model/model.json",
         "model/group1-shard1of1.bin",
         "remote/dos-remote.html"

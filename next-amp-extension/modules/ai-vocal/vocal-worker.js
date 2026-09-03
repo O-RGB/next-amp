@@ -99,8 +99,22 @@ async function init(wasmUrl, modelUrl) {
       }
     }
 
+    // 3. Register custom IO handler for chrome-extension:// scheme
+    if (tf.io && tf.io.registerLoadRouter) {
+      tf.io.registerLoadRouter((url) => {
+        if (typeof url === "string" && (url.startsWith("chrome-extension://") || url.startsWith("./") || url.startsWith("../"))) {
+          return tf.io.browserHTTPRequest(url);
+        }
+        return null;
+      });
+    }
+
     const targetModelUrl = modelUrl || "../../model/model.json";
-    model = await tf.loadGraphModel(targetModelUrl);
+    const ioHandler = (tf.io && tf.io.browserHTTPRequest) 
+      ? tf.io.browserHTTPRequest(targetModelUrl) 
+      : targetModelUrl;
+
+    model = await tf.loadGraphModel(ioHandler);
     resetState();
 
     console.log(`[NextAmp AI] Initialized successfully with backend: ${activeBackend.toUpperCase()}`);
