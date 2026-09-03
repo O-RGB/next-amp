@@ -224,10 +224,10 @@ input[type="range"].h-slider:active::-webkit-slider-thumb {
   box-shadow: 0 0 8px #00ff00;
 }
 
-/* 10-BAND EQ */
+/* 10-BAND EQ (AUTO-FIT NO SCROLL) */
 .eq-scroll-wrapper {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  width: 100%;
   padding: 4px 0 2px;
 }
 
@@ -235,32 +235,37 @@ input[type="range"].h-slider:active::-webkit-slider-thumb {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding: 8px 8px 6px;
-  height: 146px;
-  min-width: 420px;
+  padding: 6px 3px 4px;
+  height: 140px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   background: #050505;
   border: 1px solid #000;
   border-right: 1px solid #444;
   border-bottom: 1px solid #444;
-  gap: 4px;
+  gap: 1px;
 }
 
 .eq-col {
   position: relative;
   height: 100%;
-  flex: 1;
-  min-width: 36px;
+  flex: 1 1 0;
+  min-width: 0;
+  width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  box-sizing: border-box;
 }
 
 .eq-bar-wrapper {
-  width: 8px;
+  width: 6px;
+  max-width: 8px;
   flex: 1;
   position: relative;
   margin: 0 auto;
-  border-radius: 2px;
+  border-radius: 1px;
   background: linear-gradient(
     to top,
     var(--eq-col-1) 0%,
@@ -278,13 +283,14 @@ input[type="range"].h-slider:active::-webkit-slider-thumb {
   background: #222;
   pointer-events: none;
   transition: height 0.05s linear;
-  border-radius: 2px 2px 0 0;
+  border-radius: 1px 1px 0 0;
   z-index: 10;
 }
 
 .eq-thumb {
-  height: 12px;
-  width: 22px;
+  height: 10px;
+  width: 16px;
+  max-width: 90%;
   background: #c0c0c0;
   border-top: 1.5px solid #fff;
   border-left: 1.5px solid #fff;
@@ -295,25 +301,31 @@ input[type="range"].h-slider:active::-webkit-slider-thumb {
   transform: translateX(-50%);
   pointer-events: none;
   z-index: 40;
-  margin-bottom: -6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  margin-bottom: -5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
 .eq-label {
   font-family: "Chakra Petch", sans-serif;
-  font-size: 9px;
+  font-size: 8px;
   color: #888;
   text-align: center;
   width: 100%;
-  margin-top: 5px;
+  margin-top: 4px;
   cursor: default;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: -0.3px;
 }
 
 .eq-val-badge {
-  font-size: 9px;
+  font-size: 8px;
   font-family: monospace;
   color: #ffcc00;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
 }
 
 input[type="range"].v-input {
@@ -768,7 +780,7 @@ function snd(key, value, index = null) {
 }
 
 // 10-BAND EQ FREQUENCIES
-const FREQS = ["32Hz","64Hz","125Hz","250Hz","500Hz","1kHz","2kHz","4kHz","8kHz","16kHz"];
+const FREQS = ["32","64","125","250","500","1k","2k","4k","8k","16k"];
 function setupEqBands() {
   const container = G("eq-container");
   if (!container) return;
