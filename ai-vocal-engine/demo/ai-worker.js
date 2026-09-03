@@ -79,20 +79,10 @@ async function init() {
       ]
     };
 
-    // 2. Ultra-Lightweight Vectorized WebGL Pipeline
+    // 2. Rock-Solid Stable WebGL Backend (Bit-for-bit identical to ai remove)
     await tf.setBackend("webgl");
     tf.env().set("WEBGL_CPU_FORWARD", false);
     tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
-    tf.env().set("WEBGL_PACK", true);
-    tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
-    tf.env().set("WEBGL_PACK_ARRAY_OPERATIONS", true);
-    tf.env().set("WEBGL_PACK_IMAGE_OPERATIONS", true);
-    tf.env().set("WEBGL_PACK_NORMALIZATION", true);
-    tf.env().set("WEBGL_PACK_UNARY_OPERATIONS", true);
-    tf.env().set("WEBGL_PACK_CLIP", true);
-    tf.env().set("WEBGL_PACK_DEPTHWISECONV", true);
-    tf.env().set("WEBGL_PACK_CONV2DTRANSPOSE", true);
-    tf.env().set("WEBGL_LAZILY_UNPACK", true);
     tf.env().set("PROD", true);
 
     model = await tf.loadGraphModel("model/model.json");
@@ -122,12 +112,12 @@ self.onmessage = async (e) => {
   } else if (data.type === "RESET") {
     resetState();
   } else if (data.type === "PROCESS_CHUNK") {
-    const { chunkIndex, rawL, rawR, mode, strength } = data;
-    await processChunk(chunkIndex, rawL, rawR, mode, strength || 1.0);
+    const { chunkIndex, rawL, rawR, mode, strength, generation } = data;
+    await processChunk(chunkIndex, rawL, rawR, mode, strength || 1.0, generation);
   }
 };
 
-async function processChunk(chunkIndex, rawL, rawR, mode, strength = 1.0) {
+async function processChunk(chunkIndex, rawL, rawR, mode, strength = 1.0, generation = 0) {
   if (!io || !model) return;
 
   const tStart = performance.now();
@@ -205,6 +195,7 @@ async function processChunk(chunkIndex, rawL, rawR, mode, strength = 1.0) {
     {
       type: "CHUNK_PROCESSED",
       chunkIndex,
+      generation,
       outL,
       outR,
       latency

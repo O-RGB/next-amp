@@ -402,12 +402,31 @@
   let isPlaying = false;
   let playheadSample = 0;
   let producerSample = 0;
-  let currentMode = "bypass"; // "bypass", "karaoke", "acapella"
+  const CHUNK_SIZE = 7680;
+  let currentMode = "bypass"; // worker generating mode: "bypass", "karaoke", "acapella"
+  let requestedMode = "bypass"; // UI button clicked
+  let currentAudibleSource = "orig"; // "orig" (decodedAudio) or "ai" (streamBuffer)
+  let isAiTargetReady = false; // true when AI has generated >= 0.8s ahead of current playhead
   let currentStrength = 1.0;
   let isWorkerBusy = false;
   let isWorkerReady = false;
+  let currentGeneration = 0;
 
-  const CHUNK_SIZE = 7680;
+  // Studio Equal-Power Crossfade Engine (46.4ms)
+  const FADE_LEN = 2048;
+  const fadeState = {
+    active: false,
+    dir: "to_ai", // "to_ai" or "to_orig"
+    progress: 0
+  };
+
+  function startCrossfade(dir) {
+    if (!decodedAudio) return;
+    fadeState.active = true;
+    fadeState.dir = dir;
+    fadeState.progress = 0;
+  }
+
   const LOOKAHEAD_TARGET_SEC = 2.5; // Maintain 2.5 seconds cushion in background
 
   // 1. Initialize Web Worker
@@ -465,8 +484,13 @@
     // Create stream buffer matching full audio length
     streamBuffer = audioCtx.createBuffer(2, decodedAudio.length, decodedAudio.sampleRate);
     
+    currentGeneration++;
     playheadSample = 0;
+    fetchSample = 0;
     producerSample = 0;
+    isAiTargetReady = false;
+    currentAudibleSource = "orig";
+    isRefilling = true;
     isWorkerBusy = false;
     if (worker) worker.postMessage({ type: "RESET" });
 
@@ -491,8 +515,11 @@
     const sampleRate = decodedAudio.sampleRate;
     const bufferedAheadSec = (producerSample - playheadSample) / sampleRate;
 
-    // Hysteresis State Machine:
-    if (bufferedAheadSec >= HIGH_WATERMARK_SEC) {
+    // Buffer management:
+    // When waiting to engage AI, ALWAYS refill until AI audio is ready!
+    if (!isAiTargetReady && requestedMode !== "bypass") {
+      isRefilling = true;
+    } else if (bufferedAheadSec >= HIGH_WATERMARK_SEC) {
       isRefilling = false; // Cushion is full -> AI sleeps!
     } else if (bufferedAheadSec <= LOW_WATERMARK_SEC || isBuffering) {
       isRefilling = true;  // Cushion low -> Wake up and burst!
@@ -500,27 +527,27 @@
 
     // Update HUD
     const hudBuf = document.getElementById("hud-buffer");
-    if (currentMode === "bypass") {
-      hudBuf.textContent = "Bypassed (Original)";
+    if (requestedMode === "bypass") {
+      hudBuf.textContent = "Original (Bypass)";
       hudBuf.style.color = "#38bdf8";
-    } else if (isBuffering) {
-      hudBuf.textContent = `Buffering: ${Math.max(0, bufferedAheadSec).toFixed(1)}s / ${INITIAL_CUSHION_SEC}s`;
+    } else if (!isAiTargetReady) {
+      hudBuf.textContent = `Preparing AI: ${Math.max(0, bufferedAheadSec).toFixed(1)}s / 0.8s`;
       hudBuf.style.color = "#ffb703";
-      setStatus(`⏳ Pre-calculating AI cushion (${Math.max(0, bufferedAheadSec).toFixed(1)}s)...`);
+      setStatus("▶ Playing Original (Pre-calculating AI cushion...)");
     } else if (!isRefilling) {
       hudBuf.textContent = `${Math.max(0, bufferedAheadSec).toFixed(1)}s (AI Deep Sleep 💤)`;
       hudBuf.style.color = "#00ff66";
-      setStatus("▶ Playing (AI Sleeping - Zero CPU / Zero GPU)");
+      setStatus("▶ Playing AI (Zero CPU / Zero GPU)");
     } else {
       hudBuf.textContent = `${Math.max(0, bufferedAheadSec).toFixed(1)}s (Refilling ⚡)`;
       hudBuf.style.color = "#38bdf8";
-      setStatus("▶ Playing (Fast burst refill)");
+      setStatus("▶ Playing AI (Fast burst refill)");
     }
 
-    if (currentMode === "bypass") return;
+    if (requestedMode === "bypass") return;
 
-    // Only dispatch when in refilling state or initial buffering
-    if (producerSample < totalSamples && (isRefilling || isBuffering)) {
+    // Only dispatch when in refilling state, initial buffering, or waiting for AI target
+    if (producerSample < totalSamples && (isRefilling || isBuffering || !isAiTargetReady)) {
       isWorkerBusy = true;
       const rawL = new Float32Array(CHUNK_SIZE);
       const rawR = new Float32Array(CHUNK_SIZE);
@@ -536,9 +563,10 @@
         {
           type: "PROCESS_CHUNK",
           chunkIndex: producerSample,
+          generation: currentGeneration,
           rawL,
           rawR,
-          mode: currentMode,
+          mode: requestedMode,
           strength: currentStrength
         },
         [rawL.buffer, rawR.buffer]
@@ -548,20 +576,29 @@
 
   function handleChunkProcessed(data) {
     isWorkerBusy = false;
-    const { chunkIndex, outL, outR, latency } = data;
+    const { chunkIndex, generation, outL, outR, latency } = data;
+
+    // Reject stale in-flight chunks from prior mode or seek!
+    if (generation !== currentGeneration) {
+      pumpWorker();
+      return;
+    }
 
     if (streamBuffer) {
       streamBuffer.getChannelData(0).set(outL, chunkIndex);
       streamBuffer.getChannelData(1).set(outR, chunkIndex);
+      producerSample = chunkIndex + outL.length;
     }
 
-    producerSample = chunkIndex + outL.length;
     document.getElementById("hud-latency").textContent = latency.toFixed(1) + " ms";
 
-    if (decodedAudio) {
-      const bufferedAheadSec = (producerSample - playheadSample) / decodedAudio.sampleRate;
-      if (isBuffering && (bufferedAheadSec >= INITIAL_CUSHION_SEC || producerSample >= decodedAudio.length)) {
-        isBuffering = false;
+    if (decodedAudio && requestedMode !== "bypass") {
+      const freshAiAheadSec = (producerSample - playheadSample) / decodedAudio.sampleRate;
+
+      // When fresh AI audio is solidly >= 0.8s ahead of current playhead, crossfade into AI!
+      if (!isAiTargetReady && freshAiAheadSec >= 0.8) {
+        isAiTargetReady = true;
+        startCrossfade("to_ai");
       }
     }
 
@@ -581,29 +618,62 @@
       const outR = e.outputBuffer.getChannelData(1);
       const numSamples = outL.length;
 
-      if (!isPlaying || !decodedAudio || isBuffering) {
+      if (!isPlaying || !decodedAudio) {
         outL.fill(0);
         outR.fill(0);
         return;
       }
 
-      // In AI mode, ALWAYS read from streamBuffer without strobing back to decodedAudio!
-      const activeBuf = (currentMode === "bypass" || !streamBuffer) ? decodedAudio : streamBuffer;
-      const srcL = activeBuf.getChannelData(0);
-      const srcR = activeBuf.getChannelData(1);
+      // 1. Crossfade between Original and AI
+      if (fadeState.active && streamBuffer) {
+        const origL = decodedAudio.getChannelData(0);
+        const origR = decodedAudio.getChannelData(1);
+        const aiL = streamBuffer.getChannelData(0);
+        const aiR = streamBuffer.getChannelData(1);
 
-      const remain = activeBuf.length - playheadSample;
-      if (remain >= numSamples) {
-        outL.set(srcL.subarray(playheadSample, playheadSample + numSamples));
-        outR.set(srcR.subarray(playheadSample, playheadSample + numSamples));
-      } else if (remain > 0) {
-        outL.fill(0);
-        outR.fill(0);
-        outL.set(srcL.subarray(playheadSample, activeBuf.length));
-        outR.set(srcR.subarray(playheadSample, activeBuf.length));
+        for (let i = 0; i < numSamples; i++) {
+          const idx = playheadSample + i;
+          if (fadeState.progress < FADE_LEN && idx < decodedAudio.length) {
+            const t = fadeState.progress / FADE_LEN;
+            const gOrig = fadeState.dir === "to_ai" ? Math.cos(t * Math.PI * 0.5) : Math.sin(t * Math.PI * 0.5);
+            const gAi   = fadeState.dir === "to_ai" ? Math.sin(t * Math.PI * 0.5) : Math.cos(t * Math.PI * 0.5);
+
+            outL[i] = gOrig * origL[idx] + gAi * aiL[idx];
+            outR[i] = gOrig * origR[idx] + gAi * aiR[idx];
+            fadeState.progress++;
+          } else {
+            fadeState.active = false;
+            currentAudibleSource = fadeState.dir === "to_ai" ? "ai" : "orig";
+            const targetBuf = currentAudibleSource === "ai" ? streamBuffer : decodedAudio;
+            const srcL = targetBuf.getChannelData(0);
+            const srcR = targetBuf.getChannelData(1);
+            const rest = numSamples - i;
+            if (rest > 0 && idx < decodedAudio.length) {
+              outL.set(srcL.subarray(idx, Math.min(srcL.length, idx + rest)), i);
+              outR.set(srcR.subarray(idx, Math.min(srcR.length, idx + rest)), i);
+            }
+            break;
+          }
+        }
       } else {
-        outL.fill(0);
-        outR.fill(0);
+        // 2. Normal Steady Playback (Zero CPU SIMD memcpy)
+        const buf = (currentAudibleSource === "ai" && streamBuffer) ? streamBuffer : decodedAudio;
+        const srcL = buf.getChannelData(0);
+        const srcR = buf.getChannelData(1);
+
+        const remain = buf.length - playheadSample;
+        if (remain >= numSamples) {
+          outL.set(srcL.subarray(playheadSample, playheadSample + numSamples));
+          outR.set(srcR.subarray(playheadSample, playheadSample + numSamples));
+        } else if (remain > 0) {
+          outL.fill(0);
+          outR.fill(0);
+          outL.set(srcL.subarray(playheadSample, buf.length));
+          outR.set(srcR.subarray(playheadSample, buf.length));
+        } else {
+          outL.fill(0);
+          outR.fill(0);
+        }
       }
 
       playheadSample += numSamples;
@@ -611,7 +681,7 @@
       // Pump worker ahead
       pumpWorker();
 
-      // Update seek bar and time readout (throttled to 4 times per second to save CPU)
+      // UI update (throttled to 4 times per second)
       const now = performance.now();
       if (now - lastUiTime > 250 && decodedAudio) {
         lastUiTime = now;
@@ -634,15 +704,36 @@
 
   // 5. Controls
   function setMode(mode) {
-    currentMode = mode;
+    if (mode === requestedMode) return;
+    requestedMode = mode;
+    currentGeneration++; // Invalidate all in-flight worker chunks immediately!
+
     document.getElementById("btn-orig").className = "mode-btn" + (mode === "bypass" ? " active-original" : "");
     document.getElementById("btn-karaoke").className = "mode-btn" + (mode === "karaoke" ? " active-karaoke" : "");
     document.getElementById("btn-acapella").className = "mode-btn" + (mode === "acapella" ? " active-acapella" : "");
 
-    if (decodedAudio && currentMode !== "bypass") {
+    if (!decodedAudio) return;
+
+    if (mode === "bypass") {
+      // Switching back to Original: smoothly crossfade to original sound
+      isAiTargetReady = false;
+      currentMode = "bypass";
+      startCrossfade("to_orig");
+    } else {
+      // Switching to Karaoke or Acapella:
+      // Wipe future streamBuffer so old mode audio never contaminates the new mode!
+      if (streamBuffer) {
+        streamBuffer.getChannelData(0).subarray(playheadSample).fill(0);
+        streamBuffer.getChannelData(1).subarray(playheadSample).fill(0);
+      }
+
+      currentAudibleSource = "orig";
+      isAiTargetReady = false;
+      currentMode = mode;
       producerSample = playheadSample;
-      isBuffering = true;
+      isRefilling = true;
       isWorkerBusy = false;
+
       if (worker) worker.postMessage({ type: "RESET" });
       pumpWorker();
     }
@@ -673,9 +764,22 @@
 
   function seekTo(sec) {
     if (!decodedAudio) return;
+    currentGeneration++; // Invalidate all in-flight worker chunks from before seek!
     playheadSample = Math.floor(sec * decodedAudio.sampleRate);
     producerSample = playheadSample;
+
+    // Wipe future streamBuffer on seek
+    if (streamBuffer) {
+      streamBuffer.getChannelData(0).subarray(playheadSample).fill(0);
+      streamBuffer.getChannelData(1).subarray(playheadSample).fill(0);
+    }
+
+    isAiTargetReady = false;
+    currentAudibleSource = "orig"; // Instant normal audio on seek!
+    isRefilling = true;
+    fadeState.active = false;
     isWorkerBusy = false;
+
     if (worker) worker.postMessage({ type: "RESET" });
     pumpWorker();
   }

@@ -27,7 +27,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
 def main():
     os.chdir(DIRECTORY)
-    with socketserver.TCPServer(("", PORT), CustomHandler) as httpd:
+    socketserver.TCPServer.allow_reuse_address = True
+    with http.server.ThreadingHTTPServer(("", PORT), CustomHandler) as httpd:
         url = f"http://localhost:{PORT}/index.html"
         print("=" * 60)
         print("⚡ NEXTAMP AI VOCAL ENGINE: DEMO PLAYER RUNNING ⚡")
