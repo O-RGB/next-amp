@@ -519,6 +519,7 @@ function updateVocalUI(mode) {
   const btnBypass = $("#btn-vocal-bypass");
   const btnKaraoke = $("#btn-vocal-karaoke");
   const btnAcapella = $("#btn-vocal-acapella");
+  const btnToggle = $("#btn-toggle-vocal");
 
   if (!btnBypass || !btnKaraoke || !btnAcapella) return;
 
@@ -529,11 +530,25 @@ function updateVocalUI(mode) {
 
   if (mode === "karaoke") {
     btnKaraoke.classList.add("pressed");
+    if (btnToggle) btnToggle.classList.add("pressed");
   } else if (mode === "acapella") {
     btnAcapella.classList.add("pressed");
+    if (btnToggle) btnToggle.classList.add("pressed");
   } else {
     btnBypass.classList.add("pressed");
+    if (btnToggle) btnToggle.classList.remove("pressed");
   }
+}
+
+function updateDiffUI(level) {
+  const lvl = Number(level) || 2;
+  $$(".btn-diff").forEach((btn) => {
+    if (Number(btn.dataset.level) === lvl) {
+      btn.classList.add("pressed");
+    } else {
+      btn.classList.remove("pressed");
+    }
+  });
 }
 
 function updateUIFromExternal(key, value, index) {
@@ -597,6 +612,14 @@ function updateUIFromExternal(key, value, index) {
     updateNormalizeButton();
   } else if (key === "vocalMode") {
     updateVocalUI(value);
+  } else if (key === "vocalDiff") {
+    updateDiffUI(value);
+  } else if (key === "vocalBassProtect") {
+    const chk = $("#chk-vocal-bass");
+    if (chk) chk.checked = !!value;
+  } else if (key === "vocalSmartVad") {
+    const chk = $("#chk-vocal-vad");
+    if (chk) chk.checked = !!value;
   }
 }
 function sendParam(key, value, index = null) {
@@ -767,10 +790,16 @@ function setupListeners() {
   });
 
   // --- AI VOCAL SEPARATOR CONTROLS ---
-  $("#txt-vocal-label")?.addEventListener("click", () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
+  $("#btn-toggle-vocal")?.addEventListener("click", () => {
+    const isPressed = $("#btn-toggle-vocal").classList.contains("pressed");
+    const nextMode = isPressed ? "bypass" : "karaoke";
+    sendParam("vocalMode", nextMode);
+    updateVocalUI(nextMode);
   });
   $("#txt-vocal-status")?.addEventListener("click", () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
+  });
+  $("#btn-vocal-diag")?.addEventListener("click", () => {
     chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
   });
   $("#btn-vocal-bypass")?.addEventListener("click", () => {
@@ -784,6 +813,19 @@ function setupListeners() {
   $("#btn-vocal-acapella")?.addEventListener("click", () => {
     sendParam("vocalMode", "acapella");
     updateVocalUI("acapella");
+  });
+  $$(".btn-diff").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const lvl = Number(e.currentTarget.dataset.level) || 2;
+      sendParam("vocalDiff", lvl);
+      updateDiffUI(lvl);
+    });
+  });
+  $("#chk-vocal-bass")?.addEventListener("change", (e) => {
+    sendParam("vocalBassProtect", e.target.checked);
+  });
+  $("#chk-vocal-vad")?.addEventListener("change", (e) => {
+    sendParam("vocalSmartVad", e.target.checked);
   });
 
   $("#eq-preset").addEventListener("change", (e) => {
@@ -1227,6 +1269,17 @@ function loadAudioState(state) {
   updateNormalizeButton();
   if (state.vocalMode) {
     updateVocalUI(state.vocalMode);
+  }
+  if (state.vocalDiff !== undefined) {
+    updateDiffUI(state.vocalDiff);
+  }
+  if (state.vocalBassProtect !== undefined) {
+    const chk = $("#chk-vocal-bass");
+    if (chk) chk.checked = !!state.vocalBassProtect;
+  }
+  if (state.vocalSmartVad !== undefined) {
+    const chk = $("#chk-vocal-vad");
+    if (chk) chk.checked = !!state.vocalSmartVad;
   }
   if (state.vocalStatus) {
     const txtStatus = $("#txt-vocal-status");

@@ -127,6 +127,9 @@ const createDefaultParams = () => ({
   dynBoost: 40,
   dynLimit: 60,
   vocalMode: "bypass", // "bypass", "karaoke", "acapella"
+  vocalDiff: 2,        // 1, 2, 3, 4
+  vocalBassProtect: true,
+  vocalSmartVad: true,
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -542,6 +545,24 @@ function applyParamToSession(session, key, value, index, source) {
         session.aiVocal.setMode(value);
       }
       break;
+    case "vocalDiff":
+      params.vocalDiff = value;
+      if (session.aiVocal) {
+        session.aiVocal.setDiffLevel(value);
+      }
+      break;
+    case "vocalBassProtect":
+      params.vocalBassProtect = value;
+      if (session.aiVocal) {
+        session.aiVocal.setBassProtect(value);
+      }
+      break;
+    case "vocalSmartVad":
+      params.vocalSmartVad = value;
+      if (session.aiVocal) {
+        session.aiVocal.setSmartVad(value);
+      }
+      break;
     case "volume":
       effects.setVolume(value);
       break;
@@ -735,9 +756,12 @@ function applyAllParams(session) {
     pitchProc.setPitch(params.pitch);
   }
 
-  // Apply AI Vocal mode on initialization / reset
-  if (session.aiVocal && params.vocalMode) {
-    session.aiVocal.setMode(params.vocalMode);
+  // Apply AI Vocal parameters
+  if (session.aiVocal) {
+    if (params.vocalMode) session.aiVocal.setMode(params.vocalMode);
+    if (params.vocalDiff) session.aiVocal.setDiffLevel(params.vocalDiff);
+    if (params.vocalBassProtect !== undefined) session.aiVocal.setBassProtect(params.vocalBassProtect);
+    if (params.vocalSmartVad !== undefined) session.aiVocal.setSmartVad(params.vocalSmartVad);
   }
 }
 

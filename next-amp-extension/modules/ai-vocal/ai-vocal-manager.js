@@ -20,6 +20,12 @@ export class AIVocalManager {
     this.onStatusChange = null;
     this.lastError = null;
 
+    // Separation Settings
+    this.diffLevel = 2;
+    this.strength = 1.0;
+    this.bassProtect = true;
+    this.smartVad = true;
+
     // DSP WASM
     this.wasmInstance = null;
     this.exp = null;
@@ -265,7 +271,7 @@ export class AIVocalManager {
 
       // 3. Smart Vocal Activity Detection (VAD) / Instrumental Gating
       const vocalEnergy = this.exp.stft_get_vocal_energy(A);
-      const isInstrumentalSilence = (vocalEnergy < VOCAL_ENERGY_THRESHOLD && mode === "karaoke");
+      const isInstrumentalSilence = (this.smartVad && vocalEnergy < VOCAL_ENERGY_THRESHOLD && mode === "karaoke");
 
       if (isInstrumentalSilence) {
         this.exp.stft_apply_mask_delayed(1, A, 2, 0.0);
@@ -301,12 +307,24 @@ export class AIVocalManager {
         if (this.rollingMags) this.rollingMags.dispose();
         this.rollingMags = newRolling;
 
+        // Bass Protect: Keep bins 0-6 (< 150 Hz) as non-vocal to preserve kick & bass punch
+        if (this.bassProtect && mode === "karaoke") {
+          for (let f = 0; f < A; f++) {
+            const row0 = f * _;
+            const row1 = A * _ + f * _;
+            for (let k = 0; k < 7; k++) {
+              maskData[row0 + k] = 0.0;
+              maskData[row1 + k] = 0.0;
+            }
+          }
+        }
+
         // 7. Write mask directly into WASM mask buffer
         this.mem.subarray(this.maskPtr0, this.maskPtr0 + A * _).set(maskData.subarray(0, A * _));
         this.mem.subarray(this.maskPtr1, this.maskPtr1 + A * _).set(maskData.subarray(A * _, 2 * A * _));
 
         // 8. Zero-Copy C/WASM Mask Application to Delayed Spectrum (1 chunk lookahead)
-        this.exp.stft_apply_mask_delayed(1, A, modeCode, strength);
+        this.exp.stft_apply_mask_delayed(1, A, modeCode, this.strength);
       }
 
       // 9. Inverse STFT with SIMD128
@@ -343,6 +361,20 @@ export class AIVocalManager {
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: " + this.lastError.substring(0, 16));
     }
+  }
+
+  setDiffLevel(level) {
+    this.diffLevel = Number(level) || 2;
+    const strengths = { 1: 0.8, 2: 1.0, 3: 1.25, 4: 1.5 };
+    this.strength = strengths[this.diffLevel] || 1.0;
+  }
+
+  setBassProtect(enable) {
+    this.bassProtect = !!enable;
+  }
+
+  setSmartVad(enable) {
+    this.smartVad = !!enable;
   }
 
   setMode(mode) {
