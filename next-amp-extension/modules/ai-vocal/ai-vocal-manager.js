@@ -15,6 +15,7 @@ export class AIVocalManager {
     this.audioCtx = audioCtx;
     this.workletNode = null;
     this.isReady = false;
+    this.engineLoading = false;
     this.currentMode = "bypass";
     this.currentStatus = "ORIGINAL";
     this.onStatusChange = null;
@@ -98,7 +99,7 @@ export class AIVocalManager {
       this.workletNode.port.onmessage = async (e) => {
         const data = e.data;
         if (data.type === "PROCESS_CHUNK") {
-          if (this.isReady) {
+          if (this.isReady && this.currentMode !== "bypass") {
             await this.processChunk(data.chunkIndex, data.rawL, data.rawR, data.mode);
           }
         } else if (data.type === "WORKLET_STATUS") {
@@ -108,10 +109,12 @@ export class AIVocalManager {
 
       this.setStatus("ORIGINAL");
 
-      // 3. Load DSP & U-Net Model in background
-      this.loadEngine().catch((err) => {
-        console.error("[NextAmp AI] Background engine load error:", err);
-      });
+      // Truly Lazy: DO NOT load 15MB model or start GPU on startup if in bypass (OFF)!
+      if (this.currentMode !== "bypass") {
+        this.loadEngine().catch((err) => {
+          console.error("[NextAmp AI] Background engine load error:", err);
+        });
+      }
 
       return this.workletNode;
     } catch (err) {
@@ -123,6 +126,8 @@ export class AIVocalManager {
   }
 
   async loadEngine() {
+    if (this.isReady || this.engineLoading) return;
+    this.engineLoading = true;
     try {
       this.setStatus("Loading DSP...");
 
@@ -207,6 +212,7 @@ export class AIVocalManager {
 
       console.log(`[NextAmp AI] Engine ready with backend: ${activeBackend.toUpperCase()}`);
       this.isReady = true;
+      this.engineLoading = false;
 
       if (this.workletNode) {
         this.workletNode.port.postMessage({ type: "WORKER_READY" });
@@ -218,6 +224,7 @@ export class AIVocalManager {
         this.setStatus("Buffering...");
       }
     } catch (err) {
+      this.engineLoading = false;
       console.error("[NextAmp AI] Engine load failed:", err);
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: " + this.lastError.substring(0, 18));
@@ -364,6 +371,11 @@ export class AIVocalManager {
       this.resetState();
       if (!this.isReady) {
         this.setStatus("Loading Model (15MB)...");
+        if (!this.engineLoading) {
+          this.loadEngine().catch((err) => {
+            console.error("[NextAmp AI] Lazy engine load error:", err);
+          });
+        }
       } else {
         this.setStatus("Buffering...");
       }
