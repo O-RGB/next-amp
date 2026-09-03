@@ -72,6 +72,27 @@ button:active,button.active{background:#00ff00;color:#000}
 </div>
 
 <div class="box">
+  <div class="title">
+    <span>AI VOCAL (KARAOKE)</span>
+    <span id="t-vocal">ORIGINAL</span>
+  </div>
+  <div class="btn-grid-3">
+    <button id="btn-vocal-orig" class="active" onclick="setVocal('bypass')">ORIG</button>
+    <button id="btn-vocal-karaoke" onclick="setVocal('karaoke')">KARAOKE</button>
+    <button id="btn-vocal-acapella" onclick="setVocal('acapella')">ACAPELLA</button>
+  </div>
+  <div class="row" style="margin-top:6px">
+    <span class="label">DIFF:</span>
+    <select id="sel-diff" onchange="snd('vocalDiff', +this.value)" style="flex:1">
+      <option value="1">1: SOFT (0.8x)</option>
+      <option value="2" selected>2: STANDARD (1.0x)</option>
+      <option value="3">3: DEEP (1.3x)</option>
+      <option value="4">4: ULTRA (1.6x)</option>
+    </select>
+  </div>
+</div>
+
+<div class="box">
   <div class="title">VIDEO CONTROLLER</div>
   <div class="row">
     <span class="label">DELAY</span>
@@ -231,6 +252,10 @@ function resetVideo() {
   snd("videoDelay", 0);
 }
 
+function setVocal(m) {
+  snd("vocalMode", m);
+}
+
 function applyFullState(s) {
   isProgrammatic = true;
   for (let k in s) syncKey(k, s[k]);
@@ -258,6 +283,15 @@ function syncKey(k, v) {
     G("t-zoom").textContent = (+v).toFixed(1) + "x";
   } else if (k === "videoQuality") {
     G("v-qual").value = v;
+  } else if (k === "vocalMode") {
+    const m = v || "bypass";
+    G("btn-vocal-orig")?.classList.toggle("active", m === "bypass");
+    G("btn-vocal-karaoke")?.classList.toggle("active", m === "karaoke");
+    G("btn-vocal-acapella")?.classList.toggle("active", m === "acapella");
+    const t = G("t-vocal");
+    if (t) t.textContent = m === "karaoke" ? "KARAOKE (CUT)" : m === "acapella" ? "ACAPELLA (ISO)" : "ORIGINAL";
+  } else if (k === "vocalDiff") {
+    if (G("sel-diff")) G("sel-diff").value = v;
   } else if (k === "isAudioMasterOn") {
     G("btn-mute").className = v ? "" : "active";
     G("btn-mute").textContent = v ? "MUTE" : "MUTED";

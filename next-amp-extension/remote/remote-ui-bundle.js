@@ -388,6 +388,7 @@ input[type="range"].v-input {
 .flex-1 { flex: 1; }
 .grid { display: grid; }
 .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
 .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
 .gap-1 { gap: 6px; }
 .gap-1-5 { gap: 8px; }
@@ -557,6 +558,50 @@ select {
       <div class="eq-scroll-wrapper">
         <div id="eq-container" class="win-border-in">
           <!-- 10 Vertical Bands -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BLOCK: AI VOCAL / KARAOKE -->
+  <div class="win-border-out" id="block-vocal">
+    <div id="bar-vocal" class="theme-bar">
+      <div class="flex items-center gap-2">
+        <button id="btn-toggle-vocal" class="win-btn win-btn-sm" style="min-width:48px">ON</button>
+        <div class="flex items-center gap-1.5">
+          <i class="ph-bold ph-microphone-stage"></i>
+          <span>AI VOCAL</span>
+        </div>
+      </div>
+      <span id="txt-vocal-status" style="font-family:monospace;font-size:12px;color:#ffff00;font-weight:bold">ORIGINAL</span>
+    </div>
+
+    <div id="body-vocal" class="p-2 flex flex-col gap-2" style="background:#222">
+      <div class="win-border-in p-3 flex flex-col gap-3" style="background:#181818">
+        <!-- Separation Modes -->
+        <div class="flex flex-col">
+          <div class="flex justify-between items-center font-pixel" style="color:#bbb;margin-bottom:6px">
+            <span class="section-label"><i class="ph-bold ph-waveform"></i> SEPARATION MODE</span>
+          </div>
+          <div class="grid grid-cols-3 gap-1-5">
+            <button id="btn-vocal-bypass" class="win-btn win-btn-sm pressed">ORIG</button>
+            <button id="btn-vocal-karaoke" class="win-btn win-btn-sm">KARAOKE</button>
+            <button id="btn-vocal-acapella" class="win-btn win-btn-sm">ACAPELLA</button>
+          </div>
+        </div>
+
+        <!-- Diff Level 1-4 -->
+        <div class="flex flex-col" style="border-top:1px solid #333;padding-top:10px">
+          <div class="flex justify-between items-center font-pixel" style="color:#bbb;margin-bottom:6px">
+            <span class="section-label"><i class="ph-bold ph-gauge"></i> DIFF LEVEL</span>
+            <span id="txt-diff-desc" style="font-size:12px;font-family:monospace;color:#80d0ff;font-weight:bold">2: STD (1.0x)</span>
+          </div>
+          <div class="grid grid-cols-4 gap-1">
+            <button class="win-btn win-btn-sm btn-remote-diff" data-level="1">1: SOFT</button>
+            <button class="win-btn win-btn-sm btn-remote-diff pressed" data-level="2">2: STD</button>
+            <button class="win-btn win-btn-sm btn-remote-diff" data-level="3">3: DEEP</button>
+            <button class="win-btn win-btn-sm btn-remote-diff" data-level="4">4: ULTRA</button>
+          </div>
         </div>
       </div>
     </div>
@@ -875,6 +920,53 @@ function syncView(k, v, index = null) {
     }
   } else if (k === "eqPreset") {
     if (G("eq-preset")) G("eq-preset").value = v;
+  } else if (k === "vocalMode") {
+    const mode = v || "bypass";
+    const btnBypass = G("btn-vocal-bypass");
+    const btnKaraoke = G("btn-vocal-karaoke");
+    const btnAcapella = G("btn-vocal-acapella");
+    const btnToggle = G("btn-toggle-vocal");
+    const txtStatus = G("txt-vocal-status");
+
+    [btnBypass, btnKaraoke, btnAcapella].forEach((b) => b && b.classList.remove("pressed"));
+    if (mode === "karaoke") {
+      if (btnKaraoke) btnKaraoke.classList.add("pressed");
+      if (btnToggle) {
+        btnToggle.classList.add("pressed", "active-green");
+        btnToggle.textContent = "ON";
+      }
+      if (txtStatus) txtStatus.textContent = "KARAOKE (CUT)";
+    } else if (mode === "acapella") {
+      if (btnAcapella) btnAcapella.classList.add("pressed");
+      if (btnToggle) {
+        btnToggle.classList.add("pressed", "active-green");
+        btnToggle.textContent = "ON";
+      }
+      if (txtStatus) txtStatus.textContent = "ACAPELLA (ISO)";
+    } else {
+      if (btnBypass) btnBypass.classList.add("pressed");
+      if (btnToggle) {
+        btnToggle.classList.remove("pressed", "active-green");
+        btnToggle.textContent = "OFF";
+      }
+      if (txtStatus) txtStatus.textContent = "ORIGINAL";
+    }
+  } else if (k === "vocalDiff") {
+    const lvl = Number(v) || 2;
+    const descs = {
+      1: "1: SOFT (0.8x)",
+      2: "2: STD (1.0x)",
+      3: "3: DEEP (1.3x)",
+      4: "4: ULTRA (1.6x)"
+    };
+    if (G("txt-diff-desc")) G("txt-diff-desc").textContent = descs[lvl] || "2: STD (1.0x)";
+    document.querySelectorAll(".btn-remote-diff").forEach((b) => {
+      if (Number(b.dataset.level) === lvl) {
+        b.classList.add("pressed");
+      } else {
+        b.classList.remove("pressed");
+      }
+    });
   }
 }
 
@@ -921,6 +1013,40 @@ G("btn-normalize").onclick = function() {
   vib(18);
   snd("normalize", !(state.normalize ?? false));
 };
+
+if (G("btn-toggle-vocal")) {
+  G("btn-toggle-vocal").onclick = function() {
+    vib(18);
+    const isPressed = this.classList.contains("pressed");
+    const next = isPressed ? "bypass" : "karaoke";
+    snd("vocalMode", next);
+  };
+}
+if (G("btn-vocal-bypass")) {
+  G("btn-vocal-bypass").onclick = function() {
+    vib(15);
+    snd("vocalMode", "bypass");
+  };
+}
+if (G("btn-vocal-karaoke")) {
+  G("btn-vocal-karaoke").onclick = function() {
+    vib(15);
+    snd("vocalMode", "karaoke");
+  };
+}
+if (G("btn-vocal-acapella")) {
+  G("btn-vocal-acapella").onclick = function() {
+    vib(15);
+    snd("vocalMode", "acapella");
+  };
+}
+document.querySelectorAll(".btn-remote-diff").forEach((b) => {
+  b.onclick = function() {
+    vib(15);
+    const lvl = Number(this.dataset.level) || 2;
+    snd("vocalDiff", lvl);
+  };
+});
 
 window.setVol = v => { vib(12); snd("volume", v); };
 window.setPan = v => { vib(12); snd("pan", v); };
