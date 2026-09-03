@@ -23,8 +23,6 @@ export class AIVocalManager {
     // Separation Settings
     this.diffLevel = 2;
     this.strength = 1.0;
-    this.bassProtect = true;
-    this.smartVad = true;
 
     // DSP WASM
     this.wasmInstance = null;
@@ -269,63 +267,43 @@ export class AIVocalManager {
 
       const modeCode = mode === "acapella" ? 1 : mode === "karaoke" ? 0 : 2;
 
-      // 3. Smart Vocal Activity Detection (VAD) / Instrumental Gating
-      const vocalEnergy = this.exp.stft_get_vocal_energy(A);
-      const isInstrumentalSilence = (this.smartVad && vocalEnergy < VOCAL_ENERGY_THRESHOLD && mode === "karaoke");
+      // 3. Update 64-frame rolling magnitudes tensor [1, 1024, 64, 2]
+      const mags0 = this.mem.subarray(this.magPtr0, this.magPtr0 + A * _);
+      const mags1 = this.mem.subarray(this.magPtr1, this.magPtr1 + A * _);
 
-      if (isInstrumentalSilence) {
-        this.exp.stft_apply_mask_delayed(1, A, 2, 0.0);
-      } else {
-        // 4. Update 64-frame rolling magnitudes tensor [1, 1024, 64, 2]
-        const mags0 = this.mem.subarray(this.magPtr0, this.magPtr0 + A * _);
-        const mags1 = this.mem.subarray(this.magPtr1, this.magPtr1 + A * _);
+      const [newRolling, normInput] = tf.tidy(() => {
+        const newMags = tf.stack([
+          tf.tensor2d(mags0, [A, _]),
+          tf.tensor2d(mags1, [A, _])
+        ]).transpose([2, 1, 0]).reshape([1, _, A, 2]);
 
-        const [newRolling, normInput] = tf.tidy(() => {
-          const newMags = tf.stack([
-            tf.tensor2d(mags0, [A, _]),
-            tf.tensor2d(mags1, [A, _])
-          ]).transpose([2, 1, 0]).reshape([1, _, A, 2]);
+        const rolled = this.rollingMags.slice([0, 0, 16, 0], [1, _, 48, 2]).concat(newMags, 2);
+        return [rolled, rolled.divNoNan(rolled.max())];
+      });
 
-          const rolled = this.rollingMags.slice([0, 0, 16, 0], [1, _, 48, 2]).concat(newMags, 2);
-          return [rolled, rolled.divNoNan(rolled.max())];
-        });
+      // 4. Hardware-Accelerated U-Net Inference
+      const outTensor = this.model.execute(normInput);
+      normInput.dispose();
 
-        // 5. Hardware-Accelerated U-Net Inference
-        const outTensor = this.model.execute(normInput);
-        normInput.dispose();
+      // 5. Slicing mask centered at Frame 31 (Peak Receptive Field Fidelity)
+      const maskTensor = tf.tidy(() => {
+        const transposed = outTensor.transpose([0, 3, 2, 1]).reshape([2, 64, _]);
+        outTensor.dispose();
+        return transposed.slice([0, 31, 0], [2, A, _]).sigmoid();
+      });
 
-        // 6. Slicing mask centered at Frame 31 (Peak Receptive Field Fidelity)
-        const maskTensor = tf.tidy(() => {
-          const transposed = outTensor.transpose([0, 3, 2, 1]).reshape([2, 64, _]);
-          outTensor.dispose();
-          return transposed.slice([0, 31, 0], [2, A, _]).sigmoid();
-        });
+      const maskData = await maskTensor.data();
+      maskTensor.dispose();
 
-        const maskData = await maskTensor.data();
-        maskTensor.dispose();
+      if (this.rollingMags) this.rollingMags.dispose();
+      this.rollingMags = newRolling;
 
-        if (this.rollingMags) this.rollingMags.dispose();
-        this.rollingMags = newRolling;
+      // 6. Write mask directly into WASM mask buffer
+      this.mem.subarray(this.maskPtr0, this.maskPtr0 + A * _).set(maskData.subarray(0, A * _));
+      this.mem.subarray(this.maskPtr1, this.maskPtr1 + A * _).set(maskData.subarray(A * _, 2 * A * _));
 
-        // Bass Protect: Keep bins 0-6 (< 150 Hz) as non-vocal to preserve kick & bass punch
-        if (this.bassProtect && mode === "karaoke") {
-          for (let f = 0; f < A; f++) {
-            const row0 = f * _;
-            const row1 = A * _ + f * _;
-            for (let k = 0; k < 7; k++) {
-              maskData[row0 + k] = 0.0;
-              maskData[row1 + k] = 0.0;
-            }
-          }
-        }
-
-        // 7. Write mask directly into WASM mask buffer
-        this.mem.subarray(this.maskPtr0, this.maskPtr0 + A * _).set(maskData.subarray(0, A * _));
-        this.mem.subarray(this.maskPtr1, this.maskPtr1 + A * _).set(maskData.subarray(A * _, 2 * A * _));
-
-        // 8. Zero-Copy C/WASM Mask Application to Delayed Spectrum (1 chunk lookahead)
-        this.exp.stft_apply_mask_delayed(1, A, modeCode, this.strength);
-      }
+      // 7. Pure Mask Application via C/WASM
+      this.exp.stft_apply_mask_delayed(1, A, modeCode, this.strength);
 
       // 9. Inverse STFT with SIMD128
       this.exp.stft_backward(A);
@@ -367,14 +345,6 @@ export class AIVocalManager {
     this.diffLevel = Number(level) || 2;
     const strengths = { 1: 0.8, 2: 1.0, 3: 1.25, 4: 1.5 };
     this.strength = strengths[this.diffLevel] || 1.0;
-  }
-
-  setBassProtect(enable) {
-    this.bassProtect = !!enable;
-  }
-
-  setSmartVad(enable) {
-    this.smartVad = !!enable;
   }
 
   setMode(mode) {

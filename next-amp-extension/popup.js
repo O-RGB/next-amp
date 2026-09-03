@@ -614,12 +614,6 @@ function updateUIFromExternal(key, value, index) {
     updateVocalUI(value);
   } else if (key === "vocalDiff") {
     updateDiffUI(value);
-  } else if (key === "vocalBassProtect") {
-    const chk = $("#chk-vocal-bass");
-    if (chk) chk.checked = !!value;
-  } else if (key === "vocalSmartVad") {
-    const chk = $("#chk-vocal-vad");
-    if (chk) chk.checked = !!value;
   }
 }
 function sendParam(key, value, index = null) {
@@ -821,12 +815,7 @@ function setupListeners() {
       updateDiffUI(lvl);
     });
   });
-  $("#chk-vocal-bass")?.addEventListener("change", (e) => {
-    sendParam("vocalBassProtect", e.target.checked);
-  });
-  $("#chk-vocal-vad")?.addEventListener("change", (e) => {
-    sendParam("vocalSmartVad", e.target.checked);
-  });
+
 
   $("#eq-preset").addEventListener("change", (e) => {
     if (!isAudioMasterOn) return;
@@ -1272,14 +1261,6 @@ function loadAudioState(state) {
   }
   if (state.vocalDiff !== undefined) {
     updateDiffUI(state.vocalDiff);
-  }
-  if (state.vocalBassProtect !== undefined) {
-    const chk = $("#chk-vocal-bass");
-    if (chk) chk.checked = !!state.vocalBassProtect;
-  }
-  if (state.vocalSmartVad !== undefined) {
-    const chk = $("#chk-vocal-vad");
-    if (chk) chk.checked = !!state.vocalSmartVad;
   }
   if (state.vocalStatus) {
     const txtStatus = $("#txt-vocal-status");
