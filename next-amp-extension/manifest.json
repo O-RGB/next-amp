@@ -38,7 +38,8 @@
         "model/model.json",
         "model/group1-shard1of1.bin",
         "remote/dos-remote.html",
-        "debug-ai.html"
+        "debug-ai.html",
+        "debug-ai.js"
       ],
       "matches": ["<all_urls>"]
     }
