@@ -929,28 +929,27 @@ function syncView(k, v, index = null) {
     const txtStatus = G("txt-vocal-status");
 
     [btnBypass, btnKaraoke, btnAcapella].forEach((b) => b && b.classList.remove("pressed"));
+    const on = (mode !== "bypass");
+    const bar = G("bar-vocal");
+    const bodyV = G("body-vocal");
+
     if (mode === "karaoke") {
       if (btnKaraoke) btnKaraoke.classList.add("pressed");
-      if (btnToggle) {
-        btnToggle.classList.add("pressed", "active-green");
-        btnToggle.textContent = "ON";
-      }
       if (txtStatus) txtStatus.textContent = "KARAOKE (CUT)";
     } else if (mode === "acapella") {
       if (btnAcapella) btnAcapella.classList.add("pressed");
-      if (btnToggle) {
-        btnToggle.classList.add("pressed", "active-green");
-        btnToggle.textContent = "ON";
-      }
       if (txtStatus) txtStatus.textContent = "ACAPELLA (ISO)";
     } else {
       if (btnBypass) btnBypass.classList.add("pressed");
-      if (btnToggle) {
-        btnToggle.classList.remove("pressed", "active-green");
-        btnToggle.textContent = "OFF";
-      }
       if (txtStatus) txtStatus.textContent = "ORIGINAL";
     }
+
+    if (btnToggle) {
+      btnToggle.className = "win-btn win-btn-sm" + (on ? " pressed active-green" : "");
+      btnToggle.textContent = on ? "ON" : "OFF";
+    }
+    if (bar) bar.classList.toggle("theme-bar-off", !on);
+    if (bodyV) bodyV.classList.toggle("panel-disabled", !on);
   } else if (k === "vocalDiff") {
     const lvl = Number(v) || 2;
     const descs = {

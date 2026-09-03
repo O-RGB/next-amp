@@ -30,6 +30,7 @@ let isAudioMasterOn = true;
 let isVideoMasterOn = true;
 
 let isEqOn = true;
+let currentVocalMode = "bypass";
 
 let isNormalizeOn = false;
 let currentEqValues = [...PRESETS.flat];
@@ -516,27 +517,61 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 function updateVocalUI(mode) {
+  currentVocalMode = mode || "bypass";
   const btnBypass = $("#btn-vocal-bypass");
   const btnKaraoke = $("#btn-vocal-karaoke");
   const btnAcapella = $("#btn-vocal-acapella");
   const btnToggle = $("#btn-toggle-vocal");
+  const vocalArea = $("#vocal-controls-area");
+  const txtStatus = $("#txt-vocal-status");
 
   if (!btnBypass || !btnKaraoke || !btnAcapella) return;
+
+  const isBypass = (currentVocalMode === "bypass");
 
   [btnBypass, btnKaraoke, btnAcapella].forEach((btn) => {
     btn.classList.remove("pressed");
     btn.classList.add("text-black", "font-bold");
   });
 
-  if (mode === "karaoke") {
+  if (currentVocalMode === "karaoke") {
     btnKaraoke.classList.add("pressed");
-    if (btnToggle) btnToggle.classList.add("pressed");
-  } else if (mode === "acapella") {
+  } else if (currentVocalMode === "acapella") {
     btnAcapella.classList.add("pressed");
-    if (btnToggle) btnToggle.classList.add("pressed");
   } else {
     btnBypass.classList.add("pressed");
-    if (btnToggle) btnToggle.classList.remove("pressed");
+  }
+
+  if (btnToggle) {
+    if (isBypass) {
+      btnToggle.textContent = "OFF";
+      btnToggle.classList.remove("pressed", "text-white");
+      btnToggle.classList.add("text-gray-500");
+    } else {
+      btnToggle.textContent = "ON";
+      btnToggle.classList.add("pressed", "text-white");
+      btnToggle.classList.remove("text-gray-500");
+    }
+  }
+
+  if (vocalArea) {
+    if (isBypass) {
+      vocalArea.style.opacity = "0.4";
+      vocalArea.style.filter = "grayscale(100%)";
+    } else {
+      vocalArea.style.opacity = "1";
+      vocalArea.style.filter = "none";
+    }
+  }
+
+  if (txtStatus) {
+    if (isBypass) {
+      txtStatus.classList.remove("text-yellow-300");
+      txtStatus.classList.add("text-gray-500");
+    } else {
+      txtStatus.classList.remove("text-gray-500");
+      txtStatus.classList.add("text-yellow-300");
+    }
   }
 }
 
@@ -785,8 +820,8 @@ function setupListeners() {
 
   // --- AI VOCAL SEPARATOR CONTROLS ---
   $("#btn-toggle-vocal")?.addEventListener("click", () => {
-    const isPressed = $("#btn-toggle-vocal").classList.contains("pressed");
-    const nextMode = isPressed ? "bypass" : "karaoke";
+    const isOff = (currentVocalMode === "bypass");
+    const nextMode = isOff ? "karaoke" : "bypass";
     sendParam("vocalMode", nextMode);
     updateVocalUI(nextMode);
   });
@@ -1015,6 +1050,17 @@ function updateMasterTogglesUI() {
     btnVideo.classList.add("text-gray-500");
     videoArea.style.opacity = "0.4";
     videoArea.style.pointerEvents = "none";
+  }
+
+  const vocalBlock = $("#block-vocal");
+  if (isAudioMasterOn) {
+    if (vocalBlock) vocalBlock.style.pointerEvents = "auto";
+    updateVocalUI(currentVocalMode);
+  } else {
+    if (vocalBlock) {
+      vocalBlock.style.opacity = "0.4";
+      vocalBlock.style.pointerEvents = "none";
+    }
   }
 }
 
