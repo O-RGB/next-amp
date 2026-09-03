@@ -23,6 +23,7 @@ export class AIVocalManager {
     // Separation Settings
     this.diffLevel = 2;
     this.strength = 1.0;
+    this.maskGamma = 1.0;
 
     // DSP WASM
     this.wasmInstance = null;
@@ -265,7 +266,7 @@ export class AIVocalManager {
       // 2. SIMD128 Forward STFT: computes 16 frames & stores to C circular ring buffer
       this.exp.stft_forward(A);
 
-      const modeCode = mode === "acapella" ? 1 : mode === "karaoke" ? 0 : 2;
+      const modeCode = mode === "karaoke" ? 1 : mode === "acapella" ? 0 : 2;
 
       // 3. Update 64-frame rolling magnitudes tensor [1, 1024, 64, 2]
       const mags0 = this.mem.subarray(this.magPtr0, this.magPtr0 + A * _);
@@ -294,6 +295,15 @@ export class AIVocalManager {
 
       const maskData = await maskTensor.data();
       maskTensor.dispose();
+
+      // Reshape mask contrast based on DIFF level (1=Soft, 2=Standard, 3=Deep, 4=Ultra)
+      if (this.maskGamma && this.maskGamma !== 1.0) {
+        const gamma = this.maskGamma;
+        const totalLen = 2 * A * _;
+        for (let i = 0; i < totalLen; i++) {
+          maskData[i] = Math.pow(maskData[i], gamma);
+        }
+      }
 
       if (this.rollingMags) this.rollingMags.dispose();
       this.rollingMags = newRolling;
@@ -343,8 +353,9 @@ export class AIVocalManager {
 
   setDiffLevel(level) {
     this.diffLevel = Number(level) || 2;
-    const strengths = { 1: 0.8, 2: 1.0, 3: 1.25, 4: 1.5 };
-    this.strength = strengths[this.diffLevel] || 1.0;
+    const gammas = { 1: 0.8, 2: 1.0, 3: 1.3, 4: 1.6 };
+    this.maskGamma = gammas[this.diffLevel] || 1.0;
+    this.strength = 1.0;
   }
 
   setMode(mode) {

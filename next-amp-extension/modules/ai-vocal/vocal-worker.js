@@ -190,7 +190,7 @@ async function processChunk(chunkIndex, rawL, rawR, mode, strength = 1.0, genera
     // 2. SIMD128 Forward STFT: computes 16 frames & stores to C circular ring buffer
     exp.stft_forward(A);
 
-    const modeCode = mode === "acapella" ? 1 : mode === "karaoke" ? 0 : 2;
+    const modeCode = mode === "karaoke" ? 1 : mode === "acapella" ? 0 : 2;
 
     // 3. Smart Vocal Activity Detection (VAD) / Instrumental Gating
     const vocalEnergy = exp.stft_get_vocal_energy(A);
