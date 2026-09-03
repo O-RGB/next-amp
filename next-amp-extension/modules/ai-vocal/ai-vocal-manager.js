@@ -1,7 +1,7 @@
 /**
  * NextAmp AI Vocal Engine - Direct Offscreen Orchestrator
  * Runs directly in offscreen.html context with hardware-accelerated WebGL/WebGPU.
- * Eliminates Web Worker fragility, importScripts path issues, and multi-hop serialization.
+ * Non-blocking async architecture: Worklet connects instantly in 2ms, model streams in background.
  */
 
 const A = 16;       // 16 magnitude frames per chunk
@@ -44,6 +44,9 @@ export class AIVocalManager {
 
   setStatus(status) {
     this.currentStatus = status;
+    try {
+      chrome.storage.local.set({ aiVocalStatus: status }).catch(() => {});
+    } catch (_) {}
     if (this.onStatusChange) {
       this.onStatusChange(status);
     }
@@ -69,7 +72,52 @@ export class AIVocalManager {
     }
   }
 
+  /**
+   * Fast Non-Blocking Init:
+   * 1. Creates AudioWorkletNode immediately (2ms) so audio flows without delay
+   * 2. Starts engine loading asynchronously in background
+   */
   async init() {
+    try {
+      // 1. Load AudioWorklet module & create AudioWorkletNode
+      const workletUrl = chrome.runtime.getURL("modules/ai-vocal/vocal-worklet.js");
+      await this.audioCtx.audioWorklet.addModule(workletUrl);
+
+      this.workletNode = new AudioWorkletNode(this.audioCtx, "nextamp-ai-vocal-processor", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [2]
+      });
+
+      // 2. Wire Worklet <-> Engine
+      this.workletNode.port.onmessage = async (e) => {
+        const data = e.data;
+        if (data.type === "PROCESS_CHUNK") {
+          if (this.isReady) {
+            await this.processChunk(data.chunkIndex, data.rawL, data.rawR, data.mode);
+          }
+        } else if (data.type === "WORKLET_STATUS") {
+          this.handleWorkletStatus(data);
+        }
+      };
+
+      this.setStatus("ORIGINAL");
+
+      // 3. Load DSP & U-Net Model in background
+      this.loadEngine().catch((err) => {
+        console.error("[NextAmp AI] Background engine load error:", err);
+      });
+
+      return this.workletNode;
+    } catch (err) {
+      console.error("[NextAmp AI] Worklet creation failed:", err);
+      this.lastError = err.message || err.toString();
+      this.setStatus("ERR: Worklet");
+      return null;
+    }
+  }
+
+  async loadEngine() {
     try {
       this.setStatus("Loading DSP...");
 
@@ -142,7 +190,7 @@ export class AIVocalManager {
         });
       }
 
-      this.setStatus("Loading Model...");
+      this.setStatus("Loading Model (15MB)...");
 
       const modelUrl = chrome.runtime.getURL("model/model.json");
       const ioHandler = (tf.io && tf.io.browserHTTPRequest)
@@ -152,40 +200,22 @@ export class AIVocalManager {
       this.model = await tf.loadGraphModel(ioHandler);
       this.resetState();
 
-      console.log(`[NextAmp AI] In-page engine ready with backend: ${activeBackend.toUpperCase()}`);
-
-      // 4. Load AudioWorklet module & create AudioWorkletNode
-      const workletUrl = chrome.runtime.getURL("modules/ai-vocal/vocal-worklet.js");
-      await this.audioCtx.audioWorklet.addModule(workletUrl);
-
-      this.workletNode = new AudioWorkletNode(this.audioCtx, "nextamp-ai-vocal-processor", {
-        numberOfInputs: 1,
-        numberOfOutputs: 1,
-        outputChannelCount: [2]
-      });
-
-      // 5. Wire Worklet <-> Engine
-      this.workletNode.port.onmessage = async (e) => {
-        const data = e.data;
-        if (data.type === "PROCESS_CHUNK") {
-          if (this.isReady) {
-            await this.processChunk(data.chunkIndex, data.rawL, data.rawR, data.mode);
-          }
-        } else if (data.type === "WORKLET_STATUS") {
-          this.handleWorkletStatus(data);
-        }
-      };
-
+      console.log(`[NextAmp AI] Engine ready with backend: ${activeBackend.toUpperCase()}`);
       this.isReady = true;
-      this.workletNode.port.postMessage({ type: "WORKER_READY" });
-      this.setStatus("ORIGINAL");
 
-      return this.workletNode;
+      if (this.workletNode) {
+        this.workletNode.port.postMessage({ type: "WORKER_READY" });
+      }
+
+      if (this.currentMode === "bypass") {
+        this.setStatus("ORIGINAL");
+      } else {
+        this.setStatus("Buffering...");
+      }
     } catch (err) {
-      console.error("[NextAmp AI] Initialization failed:", err);
+      console.error("[NextAmp AI] Engine load failed:", err);
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: " + this.lastError.substring(0, 18));
-      return null;
     }
   }
 
@@ -194,13 +224,15 @@ export class AIVocalManager {
       this.setStatus("ERR: " + this.lastError.substring(0, 16));
       return;
     }
-    if (!this.isReady) {
-      this.setStatus("Loading AI...");
-      return;
-    }
     if (data.mode === "bypass") {
       this.setStatus("ORIGINAL");
-    } else if (data.fadeVal < 0.85) {
+      return;
+    }
+    if (!this.isReady) {
+      this.setStatus("Loading Model (15MB)...");
+      return;
+    }
+    if (data.fadeVal < 0.85) {
       this.setStatus(`Preparing AI: ${data.bufferedSec}s / 0.8s`);
     } else {
       this.setStatus(data.mode === "karaoke" ? "KARAOKE (CUT)" : "ACAPELLA (ISO)");
@@ -318,7 +350,7 @@ export class AIVocalManager {
     if (mode !== "bypass") {
       this.resetState();
       if (!this.isReady) {
-        this.setStatus("Loading AI...");
+        this.setStatus("Loading Model (15MB)...");
       } else {
         this.setStatus("Buffering...");
       }

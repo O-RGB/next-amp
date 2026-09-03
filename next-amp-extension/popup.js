@@ -505,11 +505,20 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.aiVocalStatus && changes.aiVocalStatus.newValue) {
+    const txtStatus = $("#txt-vocal-status");
+    if (txtStatus) {
+      txtStatus.textContent = changes.aiVocalStatus.newValue;
+      txtStatus.title = "AI Vocal: " + changes.aiVocalStatus.newValue;
+    }
+  }
+});
+
 function updateVocalUI(mode) {
   const btnBypass = $("#btn-vocal-bypass");
   const btnKaraoke = $("#btn-vocal-karaoke");
   const btnAcapella = $("#btn-vocal-acapella");
-  const txtStatus = $("#txt-vocal-status");
 
   if (!btnBypass || !btnKaraoke || !btnAcapella) return;
 
@@ -520,17 +529,10 @@ function updateVocalUI(mode) {
 
   if (mode === "karaoke") {
     btnKaraoke.classList.add("pressed");
-    if (txtStatus && !txtStatus.textContent.includes("KARAOKE")) {
-      txtStatus.textContent = "Starting AI...";
-    }
   } else if (mode === "acapella") {
     btnAcapella.classList.add("pressed");
-    if (txtStatus && !txtStatus.textContent.includes("ACAPELLA")) {
-      txtStatus.textContent = "Starting AI...";
-    }
   } else {
     btnBypass.classList.add("pressed");
-    if (txtStatus) txtStatus.textContent = "ORIGINAL";
   }
 }
 
@@ -765,6 +767,12 @@ function setupListeners() {
   });
 
   // --- AI VOCAL SEPARATOR CONTROLS ---
+  $("#txt-vocal-label")?.addEventListener("click", () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
+  });
+  $("#txt-vocal-status")?.addEventListener("click", () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
+  });
   $("#btn-vocal-bypass")?.addEventListener("click", () => {
     sendParam("vocalMode", "bypass");
     updateVocalUI("bypass");

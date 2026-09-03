@@ -104,23 +104,19 @@
         return;
       }
 
-      log("\n[5/5] Testing Dedicated Web Worker...");
+      log("\n[5/5] Testing AIVocalManager Pipeline...");
       try {
-        const workerUrl = chrome.runtime.getURL("modules/ai-vocal/vocal-worker.js");
-        const worker = new Worker(workerUrl);
-        worker.onmessage = (e) => {
-          log("✓ Worker Message: " + JSON.stringify(e.data), "log-ok");
-        };
-        worker.onerror = (e) => {
-          log("✗ Worker Error: " + (e.message || "Unknown worker error"), "log-err");
-        };
-        worker.postMessage({
-          type: "INIT",
-          wasmUrl: chrome.runtime.getURL("modules/ai-vocal/stft_simd.wasm"),
-          modelUrl: chrome.runtime.getURL("model/model.json")
-        });
+        const { AIVocalManager } = await import("./modules/ai-vocal/ai-vocal-manager.js");
+        const actx = new (window.AudioContext || window.webkitAudioContext)();
+        const mgr = new AIVocalManager(actx);
+        const node = await mgr.init();
+        if (node) {
+          log("✓ AIVocalManager Initialized successfully! Status: " + mgr.getStatus(), "log-ok");
+        } else {
+          log("✗ AIVocalManager returned null node. Error: " + mgr.lastError, "log-err");
+        }
       } catch (e) {
-        log("✗ Worker Spawn Failed: " + e.message, "log-err");
+        log("✗ AIVocalManager Failed: " + e.message, "log-err");
       }
     }
 
