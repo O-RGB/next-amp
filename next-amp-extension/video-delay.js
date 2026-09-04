@@ -53,6 +53,8 @@ class Monitor {
       } else if (message.type === "SET_VIDEO_QUALITY") {
         this.quality = message.value;
         this.delayedVideos.forEach((dv) => dv.updateQuality(this.quality));
+      } else if (message.type === "PING") {
+        sendResponse({ pong: true, version: "4.6" });
       }
       return true;
     });

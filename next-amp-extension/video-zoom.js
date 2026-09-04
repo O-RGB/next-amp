@@ -2,7 +2,7 @@ class VideoZoomer {
   constructor() {
     this.scale = 1.0;
     this.translateY = 0;
-    this.translateX = 0; // [NEW] เพิ่มแกน X
+    this.translateX = 0; // [NEW] Add X axis
     this.rotate = 0;
     this.observedElements = new WeakSet();
 
@@ -52,7 +52,7 @@ class VideoZoomer {
       if (message.type === "SET_VIDEO_ZOOM") {
         if (message.scale !== undefined) this.scale = parseFloat(message.scale);
 
-        // [NEW] รับค่า Position X และ Y
+        // [NEW] Receive Position X and Y
         if (message.translateY !== undefined)
           this.translateY = parseFloat(message.translateY);
         if (message.translateX !== undefined)
@@ -110,7 +110,7 @@ class VideoZoomer {
   }
 
   shouldApply() {
-    // [NEW] เช็ค translateX ด้วย
+    // [NEW] Check translateX as well
     return !(
       this.scale === 1.0 &&
       this.translateY === 0 &&
@@ -139,7 +139,7 @@ class VideoZoomer {
 
     const finalScale = this.scale * autoFitScale;
 
-    // [NEW] เพิ่ม translate(${this.translateX}%, ${this.translateY}%)
+    // [NEW] Add translate(${this.translateX}%, ${this.translateY}%)
     const transformValue = `scale(${finalScale}) translate(${this.translateX}%, ${this.translateY}%) rotate(${this.rotate}deg)`;
 
     if (video.style.transform !== transformValue) {

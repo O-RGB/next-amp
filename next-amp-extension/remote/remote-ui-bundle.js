@@ -739,6 +739,20 @@ select {
       </div>
     </div>
   </div>
+
+  <!-- FOOTER: BUY ME A COFFEE -->
+  <div class="flex justify-center items-center py-2.5 mt-1">
+    <a
+      href="https://ganknow.com/nextfeeder/tip"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="win-btn flex items-center justify-center gap-1.5 px-3 py-1 text-[11px] font-bold shadow-sm"
+      style="background:linear-gradient(to bottom, #ffd966, #f1c232); color:#4a2810; text-decoration:none; border:1px solid #b48608;"
+    >
+      <i class="ph-bold ph-coffee" style="font-size:13px"></i>
+      <span>BUY ME A COFFEE</span>
+    </a>
+  </div>
 </div>
 `,
 

@@ -11,7 +11,7 @@
     />
     <script src="./assets/js/tailwindcss.js"></script>
     <script src="./assets/js/config.js"></script>
-    <script src="./assets/js/phosphor.js"></script>
+    <link rel="stylesheet" href="./assets/css/phosphor.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="app-bg">
@@ -46,8 +46,8 @@
           <span>MULTIPLE SESSIONS DETECTED</span>
         </div>
         <div class="bg-[#222] p-4 flex flex-col gap-4 text-center">
-          <p class="text-white text-[10px] font-sarabun">
-            ตรวจพบการใช้งานใน Tab อื่น <br />กรุณาเลือกรูปแบบการทำงาน:
+          <p class="text-white text-[10px] font-pixel">
+            Another session detected in another tab.<br />Please choose session mode:
           </p>
           <div class="flex flex-col gap-2">
             <button
@@ -57,7 +57,7 @@
               <div class="flex flex-col items-center">
                 <span class="text-[9px]">SHARED MODE</span
                 ><span class="text-[7px] text-gray-300 font-normal"
-                  >ใช้ค่า Setting เดียวกัน (Sync)</span
+                  >Sync all settings</span
                 >
               </div>
             </button>
@@ -68,9 +68,89 @@
               <div class="flex flex-col items-center">
                 <span class="text-[9px]">TEMPORARY MODE</span
                 ><span class="text-[7px] text-gray-300 font-normal"
-                  >แยกการทำงาน (ไม่บันทึกค่า)</span
+                  >Independent (temporary)</span
                 >
               </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab Reload / Status Check Overlay -->
+    <div id="tab-status-overlay" class="z-[150000]">
+      <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">
+        <div class="theme-bar justify-between mb-2">
+          <span id="tab-status-title" class="flex items-center gap-1 font-bold">
+            <i id="tab-status-title-icon" class="ph-bold ph-arrows-clockwise text-yellow-400"></i>
+            <span id="tab-status-title-text">TAB RELOAD REQUIRED</span>
+          </span>
+          <button id="btn-close-tab-status" class="win-btn text-red-900 font-bold bg-[#e0e0e0]">X</button>
+        </div>
+        <div class="bg-[#222] p-4 flex flex-col gap-3 items-center text-center">
+          <div id="tab-status-icon-box" class="w-10 h-10 rounded-full border border-yellow-500/60 bg-yellow-500/10 flex items-center justify-center text-yellow-400 text-xl">
+            <i id="tab-status-icon" class="ph-bold ph-arrows-clockwise"></i>
+          </div>
+          <p id="tab-status-desc" class="text-white text-[10px] font-pixel leading-tight">
+            Kindly refresh the tab to ensure Next-Amp audio capture and video controls work smoothly.
+          </p>
+          <div class="flex flex-col gap-2 w-full mt-1">
+            <button
+              id="btn-tab-status-action"
+              class="win-btn h-8 bg-blue-900 text-white border-blue-400 hover:bg-blue-800 flex items-center justify-center gap-1.5"
+            >
+              <i id="btn-tab-status-action-icon" class="ph-bold ph-arrows-clockwise"></i>
+              <span id="btn-tab-status-action-text" class="text-[9px] font-bold uppercase">REFRESH THE TAB</span>
+            </button>
+            <button
+              id="btn-tab-status-dismiss"
+              class="win-btn h-6 bg-gray-700 text-gray-300 hover:bg-gray-600"
+            >
+              <span class="text-[8px]">CONTINUE ANYWAY</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- First-Launch "Buy Me a Coffee" Modal -->
+    <div id="first-launch-overlay" class="z-[160000]">
+      <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">
+        <div class="theme-bar justify-between mb-2">
+          <span class="flex items-center gap-1 font-bold">
+            <i class="ph-bold ph-coffee text-amber-300"></i>
+            <span>SUPPORT NEXT-AMP</span>
+          </span>
+          <button id="btn-close-first-launch" class="win-btn text-red-900 font-bold bg-[#e0e0e0]">X</button>
+        </div>
+        <div class="bg-[#222] p-4 flex flex-col gap-3 items-center text-center">
+          <div class="w-12 h-12 rounded-full border border-amber-500/60 bg-amber-500/10 flex items-center justify-center text-amber-400 text-2xl animate-pulse">
+            <i class="ph-bold ph-coffee"></i>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[11px] font-bold text-amber-300 font-pixel uppercase tracking-wide">
+              Buy Me a Coffee!
+            </span>
+            <span class="text-[7.5px] text-gray-400 font-pixel">
+              COMMUNITY SUPPORT
+            </span>
+          </div>
+          <p class="text-white text-[9.5px] font-pixel leading-relaxed">
+            Thank you for using Next-Amp! If you enjoy this tool, please consider buying me a coffee to support continuous development and updates.
+          </p>
+          <div class="flex flex-col gap-2 w-full mt-1">
+            <button
+              id="btn-first-launch-donate"
+              class="win-btn h-8 bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] text-[#4a2810] font-bold font-pixel text-[9px] flex items-center justify-center gap-1.5 border border-[#b48608] shadow cursor-pointer active:scale-95"
+            >
+              <i class="ph-bold ph-coffee text-[10px]"></i>
+              <span class="tracking-wide uppercase">BUY ME A COFFEE</span>
+            </button>
+            <button
+              id="btn-first-launch-dismiss"
+              class="win-btn h-6 bg-gray-700 text-gray-300 hover:bg-gray-600 cursor-pointer"
+            >
+              <span class="text-[8px]">MAYBE LATER</span>
             </button>
           </div>
         </div>
@@ -293,6 +373,22 @@
               <p class="text-[8px] text-gray-500 px-4">
                 Advanced audio processing & real-time visualizer.
               </p>
+              <div class="win-border-in bg-[#1e1e1e] p-2 mt-1 w-[90%] flex flex-col items-center gap-1 border border-gray-700">
+                <div class="text-[9px] font-bold text-yellow-400 flex items-center gap-1">
+                  <i class="ph-bold ph-coffee text-amber-400 text-[10px]"></i>
+                  <span>SUPPORT THE PROJECT</span>
+                </div>
+                <p class="text-[7.5px] text-gray-400 leading-tight">
+                  Support ongoing development and future feature updates.
+                </p>
+                <button
+                  id="btn-donate-about"
+                  class="win-btn h-5 px-2 text-[8px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer mt-0.5"
+                >
+                  <i class="ph-bold ph-coffee text-[9px]"></i>
+                  <span>BUY ME A COFFEE</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -372,8 +468,7 @@
                 class="flex justify-between text-[7px] font-pixel theme-text-main font-bold -mb-1"
               >
                 <div class="flex gap-1 z-50">
-                  <span>VOL</span
-                  ><button
+                  <span class="flex items-center gap-0.5"><i class="ph-bold ph-speaker-high text-[8px]"></i>VOL</span><button
                     id="btn-normalize"
                     class="win-btn w-full h-full border text-[7px] font-bold flex items-center justify-center gap-0.5 px-1"
                   >
@@ -401,7 +496,7 @@
               <div
                 class="flex justify-between text-[7px] font-pixel theme-text-sec font-bold -mb-1"
               >
-                <span>BAL</span><span id="txt-pan">C</span>
+                <span class="flex items-center gap-0.5"><i class="ph-bold ph-arrows-left-right text-[8px]"></i>BAL</span><span id="txt-pan">C</span>
               </div>
               <input
                 type="range"
@@ -440,8 +535,7 @@
               <div
                 class="flex justify-between text-[7px] font-pixel text-gray-400 font-bold -mb-1"
               >
-                <span>PITCH</span
-                ><span id="txt-pitch" class="theme-text-sec">0</span>
+                <span class="flex items-center gap-0.5"><i class="ph-bold ph-music-notes text-[8px]"></i>PITCH</span><span id="txt-pitch" class="theme-text-sec">0</span>
               </div>
               <input
                 type="range"
@@ -458,8 +552,7 @@
               <div
                 class="flex justify-between text-[7px] font-pixel text-gray-400 font-bold -mb-1"
               >
-                <span>VERB</span
-                ><span id="txt-verb" class="theme-text-main">0.0</span>
+                <span class="flex items-center gap-0.5"><i class="ph-bold ph-waveform text-[8px]"></i>VERB</span><span id="txt-verb" class="theme-text-main">0.0</span>
               </div>
               <input
                 type="range"
@@ -506,10 +599,7 @@
           <span>AI VOCAL</span>
         </div>
         <div class="flex items-center gap-1.5 overflow-hidden">
-          <span id="txt-vocal-status" class="text-[8px] font-pixel text-yellow-300 font-bold truncate max-w-[130px] cursor-pointer" title="AI Vocal Status (Click to inspect)">ORIGINAL</span>
-          <button id="btn-vocal-diag" class="win-btn text-[7px] font-bold px-1 h-3 text-purple-900 bg-[#f0e0ff]" title="System Diagnostics">
-            DIAG
-          </button>
+          <span id="txt-vocal-status" class="text-[8px] font-pixel text-yellow-300 font-bold truncate max-w-[130px]" title="AI Vocal Status">ORIGINAL</span>
         </div>
       </div>
       <div class="p-1 flex flex-col gap-1 bg-[#222]" id="vocal-controls-area">
@@ -522,7 +612,7 @@
           </div>
           <!-- Diff Buttons 1, 2, 3, 4 -->
           <div class="flex items-center gap-1 bg-black px-1.5 py-0.5 border border-gray-700">
-            <span class="text-[7px] font-pixel text-gray-400 font-bold">DIFF:</span>
+            <span class="text-[7px] font-pixel text-gray-400 font-bold flex items-center gap-0.5"><i class="ph-bold ph-gauge text-[8px]"></i>DIFF:</span>
             <div class="flex gap-0.5" id="diff-buttons">
               <button class="win-btn btn-diff h-3.5 w-3.5 text-[7px] font-bold text-black" data-level="1" title="Level 1: Soft (0.8x)">1</button>
               <button class="win-btn btn-diff h-3.5 w-3.5 text-[7px] font-bold pressed text-black" data-level="2" title="Level 2: Standard (1.0x)">2</button>
@@ -535,7 +625,7 @@
     </div>
 
     <div class="win-border-out flex-none" id="block-video">
-        <div class="theme-bar cursor-default select-none border-t border-black">
+      <div class="theme-bar cursor-default select-none border-t border-black flex justify-between items-center">
         <div class="flex items-center gap-2">
           <button
             id="btn-toggle-video"
@@ -546,6 +636,14 @@
           <i class="ph-bold ph-monitor-play"></i>
           <span>VIDEO</span>
         </div>
+        <button
+          id="btn-buy-coffee"
+          class="win-btn h-3.5 px-1.5 text-[8px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center gap-1 border border-[#b48608] shadow-sm cursor-pointer select-none transition-transform"
+          title="Buy Me a Coffee (Support developer)"
+        >
+          <i class="ph-bold ph-coffee text-[9px] text-[#5c3814]"></i>
+          <span class="tracking-tight uppercase">BUY ME A COFFEE</span>
+        </button>
       </div>
       <div
         class="p-1.5 grid grid-cols-2 gap-1 bg-[#222]"
@@ -555,7 +653,7 @@
           <div
             class="flex justify-between items-center text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold border-b border-[#333] pb-0.5"
           >
-            <span>Delay</span>
+            <span class="flex items-center gap-0.5"><i class="ph-bold ph-clock-countdown text-[8px]"></i>DELAY</span>
             <div class="flex items-center gap-2">
               <select
                 id="video-quality"
@@ -605,8 +703,7 @@
             class="flex justify-between items-center text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
           >
             <div class="flex items-center gap-1">
-              <span>ZOOM</span
-              ><span id="txt-zoom" class="text-blue-400">100%</span>
+              <span class="flex items-center gap-0.5"><i class="ph-bold ph-magnifying-glass-plus text-[8px]"></i>ZOOM</span><span id="txt-zoom" class="text-blue-400">100%</span>
             </div>
             <div class="flex gap-0.5">
               <button id="btn-zoom-fit" class="win-btn h-3 text-[7px] px-1">
@@ -640,8 +737,7 @@
             class="flex justify-between items-center text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
           >
             <div class="flex items-center gap-1">
-              <span>ROT</span
-              ><span id="txt-rotate" class="text-purple-400">0°</span>
+              <span class="flex items-center gap-0.5"><i class="ph-bold ph-arrows-clockwise text-[8px]"></i>ROT</span><span id="txt-rotate" class="text-purple-400">0°</span>
             </div>
             <div class="flex gap-0.5">
               <button id="btn-rotate-0" class="win-btn h-3 text-[7px] px-1">
@@ -671,7 +767,7 @@
               class="flex justify-between items-center text-[8px] text-gray-400 mb-0.5 font-pixel uppercase font-bold"
             >
               <div class="flex items-center gap-1">
-                <span>POS</span><span id="txt-pos" class="text-orange-400">0,0</span>
+                <span class="flex items-center gap-0.5"><i class="ph-bold ph-arrows-out-cardinal text-[8px]"></i>POS</span><span id="txt-pos" class="text-orange-400">0,0</span>
               </div>
               <button id="btn-pos-reset" class="win-btn h-3 text-[7px] px-1">
                 RESET

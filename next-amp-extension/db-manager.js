@@ -39,7 +39,7 @@ export class DBManager {
       hour: "2-digit",
       minute: "2-digit",
     });
-    // คำนวณขนาดไฟล์เป็น MB
+    // Calculate file size in MB
     const sizeMB = (blob.size / (1024 * 1024)).toFixed(2);
 
     const record = {
@@ -69,7 +69,7 @@ export class DBManager {
       const req = store.getAll();
 
       req.onsuccess = () => {
-        // เรียงจากใหม่ไปเก่า
+        // Sort from newest to oldest
         const results = req.result.sort((a, b) => b.timestamp - a.timestamp);
         resolve(results);
       };

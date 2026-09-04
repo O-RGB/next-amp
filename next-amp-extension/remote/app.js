@@ -97,7 +97,7 @@ const UI_CONFIG = {
 };
 
 function generateControlHTML(c) {
-  // สร้าง HTML สำหรับ Control Card 1 อัน (ใช้ดีไซน์ Slider Well)
+  // Create HTML for a single control card (slider well design)
   return `
     <div class="control-card">
       <div class="flex justify-between items-end mb-1">
@@ -140,7 +140,7 @@ function initUI() {
   render("video-pos-grid", UI_CONFIG.videoPos);
 }
 
-// เรียกใช้งานทันทีเพื่อสร้าง HTML ก่อนที่ Logic อื่นจะหา Element ไม่เจอ
+// Execute immediately to build HTML before other logic binds elements
 initUI();
 
 /* =========================================
@@ -399,7 +399,7 @@ function setBtnState(el, isActive, textOn, textOff, activeBg, activeText) {
   }
 }
 
-// สร้าง EQ
+// Build EQ
 (function generateEQ() {
   els.eqContainer.innerHTML = "";
   FREQUENCIES.forEach((f, i) => {
@@ -549,7 +549,7 @@ function setupStepper(sliderId, minusId, plusId) {
   btnPlus.onclick = () => update(true);
 }
 
-// วนลูป Setup ปุ่ม +- ให้ทุกตัวใน Config
+// Loop and setup +/- buttons for each config entry
 // [NEW] include videoPos
 [
   ...UI_CONFIG.audio,

@@ -119,6 +119,22 @@ const MODAL_HTML = `
             <div class="text-[8px] text-gray-400">Version 4.5.1</div>
           </div>
           <p class="text-[8px] text-gray-500 px-4">Advanced audio processing, real-time visualizer, and in-browser audio recording.</p>
+          <div class="win-border-in bg-[#1e1e1e] p-2 mt-1 w-[90%] flex flex-col items-center gap-1 border border-gray-700">
+            <div class="text-[9px] font-bold text-yellow-400 flex items-center gap-1">
+              <i class="ph-bold ph-coffee text-amber-400 text-[10px]"></i>
+              <span>SUPPORT THE PROJECT</span>
+            </div>
+            <p class="text-[7.5px] text-gray-400 leading-tight">
+              Support ongoing development and future feature updates.
+            </p>
+            <button
+              id="btn-donate-about"
+              class="win-btn h-5 px-2 text-[8px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer mt-0.5"
+            >
+              <i class="ph-bold ph-coffee text-[9px]"></i>
+              <span>BUY ME A COFFEE</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -185,6 +201,14 @@ export class SettingsModal {
     $$(".tab-btn").forEach(
       (btn) => (btn.onclick = () => this.switchTab(btn.dataset.tab))
     );
+
+    // Donate / Support
+    const donateAboutBtn = $("#btn-donate-about");
+    if (donateAboutBtn) {
+      donateAboutBtn.onclick = () => {
+        chrome.tabs.create({ url: "https://ganknow.com/nextfeeder/tip" });
+      };
+    }
 
     // Theme Logic
     $$(".theme-box").forEach((box) => {

@@ -28,7 +28,8 @@
       "resources": [
         "assets/libs/mjs/SignalsmithStretch.mjs",
         "assets/libs/js/tailwindcss.js",
-        "assets/libs/js/phosphor.js",
+        "assets/css/phosphor.css",
+        "assets/fonts/Phosphor-Bold.woff2",
         "assets/libs/js/peerjs.min.js",
         "assets/libs/js/tf.min.js",
         "modules/ai-vocal/vocal-worklet.js",

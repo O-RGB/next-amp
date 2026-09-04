@@ -74,30 +74,32 @@ export class AudioEffects {
 
   refreshOutputChain() {
     this.nodes.pan.disconnect();
+    this.nodes.reverbConv.disconnect();
     this.nodes.reverbGain.disconnect();
     this.nodes.compressor.disconnect();
     this.nodes.makeup.disconnect();
     this.nodes.limiter.disconnect();
 
-    // Only wire ConvolverNode when reverb is active.
-    // If reverb=0, it was disconnected by setReverb() and must stay out of the graph.
-    const reverbActive = this.nodes.reverbGain.gain.value > 0;
-    this.isReverbConnected = reverbActive;
-    if (reverbActive) {
-      this.nodes.pan.connect(this.nodes.reverbConv);
-      this.nodes.reverbConv.connect(this.nodes.reverbGain);
-    }
+    const dest = this.isNormalizeOn ? this.nodes.compressor : this.nodes.masterGain;
+
+    // Direct dry signal
+    this.nodes.pan.connect(dest);
+
+    // Wet reverb branch: reverbConv -> reverbGain -> dest
+    this.nodes.reverbConv.connect(this.nodes.reverbGain);
+    this.nodes.reverbGain.connect(dest);
 
     if (this.isNormalizeOn) {
-      this.nodes.pan.connect(this.nodes.compressor);
-      if (reverbActive) this.nodes.reverbGain.connect(this.nodes.compressor);
-
       this.nodes.compressor.connect(this.nodes.makeup);
       this.nodes.makeup.connect(this.nodes.limiter);
       this.nodes.limiter.connect(this.nodes.masterGain);
-    } else {
-      this.nodes.pan.connect(this.nodes.masterGain);
-      if (reverbActive) this.nodes.reverbGain.connect(this.nodes.masterGain);
+    }
+
+    // Input to convolver is only active if reverb gain > 0 (saves CPU when 0)
+    const reverbActive = this.nodes.reverbGain.gain.value > 0;
+    this.isReverbConnected = reverbActive;
+    if (reverbActive) {
+      try { this.nodes.pan.connect(this.nodes.reverbConv); } catch (_) {}
     }
   }
 
@@ -127,7 +129,7 @@ export class AudioEffects {
     this.nodes.reverbGain.gain.value = val;
 
     // ConvolverNode is very expensive (FFT convolution every render quantum).
-    // Disconnect it entirely when reverb=0 so the browser stops scheduling it.
+    // Disconnect pan -> reverbConv when reverb=0 so the browser stops scheduling it.
     if (val === 0) {
       if (this.isReverbConnected) {
         try { this.nodes.pan.disconnect(this.nodes.reverbConv); } catch (_) {}

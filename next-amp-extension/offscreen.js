@@ -77,7 +77,7 @@ function handleRemoteCommand(conn, data) {
   if (!tabId || !sessions.has(tabId)) return;
 
   if (data.type === "SET_PARAM") {
-    // อัปเดต Params และ Broadcast
+    // Update Params and Broadcast
     updateParams({
       ...data,
       tabId: tabId,
@@ -113,12 +113,12 @@ const createDefaultParams = () => ({
   volume: 1.0,
   visualMode: 0,
   isEqOn: true,
-  isAudioMasterOn: true, // เพิ่มสถานะ Master
-  isVideoMasterOn: true, // เพิ่มสถานะ Video
+  isAudioMasterOn: true, // Master status
+  isVideoMasterOn: true, // Video status
   videoDelay: 0,
   videoQuality: "max",
-  videoZoom: 1.0, // เก็บค่า Zoom
-  videoRotate: 0, // เก็บค่า Rotate
+  videoZoom: 1.0, // Zoom value
+  videoRotate: 0, // Rotate value
   normalize: false,
   eq: new Array(10).fill(0),
   eqPreset: "flat",
@@ -462,8 +462,8 @@ function applyParamToSession(session, key, value, index, source) {
   if (key === "eq" && index !== null) params.eq[index] = value;
   else if (key in params) params[key] = value;
 
-  // -- LOGIC การรวม VIDEO TRANSFORM --
-  // (แก้ปัญหา ปรับ zoom แล้วไม่ได้ผล หรือ rotate แล้ว zoom หาย)
+  // -- VIDEO TRANSFORM MERGE LOGIC --
+  // (Resolves zoom override or rotate resetting zoom issue)
   const tId = getKeyByValue(sessions, session);
 
   if (key === "videoZoom" || key === "videoRotate") {
@@ -589,7 +589,7 @@ function applyParamToSession(session, key, value, index, source) {
     case "visualMode":
       params.visualMode = value;
       break;
-    // Master On/Off = Mute/Unmute output (เพื่อให้ Session ยังอยู่ แต่เสียงดับ)
+    // Master On/Off = Mute/Unmute output (Keeps session alive while muting audio)
     case "isAudioMasterOn":
       if (value) {
         // Unmute: resume AudioContext (restarts all audio processing) then reconnect output

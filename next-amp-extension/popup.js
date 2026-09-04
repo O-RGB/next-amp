@@ -37,14 +37,166 @@ let currentEqValues = [...PRESETS.flat];
 let visualMode = 0;
 let isRecording = false;
 let db = new DBManager();
+let isTabReady = true;
 let currentTabId = null;
 
 let sessionManager;
 let settingsModal;
 
+async function checkTabStatus(tab) {
+  if (!tab || !tab.id) {
+    return { ok: false, reason: "no_tab" };
+  }
+
+  if (!tab.url) {
+    return { ok: false, reason: "unsupported", tabId: tab.id };
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(tab.url);
+  } catch (e) {
+    return { ok: false, reason: "unsupported", tabId: tab.id };
+  }
+
+  const isHttpOrHttps =
+    parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
+  const isRestricted =
+    parsedUrl.hostname === "chrome.google.com" ||
+    parsedUrl.hostname === "chromewebstore.google.com" ||
+    parsedUrl.protocol.startsWith("chrome") ||
+    parsedUrl.protocol.startsWith("edge") ||
+    parsedUrl.protocol.startsWith("about");
+
+  if (!isHttpOrHttps || isRestricted) {
+    return { ok: false, reason: "unsupported", tabId: tab.id, url: tab.url };
+  }
+
+  // Ping content script to verify if tab was loaded before extension was installed/reloaded
+  const hasContentScript = await new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tab.id, { type: "PING" }, (response) => {
+        if (chrome.runtime.lastError || !response || !response.pong) {
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      });
+      setTimeout(() => resolve(false), 300);
+    } catch (e) {
+      resolve(false);
+    }
+  });
+
+  if (!hasContentScript) {
+    return { ok: false, reason: "needs_reload", tabId: tab.id };
+  }
+
+  return { ok: true, tabId: tab.id };
+}
+
+function showTabStatusModal(status, tab) {
+  const overlay = $("#tab-status-overlay");
+  if (!overlay) return;
+
+  const titleText = $("#tab-status-title-text");
+  const titleIcon = $("#tab-status-title-icon");
+  const icon = $("#tab-status-icon");
+  const desc = $("#tab-status-desc");
+  const btnAction = $("#btn-tab-status-action");
+  const btnActionText = $("#btn-tab-status-action-text");
+  const btnActionIcon = $("#btn-tab-status-action-icon");
+  const btnDismiss = $("#btn-tab-status-dismiss");
+  const btnClose = $("#btn-close-tab-status");
+
+  if (status.reason === "unsupported") {
+    if (titleText) titleText.textContent = "OPEN A MEDIA TAB";
+    if (titleIcon)
+      titleIcon.className = "ph-bold ph-monitor-play text-yellow-400";
+    if (icon) icon.className = "ph-bold ph-monitor-play";
+    if (desc)
+      desc.textContent =
+        "To get started with Next-Amp, please open a music or video website like YouTube.";
+    if (btnActionText) btnActionText.textContent = "OPEN YOUTUBE";
+    if (btnActionIcon) btnActionIcon.className = "ph-bold ph-monitor-play";
+    if (btnAction) {
+      btnAction.onclick = () => {
+        chrome.tabs.create({ url: "https://www.youtube.com/" });
+        window.close();
+      };
+    }
+  } else {
+    if (titleText) titleText.textContent = "TAB RELOAD REQUIRED";
+    if (titleIcon)
+      titleIcon.className = "ph-bold ph-arrows-clockwise text-yellow-400";
+    if (icon) icon.className = "ph-bold ph-arrows-clockwise";
+    if (desc)
+      desc.textContent =
+        "Kindly refresh the tab after installation to ensure Next-Amp audio capture and video controls work smoothly.";
+    if (btnActionText) btnActionText.textContent = "REFRESH THE TAB";
+    if (btnActionIcon) btnActionIcon.className = "ph-bold ph-arrows-clockwise";
+    if (btnAction) {
+      btnAction.onclick = () => {
+        if (tab && tab.id) chrome.tabs.reload(tab.id);
+        window.close();
+      };
+    }
+  }
+
+  const dismissModal = () => {
+    overlay.classList.remove("active");
+    isTabReady = true;
+    if (isAudioMasterOn && currentTabId) {
+      initCapture(sessionManager.sessionMode);
+    }
+    checkFirstLaunchModal();
+  };
+
+  if (btnDismiss) btnDismiss.onclick = dismissModal;
+  if (btnClose) btnClose.onclick = dismissModal;
+
+  overlay.classList.add("active");
+}
+
+async function checkFirstLaunchModal() {
+  const data = await chrome.storage.local.get(["hasSeenWelcomeDonateModal"]);
+  if (!data.hasSeenWelcomeDonateModal) {
+    const overlay = $("#first-launch-overlay");
+    if (!overlay) return;
+
+    const btnDonate = $("#btn-first-launch-donate");
+    const btnDismiss = $("#btn-first-launch-dismiss");
+    const btnClose = $("#btn-close-first-launch");
+
+    const dismissDonate = (openLink = false) => {
+      chrome.storage.local.set({ hasSeenWelcomeDonateModal: true });
+      overlay.classList.remove("active");
+      if (openLink) {
+        chrome.tabs.create({ url: "https://ganknow.com/nextfeeder/tip" });
+      }
+    };
+
+    if (btnDonate) btnDonate.onclick = () => dismissDonate(true);
+    if (btnDismiss) btnDismiss.onclick = () => dismissDonate(false);
+    if (btnClose) btnClose.onclick = () => dismissDonate(false);
+
+    overlay.classList.add("active");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) currentTabId = tab.id;
+
+  // Check tab status (Tab reload check like in ai remove)
+  const tabStatus = await checkTabStatus(tab);
+  if (!tabStatus.ok) {
+    isTabReady = false;
+    showTabStatusModal(tabStatus, tab);
+  } else {
+    isTabReady = true;
+    checkFirstLaunchModal();
+  }
 
   sessionManager = new SessionManager(currentTabId);
   settingsModal = new SettingsModal(db, {
@@ -52,7 +204,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     onSettingChange: (obj) => {
       sessionManager.setSetting(obj);
       if (obj.sampleRate !== undefined || obj.latencyHint !== undefined) {
-        if (isAudioMasterOn && currentTabId) {
+        if (isAudioMasterOn && currentTabId && isTabReady) {
           initCapture(sessionManager.sessionMode);
         }
       }
@@ -92,7 +244,7 @@ async function finalizeInitialization() {
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
 
   if (sessionManager.sessionMode === "shared") {
-    // [NEW] เพิ่ม videoPosX และ videoPosY ในการโหลด
+    // [NEW] Add videoPosX and videoPosY to load
     const sharedParams = await chrome.storage.local.get([
       "volume",
       "pan",
@@ -203,7 +355,7 @@ async function finalizeInitialization() {
     loadAudioState(state);
     isAudioMasterOn = true;
   } else {
-    if (isAudioMasterOn) {
+    if (isAudioMasterOn && isTabReady) {
       initCapture(sessionManager.sessionMode);
     }
   }
@@ -825,12 +977,6 @@ function setupListeners() {
     sendParam("vocalMode", nextMode);
     updateVocalUI(nextMode);
   });
-  $("#txt-vocal-status")?.addEventListener("click", () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
-  });
-  $("#btn-vocal-diag")?.addEventListener("click", () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
-  });
   $("#btn-vocal-bypass")?.addEventListener("click", () => {
     sendParam("vocalMode", "bypass");
     updateVocalUI("bypass");
@@ -984,6 +1130,14 @@ function setupListeners() {
   });
 
   $("#btn-rec-top").onclick = toggleRecording;
+
+  const openCoffeeDonation = () => {
+    chrome.tabs.create({ url: "https://ganknow.com/nextfeeder/tip" });
+  };
+  const buyCoffeeBtn = $("#btn-buy-coffee");
+  if (buyCoffeeBtn) buyCoffeeBtn.addEventListener("click", openCoffeeDonation);
+  const donateAboutBtn = $("#btn-donate-about");
+  if (donateAboutBtn) donateAboutBtn.addEventListener("click", openCoffeeDonation);
 }
 
 function updateEqToggleButton() {
@@ -1335,6 +1489,8 @@ function loadAudioState(state) {
   syncVideoTransform();
 }
 
+let barPeaks = [];
+
 function drawVisualizer(data, mode) {
   const cvs = $("#visualizer");
   if (!cvs) return;
@@ -1342,40 +1498,118 @@ function drawVisualizer(data, mode) {
   const dpr = window.devicePixelRatio || 1;
   const w = cvs.clientWidth,
     h = cvs.clientHeight;
-  cvs.width = w * dpr;
-  cvs.height = h * dpr;
-  ctx.scale(dpr, dpr);
+  if (!w || !h) return;
+
+  if (cvs.width !== Math.floor(w * dpr) || cvs.height !== Math.floor(h * dpr)) {
+    cvs.width = Math.floor(w * dpr);
+    cvs.height = Math.floor(h * dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
+
+  // Top limit margin so bars and waveforms never obscure the VISUALIZER label (with comfortable padding)
+  const topMargin = 18;
+  const maxBarH = Math.max(1, h - topMargin);
+
+  // Draw subtle retro limit line
+  ctx.save();
+  ctx.strokeStyle = "rgba(255, 60, 60, 0.45)";
+  ctx.setLineDash([2, 3]);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, topMargin - 0.5);
+  ctx.lineTo(w, topMargin - 0.5);
+  ctx.stroke();
+  ctx.restore();
+
   if (mode === 0) {
-    const barW = w / data.length;
+    // Mode 0: Spectrum Bars with vertical gradient (Green at bottom -> Yellow in middle -> Red at top)
+    const gradient = ctx.createLinearGradient(0, h, 0, topMargin);
+    gradient.addColorStop(0.0, "#00e640");  // Bottom: bright green
+    gradient.addColorStop(0.55, "#38ef7d"); // Mid-low: lime green
+    gradient.addColorStop(0.72, "#ffea00"); // Mid: rich yellow
+    gradient.addColorStop(0.88, "#ff8800"); // Mid-high: amber orange
+    gradient.addColorStop(1.0, "#ff2222");  // Top peak: red
+
+    ctx.fillStyle = gradient;
+
+    // Reduce bar count slightly (e.g. 20 bars instead of 32) for wider, punchier retro EQ look
+    const numBars = Math.min(20, data.length);
+    if (barPeaks.length !== numBars) {
+      barPeaks = new Array(numBars).fill(0);
+    }
+
+    const barW = w / numBars;
     let x = 0;
-    for (let i = 0; i < data.length; i++) {
-      const v = data[i];
-      const barH = (v / 255) * h;
-      const r = v > 180 ? 255 : v > 100 ? (v - 100) * 2 : 0;
-      const g = v > 180 ? 255 - (v - 180) * 2 : 255;
-      ctx.fillStyle = `rgb(${r}, ${g}, 0)`;
-      ctx.fillRect(x, h - barH, barW - 0.5, barH);
+    for (let i = 0; i < numBars; i++) {
+      // Average frequency bins in this bar's range
+      const start = Math.floor((i * data.length) / numBars);
+      const end = Math.max(start + 1, Math.floor(((i + 1) * data.length) / numBars));
+      let sum = 0;
+      let count = 0;
+      for (let j = start; j < end; j++) {
+        sum += data[j];
+        count++;
+      }
+      const v = sum / count;
+      const barH = (v / 255) * maxBarH;
+
+      // Update peak hold decay
+      if (!barPeaks[i] || barPeaks[i] < barH) {
+        barPeaks[i] = barH;
+      } else {
+        barPeaks[i] = Math.max(0, barPeaks[i] - 0.7);
+      }
+
+      if (barH > 0) {
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x + 0.5, h - barH, Math.max(1, barW - 1.5), barH);
+      }
+
+      // Draw peak hold cap at the top of the bar
+      if (barPeaks[i] > 1) {
+        const peakY = h - barPeaks[i];
+        const peakColor =
+          peakY <= topMargin + 2
+            ? "#ff3333"
+            : peakY <= h - 0.65 * maxBarH
+            ? "#ffea00"
+            : "#00ff66";
+        ctx.fillStyle = peakColor;
+        ctx.fillRect(x + 0.5, peakY - 1, Math.max(1, barW - 1.5), 1);
+      }
+
       x += barW;
     }
   } else if (mode === 1) {
-    ctx.strokeStyle = "#00ff00";
+    // Mode 1: Frequency Wave line with Green -> Yellow -> Red vertical gradient
+    const gradient = ctx.createLinearGradient(0, h, 0, topMargin);
+    gradient.addColorStop(0.0, "#00e640");
+    gradient.addColorStop(0.65, "#ffea00");
+    gradient.addColorStop(1.0, "#ff2222");
+
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     const sliceW = w / data.length;
     let x = 0;
     data.forEach((v, i) => {
-      const y = h - (v / 255) * h;
+      const y = h - (v / 255) * maxBarH;
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       x += sliceW;
     });
     ctx.stroke();
   } else if (mode === 2) {
+    // Mode 2: Oscilloscope Waveform centered within available safe height
     ctx.strokeStyle = "#00ffff";
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     const sliceW = w / data.length;
     let x = 0;
+    const centerY = topMargin + maxBarH / 2;
     data.forEach((v, i) => {
-      const y = ((v / 128) * h) / 2;
+      const offset = ((v - 128) / 128) * (maxBarH / 2);
+      const y = centerY + offset;
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       x += sliceW;
     });

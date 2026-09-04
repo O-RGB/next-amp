@@ -244,7 +244,9 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 
 /* Modal and other styles remain same ... */
 #modal-overlay,
-#session-mode-overlay {
+#session-mode-overlay,
+#tab-status-overlay,
+#first-launch-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
@@ -256,7 +258,9 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 }
 
 #modal-overlay.active,
-#session-mode-overlay.active {
+#session-mode-overlay.active,
+#tab-status-overlay.active,
+#first-launch-overlay.active {
   display: flex;
 }
 

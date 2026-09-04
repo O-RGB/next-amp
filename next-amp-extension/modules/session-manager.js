@@ -7,21 +7,21 @@ const OVERLAY_HTML = `
       <span>MULTIPLE SESSIONS DETECTED</span>
     </div>
     <div class="bg-[#222] p-4 flex flex-col gap-4 text-center">
-      <p class="text-white text-[10px] font-sarabun">
-        ตรวจพบการใช้งานใน Tab อื่น <br />
-        กรุณาเลือกรูปแบบการทำงาน:
+      <p class="text-white text-[10px] font-pixel">
+        Another session detected in another tab.<br />
+        Please choose session mode:
       </p>
       <div class="flex flex-col gap-2">
         <button id="btn-mode-shared" class="win-btn h-8 bg-blue-900 text-white border-blue-400 hover:bg-blue-800 cursor-pointer pointer-events-auto">
           <div class="flex flex-col items-center pointer-events-none">
             <span class="text-[9px]">SHARED MODE</span>
-            <span class="text-[7px] text-gray-300 font-normal">ใช้ค่า Setting เดียวกัน (Sync)</span>
+            <span class="text-[7px] text-gray-300 font-normal">Sync all settings</span>
           </div>
         </button>
         <button id="btn-mode-temp" class="win-btn h-8 bg-gray-700 text-white hover:bg-gray-600 cursor-pointer pointer-events-auto">
           <div class="flex flex-col items-center pointer-events-none">
             <span class="text-[9px]">TEMPORARY MODE</span>
-            <span class="text-[7px] text-gray-300 font-normal">แยกการทำงาน (ไม่บันทึกค่า)</span>
+            <span class="text-[7px] text-gray-300 font-normal">Independent (temporary)</span>
           </div>
         </button>
       </div>
@@ -40,14 +40,14 @@ export class SessionManager {
   async init(callback) {
     console.log("SessionManager: Initializing...");
 
-    // สร้าง Overlay และ Inject เข้า Body
+    // Create overlay and inject into body
     const overlay = document.createElement("div");
     overlay.id = "session-mode-overlay";
     overlay.className = "z-[100000]";
     overlay.innerHTML = OVERLAY_HTML;
     document.body.appendChild(overlay);
 
-    // ตรวจสอบ Offscreen
+    // Check offscreen document
     const hasOffscreen = await sendMessageWithRetry({
       type: "CHECK_OFFSCREEN",
     });
@@ -60,7 +60,7 @@ export class SessionManager {
       return;
     }
 
-    // ตรวจสอบ State ปัจจุบัน
+    // Check current state
     const state = await sendMessageWithRetry({
       type: "GET_STATE",
       tabId: this.currentTabId,
@@ -72,7 +72,7 @@ export class SessionManager {
       return;
     }
 
-    // ตรวจสอบ Multiple Sessions
+    // Check multiple active sessions
     const result = await sendMessageWithRetry({
       type: "CHECK_ACTIVE_SESSIONS",
       currentTabId: this.currentTabId,
@@ -84,7 +84,7 @@ export class SessionManager {
       );
       overlay.classList.add("active");
 
-      // ผูก Event Click ด้วยวิธีที่ปลอดภัยกว่า
+      // Bind click events safely
       const btnShared = overlay.querySelector("#btn-mode-shared");
       const btnTemp = overlay.querySelector("#btn-mode-temp");
 
@@ -125,7 +125,7 @@ export class SessionManager {
     this.sessionMode = mode;
     this.initialized = true;
 
-    // ลบ Overlay ทิ้งเพื่อคืน Memory (ถ้าต้องการ) หรือแค่ซ่อนไว้
+    // Remove or hide overlay
     const overlay = document.getElementById("session-mode-overlay");
     if (overlay) overlay.classList.remove("active");
 
