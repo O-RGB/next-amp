@@ -244,8 +244,8 @@ export class AIVocalManager {
       this.setStatus("Loading Model (15MB)...");
       return;
     }
-    if (data.fadeVal < 0.85) {
-      this.setStatus(`Preparing AI: ${data.bufferedSec}s / 0.8s`);
+    if (!data.isAiReady) {
+      this.setStatus(`Preparing AI: ${data.bufferedSec}s / 0.4s`);
     } else {
       this.setStatus(data.mode === "karaoke" ? "KARAOKE (CUT)" : "ACAPELLA (ISO)");
     }
@@ -342,7 +342,13 @@ export class AIVocalManager {
       this.outTailL.set(synthL.subarray(F, F + TAIL));
       this.outTailR.set(synthR.subarray(F, F + TAIL));
 
-      // Deliver processed chunk to AudioWorklet
+      // Chunk 0 primes the WASM lookahead ring buffer (reads from uninitialized delay slot)
+      // Discard Chunk 0 so it never injects 185ms of digital silence into the playback stream!
+      if (chunkIndex === 0) {
+        return;
+      }
+
+      // Deliver real processed chunk to AudioWorklet
       this.workletNode.port.postMessage(
         {
           type: "CHUNK_PROCESSED",
