@@ -965,12 +965,12 @@ function syncView(k, v, index = null) {
   } else if (k === "vocalDiff") {
     const lvl = Number(v) || 2;
     const descs = {
-      1: "1: SOFT (0.8x)",
-      2: "2: STD (1.0x)",
-      3: "3: DEEP (1.3x)",
-      4: "4: ULTRA (1.6x)"
+      1: "1: SOFT (Fast)",
+      2: "2: STD (Optimal)",
+      3: "3: DEEP (Cleaner)",
+      4: "4: ULTRA (Max Context)"
     };
-    if (G("txt-diff-desc")) G("txt-diff-desc").textContent = descs[lvl] || "2: STD (1.0x)";
+    if (G("txt-diff-desc")) G("txt-diff-desc").textContent = descs[lvl] || "2: STD (Optimal)";
     document.querySelectorAll(".btn-remote-diff").forEach((b) => {
       if (Number(b.dataset.level) === lvl) {
         b.classList.add("pressed");

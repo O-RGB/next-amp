@@ -174,6 +174,9 @@ function registerWorkletProcessor(Module, audioNodeKey) {
 				wasmModule._main();
 
 				this.channels = options.numberOfOutputs ? options.outputChannelCount[0] : 2; // stereo by default
+				if (options.processorOptions) {
+					Object.assign(this.config, options.processorOptions);
+				}
 				this.configure();
 
 				this.port.onmessage = event => {

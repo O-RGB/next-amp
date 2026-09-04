@@ -11,7 +11,8 @@
 const CHUNK_SIZE = 8192; // 16 frames * 512 hop (64 Web Audio blocks)
 const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
 const FADE_IN_SPEED = 1.0 / 1024;  // ~23ms smooth fade-in
-const READY_QUEUE_THRESHOLD = 3;   // 3 chunks of real audio (~0.55s buffer cushion) before fade-in
+const READY_QUEUE_THRESHOLD = 3;   // 3 chunks (~0.55s buffer cushion) to start playback
+const MAX_QUEUE_THRESHOLD = 5;     // 5 chunks (~0.92s latency ceiling) prevents delay accumulation
 
 class AIVocalWorkletProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -19,6 +20,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
     this.mode = "bypass"; // "bypass", "karaoke", "acapella"
     this.targetMode = "bypass";
+    this.readyThreshold = READY_QUEUE_THRESHOLD;
 
     // Input accumulator
     this.inAccumL = new Float32Array(CHUNK_SIZE);
@@ -48,24 +50,29 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
       if (data.type === "SET_MODE") {
         if (this.targetMode !== data.mode) {
           this.targetMode = data.mode;
+          // Purge all audio queues and state on ANY mode transition
+          this.isAiReady = false;
+          this.outQueueL = [];
+          this.outQueueR = [];
+          this.currChunkL = null;
+          this.currChunkR = null;
+          this.currChunkPos = 0;
+          this.inAccumPos = 0;
+          this.chunkSeq = 0;
           if (data.mode !== "bypass") {
-            // Switching to AI mode: mute immediately and wait for AI
-            this.isAiReady = false;
-            this.outQueueL = [];
-            this.outQueueR = [];
-            this.currChunkL = null;
-            this.currChunkR = null;
-            this.currChunkPos = 0;
             this.aiGain = 0.0;
-            this.chunkSeq = 0;
-          } else {
-            // Switching back to bypass: fade back to live audio
-            this.isAiReady = false;
           }
         }
       } else if (data.type === "CHUNK_PROCESSED") {
+        if (this.targetMode === "bypass") return;
         this.outQueueL.push(new Float32Array(data.outL));
         this.outQueueR.push(new Float32Array(data.outR));
+        // Hard Latency Ceiling: Keep queue strictly capped at MAX_QUEUE_THRESHOLD (~0.92s)
+        // Completely prevents delay from ever accumulating while providing 2 chunks of jitter cushion!
+        while (this.outQueueL.length > MAX_QUEUE_THRESHOLD) {
+          this.outQueueL.shift();
+          this.outQueueR.shift();
+        }
       }
     };
   }
@@ -113,14 +120,14 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
     // 2. Check if AI queue has reached threshold to start playing
     if (!this.isAiReady) {
-      if (this.targetMode !== "bypass" && this.outQueueL.length >= READY_QUEUE_THRESHOLD) {
+      if (this.targetMode !== "bypass" && this.outQueueL.length >= this.readyThreshold) {
         this.isAiReady = true;
       }
     }
 
     // Target gains:
     // If bypass: targetLive = 1.0, targetAi = 0.0
-    // If AI & ready: targetLive = 0.0, targetAi = 1.0
+    // If AI & ready: targetLive = 0.0, targetAi = 1.0 (stable gain, no jitter flapping)
     // If AI & preparing: targetLive = 0.0, targetAi = 0.0 (MUTED SILENCE!)
     const targetLive = (this.targetMode === "bypass") ? 1.0 : 0.0;
     const targetAi = (this.targetMode !== "bypass" && this.isAiReady) ? 1.0 : 0.0;
@@ -135,6 +142,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         type: "WORKLET_STATUS",
         mode: this.targetMode,
         isAiReady: this.isAiReady,
+        readyThreshold: this.readyThreshold,
         aiGain: this.aiGain,
         bufferedSec: bufferedSec,
         queueLen: this.outQueueL.length
@@ -170,6 +178,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           } else {
             this.currChunkL = null;
             this.currChunkR = null;
+            // Never reset isAiReady = false during active playback!
+            // Temporary starvation will micro-fade down without triggering
+            // an agonizing 1.2-second re-buffering silence cycle.
           }
         }
 

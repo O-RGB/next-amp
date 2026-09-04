@@ -21,10 +21,9 @@ export class AIVocalManager {
     this.onStatusChange = null;
     this.lastError = null;
 
-    // Separation Settings
+    // Separation Settings (1=Soft/Fast, 2=Standard/Optimal, 3=Deep, 4=Ultra)
     this.diffLevel = 2;
     this.strength = 1.0;
-    this.maskGamma = 1.0;
 
     // DSP WASM
     this.wasmInstance = null;
@@ -41,14 +40,24 @@ export class AIVocalManager {
     this.magPtr1 = 0;
     this.maskPtr0 = 0;
     this.maskPtr1 = 0;
+    this.interleavedPtr = 0;
 
     this.inHistoryL = new Float32Array(TAIL);
     this.inHistoryR = new Float32Array(TAIL);
     this.outTailL = new Float32Array(TAIL);
     this.outTailR = new Float32Array(TAIL);
+
+    // High-efficiency pre-allocated buffer for zero-overhead typed array ingestion
+    this.interleavedMags = new Float32Array(_ * A * 2);
+
+    // Concurrency Lock & Latency Ceiling: Prevents GPU backlog and WASM memory collision
+    this.isBusy = false;
+    this.chunkQueue = [];
+    this.maxHistory = [1e-4, 1e-4, 1e-4, 1e-4];
   }
 
   setStatus(status) {
+    if (this.currentStatus === status) return; // Deduplicate: Stop writing to storage 10x/sec!
     this.currentStatus = status;
     try {
       chrome.storage.local.set({ aiVocalStatus: status }).catch(() => {});
@@ -65,14 +74,17 @@ export class AIVocalManager {
   resetState() {
     if (this.rollingMags) {
       try { this.rollingMags.dispose(); } catch (_) {}
+      this.rollingMags = null;
     }
-    if (typeof tf !== "undefined") {
+    if (typeof tf !== "undefined" && this.currentMode !== "bypass") {
       this.rollingMags = tf.zeros([1, _, 64, 2]);
     }
     this.inHistoryL.fill(0);
     this.inHistoryR.fill(0);
     this.outTailL.fill(0);
     this.outTailR.fill(0);
+    this.chunkQueue = [];
+    this.maxHistory = [1e-4, 1e-4, 1e-4, 1e-4];
     if (this.exp && this.exp.stft_reset) {
       this.exp.stft_reset();
     }
@@ -96,11 +108,19 @@ export class AIVocalManager {
       });
 
       // 2. Wire Worklet <-> Engine
-      this.workletNode.port.onmessage = async (e) => {
+      this.workletNode.port.onmessage = (e) => {
         const data = e.data;
         if (data.type === "PROCESS_CHUNK") {
           if (this.isReady && this.currentMode !== "bypass") {
-            await this.processChunk(data.chunkIndex, data.rawL, data.rawR, data.mode);
+            this.chunkQueue.push(data);
+            if (this.chunkQueue.length > 4) {
+              // Tab was suspended or heavily lagged; keep newest chunks to avoid backlog
+              this.chunkQueue = this.chunkQueue.slice(-2);
+              this.resetState();
+            }
+            if (!this.isBusy) {
+              this.runChunkQueue();
+            }
           }
         } else if (data.type === "WORKLET_STATUS") {
           this.handleWorkletStatus(data);
@@ -122,6 +142,21 @@ export class AIVocalManager {
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: Worklet");
       return null;
+    }
+  }
+
+  async runChunkQueue() {
+    if (this.isBusy || this.currentMode === "bypass" || !this.isReady) return;
+    this.isBusy = true;
+    try {
+      while (this.chunkQueue.length > 0 && this.currentMode !== "bypass") {
+        const chunk = this.chunkQueue.shift();
+        await this.processChunk(chunk.chunkIndex, chunk.rawL, chunk.rawR, chunk.mode);
+      }
+    } catch (err) {
+      console.error("[NextAmp AI] Queue processing error:", err);
+    } finally {
+      this.isBusy = false;
     }
   }
 
@@ -159,34 +194,22 @@ export class AIVocalManager {
       this.magPtr1 = this.exp.stft_get_magnitudes_ptr(1) / 4;
       this.maskPtr0 = this.exp.stft_get_mask_ptr(0) / 4;
       this.maskPtr1 = this.exp.stft_get_mask_ptr(1) / 4;
+      this.interleavedPtr = this.exp.stft_get_interleaved_mags_ptr ? (this.exp.stft_get_interleaved_mags_ptr() / 4) : 0;
 
       this.setStatus("Starting GPU...");
 
-      // 2. Hardware-Accelerated Backend Selection (WebGPU -> WebGL Packed -> CPU Fallback)
-      let activeBackend = "webgl";
+      // 2. Hardware-Accelerated WebGL Backend with Packed Textures & Float16
       try {
-        if (typeof navigator !== "undefined" && navigator.gpu) {
-          await tf.setBackend("webgpu");
-          activeBackend = "webgpu";
-        }
-      } catch (_) {
-        activeBackend = "webgl";
-      }
-
-      if (activeBackend === "webgl") {
-        try {
-          await tf.setBackend("webgl");
-          tf.env().set("WEBGL_PACK", true);
-          tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
-          tf.env().set("WEBGL_PACK_NORMALIZATION", true);
-          tf.env().set("WEBGL_CPU_FORWARD", false);
-          tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
-          tf.env().set("PROD", true);
-        } catch (webglErr) {
-          console.warn("[NextAmp AI] WebGL failed, falling back to CPU:", webglErr);
-          await tf.setBackend("cpu");
-          activeBackend = "cpu";
-        }
+        await tf.setBackend("webgl");
+        tf.env().set("WEBGL_PACK", true);
+        tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
+        tf.env().set("WEBGL_PACK_NORMALIZATION", true);
+        tf.env().set("WEBGL_CPU_FORWARD", false);
+        tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
+        tf.env().set("PROD", true);
+      } catch (webglErr) {
+        console.warn("[NextAmp AI] WebGL failed, falling back to CPU:", webglErr);
+        await tf.setBackend("cpu");
       }
       await tf.ready();
 
@@ -232,7 +255,8 @@ export class AIVocalManager {
         console.warn("[NextAmp AI] Warmup pass error:", warmErr);
       }
 
-      console.log(`[NextAmp AI] Engine ready with backend: ${activeBackend.toUpperCase()}`);
+      const currentBackend = tf.getBackend() || "webgl";
+      console.log(`[NextAmp AI] Engine ready with backend: ${currentBackend.toUpperCase()}`);
       this.isReady = true;
       this.engineLoading = false;
 
@@ -267,7 +291,8 @@ export class AIVocalManager {
       return;
     }
     if (!data.isAiReady) {
-      this.setStatus(`Preparing AI: ${data.bufferedSec}s / 0.6s`);
+      const targetSec = ((data.readyThreshold || 4) * 8192 / 44100).toFixed(1);
+      this.setStatus(`Buffering AI: ${data.bufferedSec}s / ${targetSec}s`);
     } else {
       this.setStatus(data.mode === "karaoke" ? "KARAOKE (CUT)" : "ACAPELLA (ISO)");
     }
@@ -297,52 +322,78 @@ export class AIVocalManager {
 
       const modeCode = mode === "karaoke" ? 1 : mode === "acapella" ? 0 : 2;
 
-      // 3. Update 64-frame rolling magnitudes tensor [1, 1024, 64, 2]
-      const mags0 = this.mem.subarray(this.magPtr0, this.magPtr0 + A * _);
-      const mags1 = this.mem.subarray(this.magPtr1, this.magPtr1 + A * _);
+      // 3. Zero-Loop Native C/WASM Magnitude Interleaving & Peak Tracking
+      let interleavedSlice;
+      let chunkPeak = 1e-5;
+      if (this.interleavedPtr && this.exp.stft_get_chunk_peak) {
+        // Native compiled C SIMD already interleaved [1024][16][2] directly in linear memory!
+        interleavedSlice = this.mem.subarray(this.interleavedPtr, this.interleavedPtr + _ * A * 2);
+        chunkPeak = this.exp.stft_get_chunk_peak();
+      } else {
+        const mags0 = this.mem.subarray(this.magPtr0, this.magPtr0 + A * _);
+        const mags1 = this.mem.subarray(this.magPtr1, this.magPtr1 + A * _);
+        let p = 0;
+        for (let k = 0; k < _; k++) {
+          for (let f = 0; f < A; f++) {
+            const srcIdx = f * _ + k;
+            const v0 = mags0[srcIdx];
+            const v1 = mags1[srcIdx];
+            this.interleavedMags[p++] = v0;
+            this.interleavedMags[p++] = v1;
+            if (v0 > chunkPeak) chunkPeak = v0;
+            if (v1 > chunkPeak) chunkPeak = v1;
+          }
+        }
+        interleavedSlice = this.interleavedMags;
+      }
 
+      this.maxHistory.push(chunkPeak);
+      if (this.maxHistory.length > 4) this.maxHistory.shift();
+      const globalMax = Math.max(...this.maxHistory, 1e-4);
+      const invMax = 1.0 / globalMax;
+
+      if (!this.rollingMags) {
+        this.rollingMags = tf.zeros([1, _, 64, 2]);
+      }
+
+      // Lookahead Depth & Exact Time Alignment
+      // diffLevel: 1=Soft (0 delay, real-time), 2=Standard (1 chunk delay), 3=Deep (2 chunks), 4=Ultra (3 chunks)
+      const depth = Math.max(1, Math.min(4, Number(this.diffLevel) || 2));
+      const delayChunks = depth - 1;
+      const sliceStart = 48 - 16 * delayChunks; // Level 2 (Standard) = Frame 32 (100% time-aligned to Chunk N-1!)
+
+      // 4. Hardware-Accelerated U-Net Inference & Mask Extraction (Zero-Leak Pipeline)
+      // Step A: Update 64-frame rolling window and compute normalized input in tidy
       const [newRolling, normInput] = tf.tidy(() => {
-        const newMags = tf.stack([
-          tf.tensor2d(mags0, [A, _]),
-          tf.tensor2d(mags1, [A, _])
-        ]).transpose([2, 1, 0]).reshape([1, _, A, 2]);
-
+        const newMags = tf.tensor4d(interleavedSlice, [1, _, A, 2]);
         const rolled = this.rollingMags.slice([0, 0, 16, 0], [1, _, 48, 2]).concat(newMags, 2);
-        return [rolled, rolled.divNoNan(rolled.max())];
+        const norm = rolled.mul(invMax);
+        return [rolled, norm];
       });
 
-      // 4. Hardware-Accelerated U-Net Inference
+      // Step B: Execute model OUTSIDE tidy (prevents tf.tidy from tracking 485 intermediate layer tensors)
       const outTensor = this.model.execute(normInput);
-      normInput.dispose();
+      normInput.dispose(); // Free normalized input immediately
 
-      // 5. Slicing mask centered at Frame 31 (Peak Receptive Field Fidelity)
+      // Step C: Slice time-aligned window & compute sigmoid mask in tidy
       const maskTensor = tf.tidy(() => {
-        const transposed = outTensor.transpose([0, 3, 2, 1]).reshape([2, 64, _]);
-        outTensor.dispose();
-        return transposed.slice([0, 31, 0], [2, A, _]).sigmoid();
+        const sliced = outTensor.slice([0, 0, sliceStart, 0], [1, _, A, 2]);
+        outTensor.dispose(); // Free large 64-frame output tensor from GPU immediately!
+        return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
       });
 
       const maskData = await maskTensor.data();
-      maskTensor.dispose();
-
-      // Reshape mask contrast based on DIFF level (1=Soft, 2=Standard, 3=Deep, 4=Ultra)
-      if (this.maskGamma && this.maskGamma !== 1.0) {
-        const gamma = this.maskGamma;
-        const totalLen = 2 * A * _;
-        for (let i = 0; i < totalLen; i++) {
-          maskData[i] = Math.pow(maskData[i], gamma);
-        }
-      }
+      maskTensor.dispose(); // Free mask tensor immediately!
 
       if (this.rollingMags) this.rollingMags.dispose();
       this.rollingMags = newRolling;
 
-      // 6. Write mask directly into WASM mask buffer
+      // 6. Write pure neural network mask directly into WASM mask buffer
       this.mem.subarray(this.maskPtr0, this.maskPtr0 + A * _).set(maskData.subarray(0, A * _));
       this.mem.subarray(this.maskPtr1, this.maskPtr1 + A * _).set(maskData.subarray(A * _, 2 * A * _));
 
       // 7. Pure Mask Application via C/WASM
-      this.exp.stft_apply_mask_delayed(1, A, modeCode, this.strength);
+      this.exp.stft_apply_mask_delayed(delayChunks, A, modeCode, this.strength);
 
       // 9. Inverse STFT with SIMD128
       this.exp.stft_backward(A);
@@ -387,16 +438,15 @@ export class AIVocalManager {
   }
 
   setDiffLevel(level) {
-    this.diffLevel = Number(level) || 2;
-    const gammas = { 1: 0.8, 2: 1.0, 3: 1.3, 4: 1.6 };
-    this.maskGamma = gammas[this.diffLevel] || 1.0;
+    this.diffLevel = Math.max(1, Math.min(4, Number(level) || 2));
     this.strength = 1.0;
   }
 
   setMode(mode) {
     this.currentMode = mode;
+    this.chunkQueue = [];
+    this.resetState();
     if (mode !== "bypass") {
-      this.resetState();
       if (!this.isReady) {
         this.setStatus("Loading Model (15MB)...");
         if (!this.engineLoading) {

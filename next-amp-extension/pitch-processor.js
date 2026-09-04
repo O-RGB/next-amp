@@ -16,13 +16,15 @@ export class PitchProcessor {
         SignalsmithStretch.wasLoaded = true;
       }
 
-      // Init with library defaults (no extra options — proven safe)
-      this.stretch = await SignalsmithStretch(this.audioCtx);
+      // Init with library cheaper preset (tested & lightweight)
+      this.stretch = await SignalsmithStretch(this.audioCtx, {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+        processorOptions: { preset: "cheaper" }
+      });
 
-      // ① "cheaper" preset via configure() — the correct API for this library version.
-      //    processorOptions at AudioWorkletNode creation is NOT supported here;
-      //    the preset must be sent via the worklet message channel after init.
-      //    Reduces internal FFT block/interval sizes → significant CPU reduction.
+      // ① "cheaper" preset
       if (typeof this.stretch.configure === "function") {
         this.stretch.configure({ preset: "cheaper" });
       }
