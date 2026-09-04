@@ -11,7 +11,7 @@
 const CHUNK_SIZE = 8192; // 16 frames * 512 hop (64 Web Audio blocks)
 const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
 const FADE_IN_SPEED = 1.0 / 1024;  // ~23ms smooth fade-in
-const READY_QUEUE_THRESHOLD = 2;   // 2 chunks of real audio before fade-in
+const READY_QUEUE_THRESHOLD = 3;   // 3 chunks of real audio (~0.55s buffer cushion) before fade-in
 
 class AIVocalWorkletProcessor extends AudioWorkletProcessor {
   constructor() {

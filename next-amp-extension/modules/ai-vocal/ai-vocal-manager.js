@@ -210,6 +210,28 @@ export class AIVocalManager {
       this.model = await tf.loadGraphModel(ioHandler);
       this.resetState();
 
+      // GPU Shader Pre-Compilation (Warm-Up):
+      // Pre-compiles all WebGL kernels (conv2d, divNoNan, transpose, slice, sigmoid)
+      // to eliminate the initial 300-500ms JIT compilation stutter on first audio chunks!
+      this.setStatus("Warming up GPU...");
+      try {
+        const dummyInput = tf.zeros([1, _, 64, 2]);
+        const normInput = dummyInput.divNoNan(dummyInput.max());
+        const outTensor = this.model.execute(normInput);
+        const transposed = outTensor.transpose([0, 3, 2, 1]).reshape([2, 64, _]);
+        const maskTensor = transposed.slice([0, 31, 0], [2, A, _]).sigmoid();
+        await maskTensor.data();
+
+        dummyInput.dispose();
+        normInput.dispose();
+        outTensor.dispose();
+        transposed.dispose();
+        maskTensor.dispose();
+        console.log("[NextAmp AI] GPU pipeline pre-warmed (all WebGL shaders compiled)");
+      } catch (warmErr) {
+        console.warn("[NextAmp AI] Warmup pass error:", warmErr);
+      }
+
       console.log(`[NextAmp AI] Engine ready with backend: ${activeBackend.toUpperCase()}`);
       this.isReady = true;
       this.engineLoading = false;
@@ -245,7 +267,7 @@ export class AIVocalManager {
       return;
     }
     if (!data.isAiReady) {
-      this.setStatus(`Preparing AI: ${data.bufferedSec}s / 0.4s`);
+      this.setStatus(`Preparing AI: ${data.bufferedSec}s / 0.6s`);
     } else {
       this.setStatus(data.mode === "karaoke" ? "KARAOKE (CUT)" : "ACAPELLA (ISO)");
     }
