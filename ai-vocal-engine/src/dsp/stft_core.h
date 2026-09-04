@@ -22,7 +22,10 @@ float* stft_get_output_ptr(int channel);
 float* stft_get_magnitudes_ptr(int channel);
 float* stft_get_mask_ptr(int channel);
 float* stft_get_spec_real_ptr(int channel);
-float* stft_get_spec_imag_ptr(int channel);
+float* stft_get_interleaved_mags_ptr(void);
+float stft_get_chunk_peak(void);
+float* stft_get_norm_input_ptr(void);
+void stft_prepare_norm_input(float inv_max);
 
 // Processing steps
 void stft_forward(int num_frames);

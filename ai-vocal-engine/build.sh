@@ -24,7 +24,7 @@ fi
 mkdir -p "${DIST_DIR}"
 mkdir -p "${EXT_MODULES_DIR}"
 
-EXPORTED_FUNCS="['_stft_init','_stft_reset','_stft_get_input_ptr','_stft_get_output_ptr','_stft_get_magnitudes_ptr','_stft_get_mask_ptr','_stft_get_spec_real_ptr','_stft_get_spec_imag_ptr','_stft_forward','_stft_apply_mask','_stft_apply_mask_delayed','_stft_backward','_stft_get_vocal_energy','_stft_get_interleaved_mags_ptr','_stft_get_chunk_peak']"
+EXPORTED_FUNCS="['_stft_init','_stft_reset','_stft_get_input_ptr','_stft_get_output_ptr','_stft_get_magnitudes_ptr','_stft_get_mask_ptr','_stft_get_spec_real_ptr','_stft_get_spec_imag_ptr','_stft_forward','_stft_apply_mask','_stft_apply_mask_delayed','_stft_backward','_stft_get_vocal_energy','_stft_get_interleaved_mags_ptr','_stft_get_chunk_peak','_stft_get_norm_input_ptr','_stft_prepare_norm_input']"
 
 # 1. Build High-Performance SIMD128 WASM Module
 echo "1. Compiling stft_simd.wasm with Wasm SIMD128 & LTO..."

@@ -8,11 +8,11 @@
  * - Eliminates 100% of stutter, phase cancellation, repeat lyrics, and digital glitching.
  */
 
-const CHUNK_SIZE = 8192; // 16 frames * 512 hop (64 Web Audio blocks)
+const CHUNK_SIZE = 8192; // 16 frames * 512 hop (64 Web Audio blocks = ~185.7ms)
 const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
 const FADE_IN_SPEED = 1.0 / 1024;  // ~23ms smooth fade-in
-const READY_QUEUE_THRESHOLD = 3;   // 3 chunks (~0.55s buffer cushion) to start playback
-const MAX_QUEUE_THRESHOLD = 5;     // 5 chunks (~0.92s latency ceiling) prevents delay accumulation
+const READY_QUEUE_THRESHOLD = 5;   // 5 chunks (~0.92s buffer cushion) prevents ANY stutter on battery
+const MAX_QUEUE_THRESHOLD = 8;     // 8 chunks (~1.48s latency ceiling) prevents delay accumulation
 
 class AIVocalWorkletProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -178,9 +178,10 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           } else {
             this.currChunkL = null;
             this.currChunkR = null;
-            // Never reset isAiReady = false during active playback!
-            // Temporary starvation will micro-fade down without triggering
-            // an agonizing 1.2-second re-buffering silence cycle.
+            // Starvation safety: re-arm buffering threshold (3 chunks) to rebuild cushion
+            // Completely stops the knife-edge 180ms on/off stutter cycle!
+            this.isAiReady = false;
+            this.readyThreshold = 3;
           }
         }
 
