@@ -5,14 +5,19 @@
  * - When switching to Karaoke / Acapella, output mutes immediately (smooth ~5.8ms micro-fade).
  * - Remains completely silent while AI model primes and buffers 2 real chunks (~0.37s).
  * - Smoothly fades in directly to isolated Karaoke music once buffer is ready.
- * - Eliminates 100% of stutter, phase cancellation, repeat lyrics, and digital glitching.
+ * - Resets stream state at genuine song boundaries so old audio cannot leak
+ *   into the next song.
  */
 
 const CHUNK_SIZE = 8192; // 16 frames * 512 hop (64 Web Audio blocks = ~185.7ms)
 const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
 const FADE_IN_SPEED = 1.0 / 1024;  // ~23ms smooth fade-in
-const READY_QUEUE_THRESHOLD = 5;   // 5 chunks (~0.92s buffer cushion) prevents ANY stutter on battery
-const MAX_QUEUE_THRESHOLD = 8;     // 8 chunks (~1.48s latency ceiling) prevents delay accumulation
+const READY_QUEUE_THRESHOLD = 2;   // 2 chunks (~370ms) perfect cushion against latency spikes
+const MAX_QUEUE_THRESHOLD = 5;     // 5 chunks (~928ms) latency ceiling prevents delay accumulation
+const FALLBACK_FADE_SPEED = 1.0 / 1024; // smooth raw/AI handoff if a bridge hiccup occurs
+const BOUNDARY_SILENCE_PEAK = 0.0003; // matches the native engine's near-silence floor
+const SILENCE_RESET_CHUNKS = 2;       // ~371ms at the default 44.1kHz sample rate
+const MISSING_INPUT_RESET_BLOCKS = 128; // ~371ms when the source stops providing buffers
 
 class AIVocalWorkletProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -26,12 +31,18 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.inAccumL = new Float32Array(CHUNK_SIZE);
     this.inAccumR = new Float32Array(CHUNK_SIZE);
     this.inAccumPos = 0;
+    this.chunkPeak = 0.0;
+    this.silentChunks = 0;
+    this.inSilenceBoundary = false;
+    this.missingInputBlocks = 0;
 
     // Output playback queue
     this.outQueueL = [];
     this.outQueueR = [];
+    this.outQueueIndex = [];
     this.currChunkL = null;
     this.currChunkR = null;
+    this.currChunkIndex = null;
     this.currChunkPos = 0;
 
     // Audio state:
@@ -41,6 +52,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.liveGain = 1.0;
     this.aiGain = 0.0;
     this.isAiReady = false;
+    this.fallbackMix = 0.0;
+    this.playbackChunkIndex = null;
+    this.playbackSamples = 0;
 
     this.chunkSeq = 0;
     this.statusCount = 0;
@@ -55,9 +69,18 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.readyThreshold = READY_QUEUE_THRESHOLD;
           this.outQueueL = [];
           this.outQueueR = [];
+          this.outQueueIndex = [];
           this.currChunkL = null;
           this.currChunkR = null;
+          this.currChunkIndex = null;
           this.currChunkPos = 0;
+          this.fallbackMix = 0.0;
+          this.playbackChunkIndex = null;
+          this.playbackSamples = 0;
+          this.chunkPeak = 0.0;
+          this.silentChunks = 0;
+          this.inSilenceBoundary = false;
+          this.missingInputBlocks = 0;
           this.inAccumPos = 0;
           this.chunkSeq = 0;
           if (data.mode !== "bypass") {
@@ -65,23 +88,80 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           }
         }
       } else if (data.type === "CHUNK_PROCESSED") {
-        if (this.targetMode === "bypass") return;
-        this.outQueueL.push(new Float32Array(data.outL));
-        this.outQueueR.push(new Float32Array(data.outR));
-        // Hard Latency Ceiling: Keep queue strictly capped at MAX_QUEUE_THRESHOLD (~1.1s)
-        // Completely prevents delay from ever accumulating while providing jitter cushion!
-        while (this.outQueueL.length > MAX_QUEUE_THRESHOLD) {
-          this.outQueueL.shift();
-          this.outQueueR.shift();
-        }
+        this.handleProcessedChunk(data);
       }
     };
+  }
+
+  handleProcessedChunk(data) {
+    if (this.targetMode === "bypass" || !data || !data.outL || !data.outR) return;
+
+    const chunkIndex = Number.isInteger(data.chunkIndex) ? data.chunkIndex : null;
+    // If the worklet had to play live audio while a response was late, do not
+    // replay an old processed chunk and create an audible time jump.
+    if (chunkIndex !== null && this.playbackChunkIndex !== null && chunkIndex < this.playbackChunkIndex) {
+      return;
+    }
+
+    this.outQueueL.push(data.outL instanceof Float32Array ? data.outL : new Float32Array(data.outL));
+    this.outQueueR.push(data.outR instanceof Float32Array ? data.outR : new Float32Array(data.outR));
+    this.outQueueIndex.push(chunkIndex);
+    while (this.outQueueL.length > MAX_QUEUE_THRESHOLD) {
+      this.outQueueL.shift();
+      this.outQueueR.shift();
+      this.outQueueIndex.shift();
+    }
+  }
+
+  resetForStreamBoundary(nextChunkIndex) {
+    this.inAccumPos = 0;
+    this.chunkPeak = 0.0;
+    this.isAiReady = false;
+    this.readyThreshold = READY_QUEUE_THRESHOLD;
+    this.outQueueL = [];
+    this.outQueueR = [];
+    this.outQueueIndex = [];
+    this.currChunkL = null;
+    this.currChunkR = null;
+    this.currChunkIndex = null;
+    this.currChunkPos = 0;
+    this.fallbackMix = 0.0;
+    this.aiGain = 0.0;
+    this.playbackChunkIndex = null;
+    this.playbackSamples = 0;
+    // Keep chunkSeq monotonic so late responses from the previous song can
+    // be rejected without colliding with the new song's chunk indexes.
+    this.port.postMessage({
+      type: "STREAM_RESET",
+      nextChunkIndex,
+      reason: "sustained-silence"
+    });
+  }
+
+  observeChunkBoundary(chunkPeak, chunkIndex) {
+    if (chunkPeak <= BOUNDARY_SILENCE_PEAK) {
+      this.silentChunks++;
+      if (!this.inSilenceBoundary && this.silentChunks >= SILENCE_RESET_CHUNKS) {
+        this.inSilenceBoundary = true;
+        this.resetForStreamBoundary(chunkIndex + 1);
+      }
+    } else {
+      this.silentChunks = 0;
+      this.inSilenceBoundary = false;
+    }
   }
 
   process(inputs, outputs) {
     const input = inputs[0];
     const output = outputs[0];
     if (!input || !input[0]) {
+      this.missingInputBlocks++;
+      if (this.targetMode !== "bypass" &&
+          !this.inSilenceBoundary &&
+          this.missingInputBlocks >= MISSING_INPUT_RESET_BLOCKS) {
+        this.inSilenceBoundary = true;
+        this.resetForStreamBoundary(this.chunkSeq);
+      }
       if (output && output[0]) {
         output[0].fill(0);
         if (output[1]) output[1].fill(0);
@@ -89,14 +169,33 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
       return true;
     }
 
+    this.missingInputBlocks = 0;
+
     const inL = input[0];
     const inR = input[1] || input[0];
     const outL = output[0];
     const outR = output[1] || output[0];
     const len = inL.length; // 128 samples
 
+    // Exact bypass fast path. Once the fade has completed, copying the input
+    // is all that is needed; avoid the per-sample gain/queue loop while AI is
+    // off. This does not alter samples or timing.
+    if (this.targetMode === "bypass" && this.liveGain === 1.0 && this.aiGain === 0.0) {
+      this.inAccumPos = 0;
+      outL.set(inL);
+      if (outR !== outL) outR.set(inR);
+      return true;
+    }
+
     // 1. Accumulate input for AI whenever AI is requested
     if (this.targetMode !== "bypass") {
+      for (let i = 0; i < len; i++) {
+        const peakL = Math.abs(inL[i]);
+        const peakR = Math.abs(inR[i]);
+        if (peakL > this.chunkPeak) this.chunkPeak = peakL;
+        if (peakR > this.chunkPeak) this.chunkPeak = peakR;
+      }
+
       let offset = 0;
       while (offset < len) {
         const toCopy = Math.min(len - offset, CHUNK_SIZE - this.inAccumPos);
@@ -108,21 +207,27 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         if (this.inAccumPos >= CHUNK_SIZE) {
           const rawL = new Float32Array(this.inAccumL);
           const rawR = new Float32Array(this.inAccumR);
-          this.port.postMessage(
-            {
-              type: "PROCESS_CHUNK",
-              chunkIndex: this.chunkSeq++,
-              rawL: rawL,
-              rawR: rawR,
-              mode: this.targetMode
-            },
-            [rawL.buffer, rawR.buffer]
-          );
+          const chunkIndex = this.chunkSeq++;
+          const chunkPeak = this.chunkPeak;
+          this.chunkPeak = 0.0;
+          const processMessage = {
+            type: "PROCESS_CHUNK",
+            chunkIndex,
+            rawL: rawL,
+            rawR: rawR,
+            mode: this.targetMode
+          };
+          const transfer = [rawL.buffer, rawR.buffer];
+          this.port.postMessage(processMessage, transfer);
           this.inAccumPos = 0;
+          this.observeChunkBoundary(chunkPeak, chunkIndex);
         }
       }
     } else {
       this.inAccumPos = 0;
+      this.chunkPeak = 0.0;
+      this.silentChunks = 0;
+      this.inSilenceBoundary = false;
     }
 
     // 2. Check if AI queue has reached threshold to start playing
@@ -178,23 +283,63 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
       // Consume from AI queue only if AI is ready / playing
       if (this.isAiReady) {
         if (!this.currChunkL || this.currChunkPos >= this.currChunkL.length) {
+          // Discard responses that refer to audio already covered by the
+          // live fallback. This prevents a delayed GO response from replaying
+          // old audio after a tab-switch scheduling hiccup.
+          while (this.outQueueL.length > 0 &&
+                 this.playbackChunkIndex !== null &&
+                 this.outQueueIndex[0] !== null &&
+                 this.outQueueIndex[0] < this.playbackChunkIndex) {
+            this.outQueueL.shift();
+            this.outQueueR.shift();
+            this.outQueueIndex.shift();
+          }
+
           if (this.outQueueL.length > 0) {
             this.currChunkL = this.outQueueL.shift();
             this.currChunkR = this.outQueueR.shift();
+            this.currChunkIndex = this.outQueueIndex.shift();
             this.currChunkPos = 0;
+            if (this.playbackChunkIndex === null && this.currChunkIndex !== null) {
+              this.playbackChunkIndex = this.currChunkIndex;
+            }
           } else {
             this.currChunkL = null;
             this.currChunkR = null;
-            // Starvation safety: fast re-arm threshold (2 chunks ~0.37s) to rebuild minimal cushion
-            this.isAiReady = false;
-            this.readyThreshold = 2;
+            this.currChunkIndex = null;
+            // Never mute to complete silence! Maintain continuity while next chunk arrives
+            this.readyThreshold = 1;
           }
         }
 
+        let usingFallback = false;
         if (this.currChunkL) {
           aiSampleL = this.currChunkL[this.currChunkPos];
           aiSampleR = this.currChunkR[this.currChunkPos];
           this.currChunkPos++;
+        } else {
+          // Seamless Fallback: Play original audio if AI chunk is momentarily delayed
+          // Completely eliminates dropouts and silence gaps!
+          aiSampleL = inL[i];
+          aiSampleR = inR[i];
+          usingFallback = true;
+        }
+
+        const fallbackTarget = usingFallback ? 1.0 : 0.0;
+        if (this.fallbackMix < fallbackTarget) {
+          this.fallbackMix = Math.min(fallbackTarget, this.fallbackMix + FALLBACK_FADE_SPEED);
+        } else if (this.fallbackMix > fallbackTarget) {
+          this.fallbackMix = Math.max(fallbackTarget, this.fallbackMix - FALLBACK_FADE_SPEED);
+        }
+        if (this.fallbackMix > 0.0 && !usingFallback) {
+          aiSampleL = (aiSampleL * (1.0 - this.fallbackMix)) + (inL[i] * this.fallbackMix);
+          aiSampleR = (aiSampleR * (1.0 - this.fallbackMix)) + (inR[i] * this.fallbackMix);
+        }
+
+        this.playbackSamples++;
+        if (this.playbackSamples >= CHUNK_SIZE) {
+          this.playbackSamples = 0;
+          if (this.playbackChunkIndex !== null) this.playbackChunkIndex++;
         }
       }
 
@@ -206,9 +351,13 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     if (this.targetMode === "bypass" && this.aiGain <= 0.0 && this.outQueueL.length > 0) {
       this.outQueueL = [];
       this.outQueueR = [];
+      this.outQueueIndex = [];
       this.currChunkL = null;
       this.currChunkR = null;
+      this.currChunkIndex = null;
       this.currChunkPos = 0;
+      this.playbackChunkIndex = null;
+      this.playbackSamples = 0;
     }
 
     return true;

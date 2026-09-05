@@ -32,6 +32,7 @@ let isVideoMasterOn = true;
 let isEqOn = true;
 let isVocalOn = false;
 let currentVocalMode = "bypass";
+let aiEngineType = "webgl"; // "webgl" or "go_native"
 
 let isNormalizeOn = false;
 let currentEqValues = [...PRESETS.flat];
@@ -238,6 +239,7 @@ async function finalizeInitialization() {
     "isVideoMasterOn",
     "isEqOn",
     "isVocalOn",
+    "aiEngineType",
   ]);
   if (savedToggles.isAudioMasterOn !== undefined)
     isAudioMasterOn = savedToggles.isAudioMasterOn;
@@ -245,6 +247,9 @@ async function finalizeInitialization() {
     isVideoMasterOn = savedToggles.isVideoMasterOn;
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
   if (savedToggles.isVocalOn !== undefined) isVocalOn = savedToggles.isVocalOn;
+  if (savedToggles.aiEngineType !== undefined) aiEngineType = savedToggles.aiEngineType;
+  updateAiEngineUI();
+  checkGoEngineHealth();
 
   if (sessionManager.sessionMode === "shared") {
     // [NEW] Add videoPosX and videoPosY to load
@@ -643,6 +648,7 @@ async function initCapture(mode) {
           sendParam("isVideoMasterOn", isVideoMasterOn);
           sendParam("isVocalOn", isVocalOn);
           sendParam("vocalMode", currentVocalMode);
+          sendParam("aiEngineType", aiEngineType);
         })
         .catch((e) => console.warn(e));
     }
@@ -841,7 +847,75 @@ function updateUIFromExternal(key, value, index) {
     updateVocalUI(value);
   } else if (key === "vocalDiff") {
     updateDiffUI(value);
+  } else if (key === "aiEngineType") {
+    aiEngineType = value;
+    updateAiEngineUI();
   }
+}
+
+function updateAiEngineUI() {
+  const btnToggle = $("#btn-engine-toggle");
+  const selEngine = $("#sel-ai-engine");
+  const isGo = (aiEngineType === "go_native");
+
+  if (btnToggle) {
+    if (isGo) {
+      btnToggle.innerHTML = `<span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 mr-0.5"></span>GO`;
+      btnToggle.className = "win-btn h-3 px-1 text-[7px] font-bold text-cyan-300 border border-cyan-500 cursor-pointer flex items-center";
+      btnToggle.title = "Go Turbo Engine Active (Click to open Go Manager)";
+    } else {
+      btnToggle.innerHTML = `WEB`;
+      btnToggle.className = "win-btn h-3 px-1 text-[7px] font-bold text-gray-400 cursor-pointer";
+      btnToggle.title = "Browser WebGL Engine (Click to open Go Manager)";
+    }
+  }
+  if (selEngine) {
+    selEngine.value = aiEngineType;
+  }
+}
+
+async function checkGoEngineHealth() {
+  const dot = $("#go-dot-indicator");
+  const txtStatus = $("#go-status-text");
+  const txtDevice = $("#txt-go-device");
+  const txtPing = $("#txt-go-ping");
+  const btnSwitch = $("#btn-go-switch-mode");
+
+  try {
+    const t0 = performance.now();
+    const res = await fetch("http://127.0.0.1:41919/health", { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      const pingMs = Math.round((performance.now() - t0) * 10) / 10;
+
+      if (dot) {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse inline-block";
+      }
+      if (txtStatus) {
+        txtStatus.className = "text-[9px] font-bold font-pixel text-emerald-400";
+        txtStatus.textContent = "ONLINE (Connected to Go Core)";
+      }
+      if (txtDevice) txtDevice.textContent = data.engine || "Go Native Core";
+      if (txtPing) txtPing.textContent = `${pingMs} ms`;
+      if (btnSwitch) {
+        btnSwitch.textContent = (aiEngineType === "go_native") ? "SWITCH TO BROWSER WEBGL" : "ACTIVATE GO ENGINE ⚡";
+      }
+      return { ok: true, pingMs };
+    }
+  } catch (_) {}
+
+  if (dot) {
+    dot.className = "w-2.5 h-2.5 rounded-full bg-red-500 inline-block";
+  }
+  if (txtStatus) {
+    txtStatus.className = "text-[9px] font-bold font-pixel text-red-400";
+    txtStatus.textContent = "OFFLINE (Not Running)";
+  }
+  if (txtPing) txtPing.textContent = "Offline";
+  if (btnSwitch) {
+    btnSwitch.textContent = (aiEngineType === "go_native") ? "SWITCH TO BROWSER WEBGL" : "ACTIVATE GO ENGINE ⚡";
+  }
+  return { ok: false };
 }
 function sendParam(key, value, index = null) {
   const isShared = sessionManager.sessionMode === "shared";
@@ -1045,6 +1119,45 @@ function setupListeners() {
       sendParam("vocalDiff", lvl);
       updateDiffUI(lvl);
     });
+  });
+
+  // AI Engine Switcher & Modal
+  $("#btn-engine-toggle")?.addEventListener("click", () => {
+    $("#go-engine-overlay")?.classList.add("active");
+    checkGoEngineHealth();
+  });
+
+  $("#sel-ai-engine")?.addEventListener("change", (e) => {
+    aiEngineType = e.target.value;
+    updateAiEngineUI();
+    sessionManager.setSetting({ aiEngineType });
+    sendParam("aiEngineType", aiEngineType);
+  });
+
+  $("#btn-go-modal-close")?.addEventListener("click", () => {
+    $("#go-engine-overlay")?.classList.remove("active");
+  });
+
+  $("#btn-go-test-ping")?.addEventListener("click", async () => {
+    const btn = $("#btn-go-test-ping");
+    if (btn) btn.innerHTML = `<i class="ph-bold ph-spinner animate-spin text-[10px]"></i> <span>Pinging...</span>`;
+    const res = await checkGoEngineHealth();
+    if (btn) {
+      btn.innerHTML = res.ok
+        ? `<i class="ph-bold ph-check text-emerald-400 text-[10px]"></i> <span class="text-emerald-300">ONLINE (${res.pingMs}ms)</span>`
+        : `<i class="ph-bold ph-x text-red-400 text-[10px]"></i> <span class="text-red-400">OFFLINE - OPEN APP FIRST</span>`;
+      setTimeout(() => {
+        btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise text-[10px]"></i> <span>TEST / RE-CHECK CONNECTION</span>`;
+      }, 2500);
+    }
+  });
+
+  $("#btn-go-switch-mode")?.addEventListener("click", () => {
+    aiEngineType = (aiEngineType === "go_native") ? "webgl" : "go_native";
+    updateAiEngineUI();
+    sessionManager.setSetting({ aiEngineType });
+    sendParam("aiEngineType", aiEngineType);
+    checkGoEngineHealth();
   });
 
   // AI Slow Hardware Modal buttons

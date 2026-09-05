@@ -218,6 +218,66 @@
       </div>
     </div>
 
+    <!-- Go Native Turbo Engine Manager Modal -->
+    <div id="go-engine-overlay" class="z-[170000]">
+      <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">
+        <div class="theme-bar justify-between mb-2">
+          <span class="flex items-center gap-1 font-bold text-cyan-300">
+            <i class="ph-bold ph-lightning text-cyan-400"></i>
+            <span>GO TURBO ENGINE</span>
+          </span>
+          <button id="btn-go-modal-close" class="win-btn text-red-900 font-bold bg-[#e0e0e0]">X</button>
+        </div>
+        <div class="bg-[#222] p-3 flex flex-col gap-2.5 items-center text-center">
+          <!-- Big Status Indicator -->
+          <div id="go-status-badge" class="w-full flex items-center justify-center gap-2 p-2 bg-[#181818] win-border-in">
+            <span id="go-dot-indicator" class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
+            <span id="go-status-text" class="text-[9px] font-bold font-pixel text-red-400">OFFLINE (Not Detected)</span>
+          </div>
+
+          <!-- Connection Info Box -->
+          <div class="win-border-in bg-[#181818] p-2 w-full flex flex-col gap-1 text-[8px] font-pixel text-left">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-1">
+              <span class="text-gray-400">Local Address:</span>
+              <span class="text-white font-mono">127.0.0.1:41919</span>
+            </div>
+            <div class="flex justify-between items-center border-b border-gray-800 py-0.5">
+              <span class="text-gray-400">Engine Device:</span>
+              <span id="txt-go-device" class="text-cyan-400 font-bold">Go Native Core</span>
+            </div>
+            <div class="flex justify-between items-center pt-0.5">
+              <span class="text-gray-400">Ping Latency:</span>
+              <span id="txt-go-ping" class="text-green-400 font-bold">-- ms</span>
+            </div>
+          </div>
+
+          <!-- Quick Guide -->
+          <div class="text-[7.5px] text-gray-400 font-pixel text-left w-full leading-tight flex flex-col gap-0.5">
+            <span>1. เปิดโปรแกรม <code class="text-white bg-[#111] px-1">nextamp-engine</code> บนเครื่อง</span>
+            <span>2. ระบบเชื่อมต่อแบบอัตโนมัติ (ไม่ต้องกรอกรหัส)</span>
+            <span>3. ก้อนเสียงจะส่งไปประมวลผลที่ Go ทันที</span>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex flex-col gap-1.5 w-full mt-0.5">
+            <button
+              id="btn-go-test-ping"
+              class="win-btn h-7 bg-[#2a2a2a] hover:bg-[#333] text-cyan-300 font-bold font-pixel text-[8.5px] flex items-center justify-center gap-1 border border-cyan-700 shadow cursor-pointer active:scale-95"
+            >
+              <i class="ph-bold ph-arrows-clockwise text-[10px]"></i>
+              <span>TEST / RE-CHECK CONNECTION</span>
+            </button>
+            <button
+              id="btn-go-switch-mode"
+              class="win-btn h-6 bg-gray-700 hover:bg-gray-600 text-gray-300 font-pixel text-[8px] cursor-pointer"
+            >
+              SWITCH TO BROWSER WEBGL
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="modal-overlay">
        <div class="win-border-out modal-window shadow-2xl">
         <div class="theme-bar">
@@ -399,7 +459,14 @@
             <div
               class="text-[9px] font-bold text-emerald-400 mb-0.5 mt-1.5 border-b border-gray-700"
             >
-              AI & GPU DIAGNOSTICS
+              AI ACCELERATION ENGINE
+            </div>
+            <div class="setting-row">
+              <span>Engine</span>
+              <select id="sel-ai-engine" class="bg-black border border-gray-600 text-[8px] text-cyan-400 h-4 outline-none">
+                <option value="webgl">Browser WebGL (In-App)</option>
+                <option value="go_native">Go Turbo Engine (Desktop) ⚡</option>
+              </select>
             </div>
             <div class="flex flex-col gap-1 mt-0.5">
               <button
@@ -667,7 +734,7 @@
     <!-- AI VOCAL / KARAOKE BLOCK -->
     <div class="win-border-out flex-none" id="block-vocal">
       <div class="theme-bar cursor-default select-none border-t border-black justify-between">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5">
           <button
             id="btn-toggle-vocal"
             class="win-btn h-3 w-8 text-[8px] font-bold text-gray-500"
@@ -676,6 +743,13 @@
           </button>
           <i class="ph-bold ph-microphone-stage"></i>
           <span>AI VOCAL</span>
+          <button
+            id="btn-engine-toggle"
+            class="win-btn h-3 px-1 text-[7px] font-bold text-gray-400 cursor-pointer"
+            title="Switch AI Engine: Browser WebGL (WEB) / Go Desktop Engine (GO)"
+          >
+            WEB
+          </button>
         </div>
         <div class="flex items-center gap-1.5 overflow-hidden">
           <span id="txt-vocal-status" class="text-[8px] font-pixel text-gray-500 font-bold truncate max-w-[130px]" title="AI Vocal Status">ORIGINAL</span>

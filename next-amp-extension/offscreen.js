@@ -129,6 +129,7 @@ const createDefaultParams = () => ({
   isVocalOn: false,
   vocalMode: "bypass", // "bypass", "karaoke", "acapella"
   vocalDiff: 2,        // 1, 2, 3, 4
+  aiEngineType: "webgl", // "webgl" or "go_native"
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -568,6 +569,12 @@ function applyParamToSession(session, key, value, index, source) {
         session.aiVocal.setDiffLevel(value);
       }
       break;
+    case "aiEngineType":
+      params.aiEngineType = value;
+      if (session.aiVocal) {
+        session.aiVocal.setEngineType(value);
+      }
+      break;
     case "volume":
       effects.setVolume(value);
       break;
@@ -763,6 +770,7 @@ function applyAllParams(session) {
 
   // Apply AI Vocal parameters
   if (session.aiVocal) {
+    if (params.aiEngineType) session.aiVocal.setEngineType(params.aiEngineType);
     if (params.vocalDiff) session.aiVocal.setDiffLevel(params.vocalDiff);
     if (!params.isVocalOn) {
       session.aiVocal.unloadEngine();

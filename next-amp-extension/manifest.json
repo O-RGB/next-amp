@@ -32,6 +32,7 @@
         "assets/fonts/Phosphor-Bold.woff2",
         "assets/libs/js/peerjs.min.js",
         "assets/libs/js/tf.min.js",
+        "assets/libs/js/tf-backend-webgpu.min.js",
         "modules/ai-vocal/vocal-worklet.js",
         "modules/ai-vocal/vocal-worker.js",
         "modules/ai-vocal/stft_simd.wasm",
@@ -54,6 +55,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://*.peerjs.com wss://*.peerjs.com https://da.gd https://spoo.me; img-src 'self' data: https://api.qrserver.com"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:* ws://localhost:* http://localhost:* https://*.peerjs.com wss://*.peerjs.com https://da.gd https://spoo.me; img-src 'self' data: https://api.qrserver.com"
   }
 }

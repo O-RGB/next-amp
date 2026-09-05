@@ -56,6 +56,7 @@ const FILE_NAMES = {
   tailwind: getMangledName('tailwindcss', '.js'),
   peerjs: getMangledName('peerjs', '.js'),
   tf: getMangledName('tf', '.js'),
+  tfWebgpu: getMangledName('tf-backend-webgpu', '.js'),
   signalsmith: getMangledName('signalsmith', '.mjs'),
 
   // WebAssembly cores
@@ -155,6 +156,7 @@ replaceInFile(offscreenTemp, 'modules/ai-vocal/stft_simd.wasm', FILE_NAMES.stftS
 replaceInFile(offscreenTemp, 'modules/ai-vocal/stft_scalar.wasm', FILE_NAMES.stftScalar);
 replaceInFile(offscreenTemp, 'model/model.json', FILE_NAMES.modelJson);
 replaceInFile(offscreenTemp, 'assets/libs/mjs/SignalsmithStretch.mjs', FILE_NAMES.signalsmith);
+replaceInFile(offscreenTemp, 'assets/libs/js/tf-backend-webgpu.min.js', FILE_NAMES.tfWebgpu);
 
 // Rewrite in video-delay bundle
 const videoDelayTemp = path.join(TEMP_DIR, 'video-delay.tmp.js');
@@ -175,6 +177,7 @@ replaceInFile(debugAiTemp, 'modules/ai-vocal/vocal-worklet.js', FILE_NAMES.vocal
 replaceInFile(debugAiTemp, 'modules/ai-vocal/stft_simd.wasm', FILE_NAMES.stftSimd);
 replaceInFile(debugAiTemp, 'modules/ai-vocal/stft_scalar.wasm', FILE_NAMES.stftScalar);
 replaceInFile(debugAiTemp, 'model/model.json', FILE_NAMES.modelJson);
+replaceInFile(debugAiTemp, 'assets/libs/js/tf-backend-webgpu.min.js', FILE_NAMES.tfWebgpu);
 
 // Inject Security Guard into popup & offscreen
 let guardCode = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'security', 'security-guard.js'), 'utf8');
@@ -275,6 +278,7 @@ run(
 // Copy pre-minified libraries
 fs.copyFileSync(path.join(SRC_DIR, 'assets', 'js', 'peerjs.min.js'), path.join(DIST_DIR, FILE_NAMES.peerjs));
 fs.copyFileSync(path.join(SRC_DIR, 'assets', 'libs', 'js', 'tf.min.js'), path.join(DIST_DIR, FILE_NAMES.tf));
+fs.copyFileSync(path.join(SRC_DIR, 'assets', 'libs', 'js', 'tf-backend-webgpu.min.js'), path.join(DIST_DIR, FILE_NAMES.tfWebgpu));
 
 // Copy WASM files to hashed names
 fs.copyFileSync(path.join(SRC_DIR, 'modules', 'ai-vocal', 'stft_simd.wasm'), path.join(DIST_DIR, FILE_NAMES.stftSimd));
@@ -362,6 +366,7 @@ console.log('    ✓ popup.html minified (1-line .min)');
 let offscreenHtml = fs.readFileSync(path.join(SRC_DIR, 'offscreen.html'), 'utf8');
 offscreenHtml = offscreenHtml.replace('assets/js/peerjs.min.js', FILE_NAMES.peerjs);
 offscreenHtml = offscreenHtml.replace('assets/libs/js/tf.min.js', FILE_NAMES.tf);
+offscreenHtml = offscreenHtml.replace('assets/libs/js/tf-backend-webgpu.min.js', FILE_NAMES.tfWebgpu);
 offscreenHtml = offscreenHtml.replace('src="offscreen.js"', `src="${FILE_NAMES.offscreen}"`);
 fs.writeFileSync(path.join(DIST_DIR, 'offscreen.html'), minifyHtml(offscreenHtml), 'utf8');
 console.log('    ✓ offscreen.html minified');
@@ -380,6 +385,7 @@ console.log('    ✓ dos-remote.html minified (1-line .min)');
 // 5. debug-ai.html
 let debugAiHtml = fs.readFileSync(path.join(SRC_DIR, 'debug-ai.html'), 'utf8');
 debugAiHtml = debugAiHtml.replace('assets/libs/js/tf.min.js', FILE_NAMES.tf);
+debugAiHtml = debugAiHtml.replace('assets/libs/js/tf-backend-webgpu.min.js', FILE_NAMES.tfWebgpu);
 debugAiHtml = debugAiHtml.replace('src="debug-ai.js"', `src="${FILE_NAMES.debugAiJs}"`);
 fs.writeFileSync(path.join(DIST_DIR, 'debug-ai.html'), minifyHtml(debugAiHtml), 'utf8');
 console.log('    ✓ debug-ai.html minified');
@@ -408,6 +414,7 @@ manifest.web_accessible_resources = [
       FILE_NAMES.phosphorFont,
       FILE_NAMES.peerjs,
       FILE_NAMES.tf,
+      FILE_NAMES.tfWebgpu,
       FILE_NAMES.vocalWorklet,
       FILE_NAMES.vocalWorker,
       FILE_NAMES.stftSimd,

@@ -4,10 +4,44 @@
  * Non-blocking async architecture: Worklet connects instantly in 2ms, model streams in background.
  */
 
+import { GoEngineClient } from "./go-engine-client.js";
+
 const A = 16;       // 16 magnitude frames per chunk
 const _ = 1024;     // 1024 frequency bins
 const F = 8192;     // 8,192 samples per chunk (16 hops of 512)
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
+// stft_core adds 1e-9 before sqrt() when calculating magnitudes, so a truly
+// empty chunk is approximately 3.16e-5. Only bypass inference at that floor;
+// quiet but audible material still follows the original model path.
+const DIGITAL_SILENCE_PEAK = 3.25e-5;
+const WEBGPU_BACKEND_ASSET = "assets/libs/js/tf-backend-webgpu.min.js";
+let webGpuBackendPromise = null;
+
+async function ensureWebGpuBackend() {
+  if (typeof tf === "undefined" || typeof document === "undefined") return false;
+
+  try {
+    if (tf.findBackendFactory && tf.findBackendFactory("webgpu")) return true;
+  } catch (_) {}
+
+  if (!webGpuBackendPromise) {
+    webGpuBackendPromise = new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = chrome.runtime.getURL(WEBGPU_BACKEND_ASSET);
+      script.onload = () => {
+        try { resolve(!!tf.findBackendFactory && !!tf.findBackendFactory("webgpu")); }
+        catch (_) { resolve(false); }
+      };
+      script.onerror = () => {
+        webGpuBackendPromise = null;
+        resolve(false);
+      };
+      (document.head || document.documentElement).appendChild(script);
+    });
+  }
+  return webGpuBackendPromise;
+}
 
 export class AIVocalManager {
   constructor(audioCtx) {
@@ -23,6 +57,38 @@ export class AIVocalManager {
     // Separation Settings (1=Soft/Fast, 2=Standard/Optimal, 3=Deep, 4=Ultra)
     this.diffLevel = 2;
     this.strength = 1.0;
+
+    // Engine Selection: "webgl" (Browser in-app) or "go_native" (Desktop engine)
+    this.engineType = "webgl";
+    this.goClient = new GoEngineClient();
+    this.goClient.onStatusChange = (status) => {
+      if (this.engineType === "go_native") {
+        this.setStatus(status);
+      }
+    };
+    this.goClient.onChunkProcessed = (chunkIndex, outL, outR, rttMs, buf) => {
+      // A sustained silence marks a new audio stream/song. Ignore responses
+      // that were already in flight from the previous stream boundary.
+      if (this.streamChunkFloor !== null && chunkIndex < this.streamChunkFloor) {
+        return;
+      }
+      if (this.workletNode) {
+        this.workletNode.port.postMessage(
+          {
+            type: "CHUNK_PROCESSED",
+            chunkIndex,
+            outL: outL,
+            outR: outR
+          },
+          buf ? [buf] : [outL.buffer, outR.buffer]
+        );
+      }
+      this.lastInferMs = rttMs;
+      if (this.currentMode !== "bypass") {
+        const modeLabel = this.currentMode === "karaoke" ? "KARAOKE (GO)" : "ACAPELLA (GO)";
+        this.setStatus(`${modeLabel} [${rttMs}ms]`);
+      }
+    };
 
     // DSP WASM
     this.wasmInstance = null;
@@ -52,6 +118,8 @@ export class AIVocalManager {
     // Concurrency Lock & Latency Ceiling: Prevents GPU backlog and WASM memory collision
     this.isBusy = false;
     this.chunkQueue = [];
+    this.chunkPeakHistory = new Map();
+    this.streamChunkFloor = null;
     this.maxHistory = [1e-4, 1e-4, 1e-4, 1e-4];
 
     this.lastInferMs = 0;
@@ -66,13 +134,13 @@ export class AIVocalManager {
 
     // Only write to chrome.storage.local on significant state transitions,
     // NOT on high-frequency (90ms) buffering progress, preventing tab IPC flooding.
-    const shouldPersist = status.startsWith("ERR") || 
+    const shouldPersist = (status.startsWith("ERR") ||
                           status.startsWith("⚠️") ||
                           status === "ORIGINAL" || 
                           status.startsWith("ORIGINAL") || 
-                          status.startsWith("KARAOKE") || 
-                          status.startsWith("ACAPELLA") ||
-                          status.startsWith("Loading");
+                          status === "KARAOKE" ||
+                          status === "ACAPELLA" ||
+                          status.startsWith("Loading")) && !status.includes("[");
     if (shouldPersist) {
       try {
         chrome.storage.local.set({ aiVocalStatus: status }).catch(() => {});
@@ -93,14 +161,15 @@ export class AIVocalManager {
       try { this.rollingMags.dispose(); } catch (_) {}
       this.rollingMags = null;
     }
-    if (typeof tf !== "undefined" && this.currentMode !== "bypass") {
-      this.rollingMags = tf.zeros([1, _, 64, 2]);
-    }
+    // The production path keeps the rolling window in WASM
+    // (stft_prepare_norm_input). Do not allocate a second GPU copy here;
+    // the JS tensor is only created by the legacy fallback path below.
     this.inHistoryL.fill(0);
     this.inHistoryR.fill(0);
     this.outTailL.fill(0);
     this.outTailR.fill(0);
     this.chunkQueue = [];
+    this.chunkPeakHistory.clear();
     this.maxHistory = [1e-4, 1e-4, 1e-4, 1e-4];
     if (this.exp && this.exp.stft_reset) {
       this.exp.stft_reset();
@@ -128,18 +197,49 @@ export class AIVocalManager {
       this.workletNode.port.onmessage = (e) => {
         const data = e.data;
         if (data.type === "PROCESS_CHUNK") {
-          if (this.isReady && this.currentMode !== "bypass") {
-            this.chunkQueue.push(data);
-            if (this.chunkQueue.length > 8) {
-              // Tab was suspended or heavily lagged; keep newest chunks to avoid backlog
-              this.chunkQueue = this.chunkQueue.slice(-3);
+          if (this.currentMode === "bypass") return;
+
+          if (this.engineType === "go_native") {
+            const depth = Math.max(1, Math.min(4, Number(this.diffLevel) || 2));
+            const delayChunks = depth - 1;
+            const ok = this.goClient.sendChunk(data.chunkIndex, data.rawL, data.rawR, data.mode, delayChunks);
+            if (!ok && this.workletNode) {
+              // Fallback pass-through so audio never starves if Go is offline
+              this.workletNode.port.postMessage(
+                {
+                  type: "CHUNK_PROCESSED",
+                  outL: data.rawL,
+                  outR: data.rawR
+                },
+                [data.rawL.buffer, data.rawR.buffer]
+              );
             }
-            if (!this.isBusy) {
-              this.runChunkQueue();
+          } else {
+            if (this.isReady) {
+              this.chunkQueue.push(data);
+              if (this.chunkQueue.length > 8) {
+                // Tab was suspended or heavily lagged; keep newest chunks to avoid backlog
+                this.chunkQueue = this.chunkQueue.slice(-3);
+              }
+              if (!this.isBusy) {
+                this.runChunkQueue();
+              }
             }
           }
         } else if (data.type === "WORKLET_STATUS") {
           this.handleWorkletStatus(data);
+        } else if (data.type === "STREAM_RESET") {
+          // Flush the browser-side scheduler immediately. Then reset the
+          // native DSP after all packets already sent before this marker.
+          this.streamChunkFloor = Number.isInteger(data.nextChunkIndex)
+            ? data.nextChunkIndex
+            : null;
+          this.chunkQueue = [];
+          if (this.engineType === "go_native") {
+            this.goClient.resetStream();
+          } else {
+            this.resetState();
+          }
         }
       };
 
@@ -186,28 +286,7 @@ export class AIVocalManager {
     try {
       this.setStatus("Loading DSP...");
 
-      // 0. Fast Pre-Check: Detect SwiftShader CPU Software Emulation immediately
-      try {
-        const testCanvas = document.createElement("canvas");
-        const testGl = testCanvas.getContext("webgl2") || testCanvas.getContext("webgl");
-        if (testGl) {
-          const dbg = testGl.getExtension("WEBGL_debug_renderer_info");
-          if (dbg) {
-            const rend = testGl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "";
-            if (rend.includes("SwiftShader")) {
-              this.isHardwareSlow = true;
-              this.benchmarkMs = 1500;
-              this.backendName = "SwiftShader (CPU)";
-              this.broadcastHardwareWarning(1500, this.backendName);
-              this.setStatus("⚠️ CPU SLOW (No GPU)");
-              this.engineLoading = false;
-              return;
-            }
-          }
-        }
-      } catch (_) {}
-
-      // 1. Load in-house STFT WASM (SIMD128 with robust Scalar fallback)
+      // 0. Load in-house STFT WASM (SIMD128 with robust Scalar fallback)
       let instance;
       try {
         const simdUrl = chrome.runtime.getURL("modules/ai-vocal/stft_simd.wasm");
@@ -246,35 +325,62 @@ export class AIVocalManager {
 
       this.setStatus("Starting GPU...");
 
-      // 2. Hardware-Accelerated WebGL Backend with Incremental Flushing & Texture Pooling
-      try {
-        tf.env().set("WEBGL_PACK", true);
-        tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
-        tf.env().set("WEBGL_CPU_FORWARD", false);
-        tf.env().set("WEBGL_LAZILY_UNPACK", true);
-        // Texture pooling: MUST be -1 (never delete) to avoid ~1,000 DirectX 11 CreateTexture2D/Release calls per second!
-        tf.env().set("WEBGL_DELETE_TEXTURE_THRESHOLD", -1);
-        tf.env().set("PROD", true);
-
-        // Try WebGL 2 first (best performance); if blocked by Chrome on Windows, fall back to WebGL 1
+      // 1. Prefer WebGPU when the bundled backend and browser adapter are
+      // available. It uses the same float32 model and tensor shapes as WebGL,
+      // but avoids much of the ANGLE/DirectX11 shader overhead on Windows and
+      // the legacy WebGL translation layer on Apple.
+      const configureWebGL = async () => {
         try {
-          tf.env().set("WEBGL_VERSION", 2);
-          await tf.setBackend("webgl");
-          await tf.ready();
-        } catch (e2) {
-          console.warn("[NextAmp AI] WebGL 2 failed, falling back to WebGL 1:", e2);
-          tf.env().set("WEBGL_VERSION", 1);
-          await tf.setBackend("webgl");
+          tf.env().set("WEBGL_PACK", true);
+          tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
+          tf.env().set("WEBGL_CPU_FORWARD", false);
+          tf.env().set("WEBGL_LAZILY_UNPACK", true);
+          // Keep textures pooled: deleting/recreating them every chunk is
+          // substantially more expensive on older Windows drivers.
+          tf.env().set("WEBGL_DELETE_TEXTURE_THRESHOLD", -1);
+          tf.env().set("PROD", true);
+
+          // Try WebGL 2 first; some older Windows drivers only expose WebGL 1.
+          try {
+            tf.env().set("WEBGL_VERSION", 2);
+            await tf.setBackend("webgl");
+            await tf.ready();
+          } catch (e2) {
+            console.warn("[NextAmp AI] WebGL 2 failed, falling back to WebGL 1:", e2);
+            tf.env().set("WEBGL_VERSION", 1);
+            await tf.setBackend("webgl");
+            await tf.ready();
+          }
+        } catch (webglErr) {
+          console.warn("[NextAmp AI] WebGL failed completely, falling back to CPU:", webglErr);
+          await tf.setBackend("cpu");
           await tf.ready();
         }
-      } catch (webglErr) {
-        console.warn("[NextAmp AI] WebGL failed completely, falling back to CPU:", webglErr);
-        await tf.setBackend("cpu");
-        await tf.ready();
+        return tf.getBackend() || "webgl";
+      };
+
+      let currentBackend = "";
+      try {
+        const hasWebGpu = typeof navigator !== "undefined" && navigator.gpu && await ensureWebGpuBackend();
+        if (hasWebGpu && typeof tf.setBackend === "function") {
+          // Keep the model's small post-processing ops on the same device;
+          // CPU handoffs introduce synchronization and extra power draw.
+          tf.env().set("WEBGPU_CPU_FORWARD", false);
+          const selected = await tf.setBackend("webgpu");
+          if (selected && tf.getBackend() === "webgpu") {
+            await tf.ready();
+            currentBackend = "webgpu";
+          }
+        }
+      } catch (webgpuErr) {
+        console.warn("[NextAmp AI] WebGPU unavailable, using WebGL:", webgpuErr);
+      }
+      if (currentBackend !== "webgpu") {
+        currentBackend = await configureWebGL();
       }
 
       // Detect GPU hardware device label early before loading model
-      const currentBackend = tf.getBackend() || "webgl";
+      currentBackend = tf.getBackend() || currentBackend || "webgl";
       let deviceLabel = currentBackend.toUpperCase();
       try {
         const gl = tf.backend()?.gpgpu?.gl;
@@ -307,6 +413,11 @@ export class AIVocalManager {
         this.isHardwareSlow = true;
         this.benchmarkMs = 2500;
         this.broadcastHardwareWarning(2500, deviceLabel);
+        // Do not upload the 15MB model or start a CPU inference loop that
+        // cannot meet real-time audio. The caller remains in a safe bypass.
+        this.engineLoading = false;
+        this.setStatus("⚠️ CPU SLOW (No GPU)");
+        return;
       } else {
         try {
           const cached = (await chrome.storage.local.get("cachedGpuBenchmark"))?.cachedGpuBenchmark;
@@ -318,7 +429,7 @@ export class AIVocalManager {
         } catch (_) {}
       }
 
-      // 3. Register custom IO handler for chrome-extension:// scheme
+      // 2. Register custom IO handler for chrome-extension:// scheme
       if (tf.io && tf.io.registerLoadRouter) {
         tf.io.registerLoadRouter((url) => {
           if (typeof url === "string" && (url.startsWith("chrome-extension://") || url.startsWith("./") || url.startsWith("../"))) {
@@ -335,6 +446,46 @@ export class AIVocalManager {
         ? tf.io.browserHTTPRequest(modelUrl)
         : modelUrl;
 
+      const runWarmup = async () => {
+        const dummyInput = tf.zeros([1, _, 64, 2]);
+        let outTensor = null;
+        let maskTensor = null;
+        try {
+          outTensor = this.model.execute(dummyInput);
+          maskTensor = tf.tidy(() => {
+            const sliced = outTensor.slice([0, 0, 32, 0], [1, _, A, 2]);
+            return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
+          });
+          // Flush the accelerator pipeline and compile the readback path too.
+          await maskTensor.data();
+        } finally {
+          if (maskTensor) maskTensor.dispose();
+          if (outTensor) outTensor.dispose();
+          dummyInput.dispose();
+        }
+      };
+
+      const fallbackToWebGL = async () => {
+        if (currentBackend !== "webgpu") return false;
+        console.warn("[NextAmp AI] WebGPU model path failed; retrying with WebGL");
+        if (this.model) {
+          try { this.model.dispose(); } catch (_) {}
+          this.model = null;
+        }
+        currentBackend = await configureWebGL();
+        deviceLabel = currentBackend.toUpperCase();
+        this.backendName = deviceLabel;
+        if (currentBackend === "cpu") {
+          throw new Error("WebGPU unavailable and WebGL fell back to CPU");
+        }
+        this.setStatus("Loading Model (15MB)...");
+        this.model = await tf.loadGraphModel(ioHandler);
+        this.resetState();
+        this.setStatus("Warming up GPU...");
+        await runWarmup();
+        return true;
+      };
+
       this.model = await tf.loadGraphModel(ioHandler);
 
       // Check if cancelled/unloaded while downloading/loading model
@@ -348,28 +499,18 @@ export class AIVocalManager {
 
       this.resetState();
 
-      // GPU Shader Pre-Compilation (Warm-Up):
-      // Pre-compiles all WebGL kernels (conv2d, depthwise, resize, concat, slice, transpose, sigmoid)
+      // Accelerator Pre-Compilation (Warm-Up):
+      // Pre-compiles all kernels (conv2d, depthwise, resize, concat, slice,
+      // transpose, sigmoid) using the exact runtime dimensions.
       // using the exact graph and dimensions of runtime processChunk to prevent initial JIT compilation freezes!
       this.setStatus("Warming up GPU...");
       try {
-        const dummyInput = tf.zeros([1, _, 64, 2]);
-        const outTensor = this.model.execute(dummyInput);
-        dummyInput.dispose();
-
-        // Exact slice and transpose matching processChunk runtime (diffLevel 2 default: frame 32)
-        const maskTensor = tf.tidy(() => {
-          const sliced = outTensor.slice([0, 0, 32, 0], [1, _, A, 2]);
-          return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
-        });
-        outTensor.dispose();
-
-        // Flush GPU pipeline and await readback
-        await maskTensor.data();
-        maskTensor.dispose();
-        console.log("[NextAmp AI] GPU pipeline pre-warmed (all WebGL shaders compiled)");
+        await runWarmup();
+        console.log(`[NextAmp AI] ${currentBackend.toUpperCase()} pipeline pre-warmed`);
       } catch (warmErr) {
-        console.warn("[NextAmp AI] Warmup pass error:", warmErr);
+        if (!(await fallbackToWebGL())) {
+          console.warn("[NextAmp AI] Warmup pass error:", warmErr);
+        }
       }
 
       // 3. One-Time 1-Chunk Hardware Benchmark: Measure actual steady-state latency
@@ -499,62 +640,81 @@ export class AIVocalManager {
       if (this.exp.stft_get_chunk_peak) {
         chunkPeak = this.exp.stft_get_chunk_peak();
       }
+      this.chunkPeakHistory.set(chunkIndex, chunkPeak);
+      // Chunk indexes restart when the worklet changes mode. Keep only the
+      // small lookahead window needed for deciding whether an output chunk is
+      // truly silent.
+      for (const oldIndex of this.chunkPeakHistory.keys()) {
+        if (oldIndex < chunkIndex - 8) this.chunkPeakHistory.delete(oldIndex);
+      }
       this.maxHistory.push(chunkPeak);
       if (this.maxHistory.length > 4) this.maxHistory.shift();
       const globalMax = Math.max(...this.maxHistory, 1e-4);
       const invMax = 1.0 / globalMax;
 
-      // 4. Zero-GPU-Overhead Rolling Window & Ingestion
-      let normInput;
-      if (this.normInputPtr && this.exp.stft_prepare_norm_input) {
-        // Native compiled C SIMD slides 48 frames and normalizes 131,072 floats in 0.02ms!
-        // Eliminates GPU slice, GPU concat, GPU mul, and GPU texture allocations completely!
-        this.exp.stft_prepare_norm_input(invMax);
-        normInput = tf.tensor4d(
-          this.mem.subarray(this.normInputPtr, this.normInputPtr + _ * 64 * 2),
-          [1, _, 64, 2]
-        );
+      // The delayed spectrum is the actual output target. Only bypass model
+      // inference when that target is known to be digital silence; checking
+      // the current input alone would be wrong at the lookahead boundary.
+      const targetChunkIndex = chunkIndex - delayChunks;
+      const targetPeak = targetChunkIndex < 0
+        ? 0
+        : this.chunkPeakHistory.get(targetChunkIndex);
+      const targetIsDigitalSilence = targetPeak !== undefined && targetPeak <= DIGITAL_SILENCE_PEAK;
+      if (targetIsDigitalSilence) {
+        this.exp.stft_apply_mask_delayed(delayChunks, A, 2, 0.0);
       } else {
-        const mags0 = this.mem.subarray(this.magPtr0, this.magPtr0 + A * _);
-        const mags1 = this.mem.subarray(this.magPtr1, this.magPtr1 + A * _);
-        let p = 0;
-        for (let k = 0; k < _; k++) {
-          for (let f = 0; f < A; f++) {
-            this.interleavedMags[p++] = mags0[f * _ + k];
-            this.interleavedMags[p++] = mags1[f * _ + k];
+        // 4. Zero-GPU-Overhead Rolling Window & Ingestion
+        let normInput;
+        if (this.normInputPtr && this.exp.stft_prepare_norm_input) {
+          // Native compiled C SIMD slides 48 frames and normalizes 131,072 floats in 0.02ms!
+          // Eliminates GPU slice, GPU concat, GPU mul, and GPU texture allocations completely!
+          this.exp.stft_prepare_norm_input(invMax);
+          normInput = tf.tensor4d(
+            this.mem.subarray(this.normInputPtr, this.normInputPtr + _ * 64 * 2),
+            [1, _, 64, 2]
+          );
+        } else {
+          const mags0 = this.mem.subarray(this.magPtr0, this.magPtr0 + A * _);
+          const mags1 = this.mem.subarray(this.magPtr1, this.magPtr1 + A * _);
+          let p = 0;
+          for (let k = 0; k < _; k++) {
+            for (let f = 0; f < A; f++) {
+              this.interleavedMags[p++] = mags0[f * _ + k];
+              this.interleavedMags[p++] = mags1[f * _ + k];
+            }
           }
+          if (!this.rollingMags) this.rollingMags = tf.zeros([1, _, 64, 2]);
+          const [newRolling, nIn] = tf.tidy(() => {
+            const newMags = tf.tensor4d(this.interleavedMags, [1, _, A, 2]);
+            const rolled = this.rollingMags.slice([0, 0, 16, 0], [1, _, 48, 2]).concat(newMags, 2);
+            return [rolled, rolled.mul(invMax)];
+          });
+          if (this.rollingMags) this.rollingMags.dispose();
+          this.rollingMags = newRolling;
+          normInput = nIn;
         }
-        if (!this.rollingMags) this.rollingMags = tf.zeros([1, _, 64, 2]);
-        const [newRolling, nIn] = tf.tidy(() => {
-          const newMags = tf.tensor4d(this.interleavedMags, [1, _, A, 2]);
-          const rolled = this.rollingMags.slice([0, 0, 16, 0], [1, _, 48, 2]).concat(newMags, 2);
-          return [rolled, rolled.mul(invMax)];
+
+        // 5. Hardware-Accelerated U-Net Inference (Single GPU Shader Pipeline)
+        const outTensor = this.model.execute(normInput);
+        normInput.dispose(); // Free normalized input immediately
+
+        // 6. Slice time-aligned window & compute sigmoid mask in tidy
+        const maskTensor = tf.tidy(() => {
+          const sliced = outTensor.slice([0, 0, sliceStart, 0], [1, _, A, 2]);
+          outTensor.dispose(); // Free large 64-frame output tensor from GPU immediately!
+          return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
         });
-        if (this.rollingMags) this.rollingMags.dispose();
-        this.rollingMags = newRolling;
-        normInput = nIn;
+
+        const maskData = await maskTensor.data();
+        maskTensor.dispose(); // Free mask tensor immediately!
+
+        // 7. Write pure neural network mask directly into WASM mask buffer
+        this.mem.subarray(this.maskPtr0, this.maskPtr0 + A * _).set(maskData.subarray(0, A * _));
+        this.mem.subarray(this.maskPtr1, this.maskPtr1 + A * _).set(maskData.subarray(A * _, 2 * A * _));
+
+        // 8. Pure Mask Application via C/WASM
+        this.exp.stft_apply_mask_delayed(delayChunks, A, modeCode, this.strength);
       }
-
-      // 5. Hardware-Accelerated U-Net Inference (Single GPU Shader Pipeline)
-      const outTensor = this.model.execute(normInput);
-      normInput.dispose(); // Free normalized input immediately
-
-      // 6. Slice time-aligned window & compute sigmoid mask in tidy
-      const maskTensor = tf.tidy(() => {
-        const sliced = outTensor.slice([0, 0, sliceStart, 0], [1, _, A, 2]);
-        outTensor.dispose(); // Free large 64-frame output tensor from GPU immediately!
-        return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
-      });
-
-      const maskData = await maskTensor.data();
-      maskTensor.dispose(); // Free mask tensor immediately!
-
-      // 7. Write pure neural network mask directly into WASM mask buffer
-      this.mem.subarray(this.maskPtr0, this.maskPtr0 + A * _).set(maskData.subarray(0, A * _));
-      this.mem.subarray(this.maskPtr1, this.maskPtr1 + A * _).set(maskData.subarray(A * _, 2 * A * _));
-
-      // 8. Pure Mask Application via C/WASM
-      this.exp.stft_apply_mask_delayed(delayChunks, A, modeCode, this.strength);
 
       // 9. Inverse STFT with SIMD128
       this.exp.stft_backward(A);
@@ -588,6 +748,7 @@ export class AIVocalManager {
       this.workletNode.port.postMessage(
         {
           type: "CHUNK_PROCESSED",
+          chunkIndex,
           outL: outL,
           outR: outR
         },
@@ -655,26 +816,65 @@ export class AIVocalManager {
     console.log("[NextAmp AI] Model unloaded & GPU memory freed");
   }
 
+  setEngineType(type) {
+    const valid = (type === "go_native") ? "go_native" : "webgl";
+    this.engineType = valid;
+    this.streamChunkFloor = null;
+    console.log("[NextAmp AI] Switched engine to:", this.engineType);
+
+    if (this.engineType === "go_native") {
+      this.goClient.enable();
+      if (this.currentMode !== "bypass") {
+        this.setStatus("⚡ GO ENGINE (Active)");
+        if (this.workletNode) {
+          this.workletNode.port.postMessage({ type: "WORKER_READY" });
+        }
+      }
+    } else {
+      this.goClient.disable();
+      if (this.currentMode !== "bypass") {
+        if (!this.isReady && !this.engineLoading) {
+          this.loadEngine().catch(() => {});
+        } else {
+          this.setStatus(this.isReady ? "Buffering..." : "Loading Model (15MB)...");
+        }
+      }
+    }
+  }
+
   setMode(mode) {
     this.currentMode = mode;
+    this.streamChunkFloor = null;
     this.chunkQueue = [];
     this.resetState();
     if (mode !== "bypass") {
-      if (this.isHardwareSlow) {
-        this.broadcastHardwareWarning(this.benchmarkMs, this.backendName);
-      }
-      if (!this.isReady) {
-        this.setStatus("Loading Model (15MB)...");
-        if (!this.engineLoading) {
-          this.loadEngine().catch((err) => {
-            console.error("[NextAmp AI] Lazy engine load error:", err);
-          });
+      if (this.engineType === "go_native") {
+        this.goClient.enable();
+        this.setStatus("⚡ GO ENGINE (Loopback)");
+        if (this.workletNode) {
+          this.workletNode.port.postMessage({ type: "WORKER_READY" });
         }
       } else {
-        this.setStatus(this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "Buffering...");
+        if (this.isHardwareSlow) {
+          this.broadcastHardwareWarning(this.benchmarkMs, this.backendName);
+        }
+        if (!this.isReady) {
+          this.setStatus("Loading Model (15MB)...");
+          if (!this.engineLoading) {
+            this.loadEngine().catch((err) => {
+              console.error("[NextAmp AI] Lazy engine load error:", err);
+            });
+          }
+        } else {
+          this.setStatus(this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "Buffering...");
+        }
       }
     } else {
-      this.setStatus(this.isReady ? (this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "ORIGINAL (AI Ready)") : "ORIGINAL");
+      if (this.engineType === "go_native") {
+        this.setStatus(this.goClient.isConnected ? "⚡ GO (Ready)" : "ORIGINAL");
+      } else {
+        this.setStatus(this.isReady ? (this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "ORIGINAL (AI Ready)") : "ORIGINAL");
+      }
     }
     if (this.workletNode) {
       this.workletNode.port.postMessage({ type: "SET_MODE", mode });
