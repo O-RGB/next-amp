@@ -43,22 +43,27 @@ type HealthResponse struct {
 	Version   string `json:"version"`
 	AIEnabled bool   `json:"ai_enabled"`
 	Device    string `json:"device"`
+	Error     string `json:"error,omitempty"`
 	Timestamp int64  `json:"timestamp"`
 }
 
 type AIEngine struct {
-	mu           sync.Mutex
-	session      *ort.AdvancedSession
-	inputTensor  *ort.Tensor[float32]
-	outputTensor *ort.Tensor[float32]
-	dspEngine    *dsp.Engine
-	enabled      bool
-	deviceInfo   string
+	mu             sync.Mutex
+	session        *ort.AdvancedSession
+	inputTensor    *ort.Tensor[float32]
+	outputTensor   *ort.Tensor[float32]
+	dspEngine      *dsp.Engine
+	modelData      []byte
+	enabled        bool
+	deviceInfo     string
+	recoveryTried  bool
+	runErrorLogged bool
 }
 
 var (
 	globalAI            *AIEngine
 	globalDashboard     *Dashboard
+	aiInitError         string
 	totalChunksReceived atomic.Uint64
 	totalBytesReceived  atomic.Uint64
 	lastStatusTime      time.Time
@@ -216,18 +221,69 @@ func initAIEngine(dev AccelerationOption) (*AIEngine, error) {
 		return nil, fmt.Errorf("ONNX warmup failed: %w", warmupErr)
 	}
 
-	// Immediately release raw model bytes after the session has been created.
-	modelData = nil
-	debug.FreeOSMemory()
-
 	return &AIEngine{
 		session:      session,
 		inputTensor:  inputTensor,
 		outputTensor: outputTensor,
 		dspEngine:    dsp.NewEngine(),
+		modelData:    modelData,
 		enabled:      true,
 		deviceInfo:   deviceLabel,
 	}, nil
+}
+
+// recoverWithCPU rebuilds the inference session with the bounded CPU provider
+// after a hardware/provider failure. Some Windows DirectML drivers accept the
+// provider during session creation but fail only when real audio is executed.
+// Keep this recovery outside the audio DSP path's normal allocation budget; it
+// is attempted at most once for the lifetime of the engine.
+func (ai *AIEngine) recoverWithCPU() error {
+	if ai == nil || ai.recoveryTried {
+		return fmt.Errorf("CPU recovery already attempted")
+	}
+	ai.recoveryTried = true
+	if len(ai.modelData) == 0 {
+		return fmt.Errorf("decrypted model is no longer available for CPU recovery")
+	}
+
+	cpuDev := AccelerationOption{
+		Type:        DeviceCPU,
+		Name:        "CPU",
+		DisplayName: "CPU (Eco SIMD 2 Cores)",
+	}
+	newSession, newInput, newOutput, deviceLabel, err := createORTSession(ai.modelData, cpuDev)
+	if err != nil {
+		return fmt.Errorf("CPU session creation failed: %w", err)
+	}
+	if err := newSession.Run(); err != nil {
+		newSession.Destroy()
+		newInput.Destroy()
+		newOutput.Destroy()
+		return fmt.Errorf("CPU warmup failed: %w", err)
+	}
+
+	oldSession := ai.session
+	oldInput := ai.inputTensor
+	oldOutput := ai.outputTensor
+	ai.session = newSession
+	ai.inputTensor = newInput
+	ai.outputTensor = newOutput
+	ai.deviceInfo = deviceLabel
+	ai.modelData = nil
+
+	if oldSession != nil {
+		oldSession.Destroy()
+	}
+	if oldInput != nil {
+		oldInput.Destroy()
+	}
+	if oldOutput != nil {
+		oldOutput.Destroy()
+	}
+	debug.FreeOSMemory()
+
+	fmt.Printf("[✓] Recovered ONNX inference on %s after provider failure.\n", deviceLabel)
+	return nil
 }
 
 func (ai *AIEngine) Close() {
@@ -248,6 +304,10 @@ func (ai *AIEngine) Close() {
 		ai.outputTensor.Destroy()
 		ai.outputTensor = nil
 	}
+	for i := range ai.modelData {
+		ai.modelData[i] = 0
+	}
+	ai.modelData = nil
 	ort.DestroyEnvironment()
 }
 
@@ -257,8 +317,11 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	aiActive := globalAI != nil && globalAI.enabled
 	dev := "Loopback DSP"
+	statusError := ""
 	if aiActive {
 		dev = globalAI.deviceInfo
+	} else {
+		statusError = aiInitError
 	}
 
 	json.NewEncoder(w).Encode(HealthResponse{
@@ -267,6 +330,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		Version:   Version,
 		AIEnabled: aiActive,
 		Device:    dev,
+		Error:     statusError,
 		Timestamp: time.Now().UnixMilli(),
 	})
 }
@@ -388,6 +452,8 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	devInfo := "Go Native Core (Loopback)"
 	if globalAI != nil && globalAI.enabled {
 		devInfo = globalAI.deviceInfo
+	} else if aiInitError != "" {
+		devInfo = "AI unavailable (see engine console)"
 	}
 
 	// Send Welcome Handshake
@@ -397,6 +463,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		"version":    Version,
 		"device":     devInfo,
 		"ai_enabled": globalAI != nil && globalAI.enabled,
+		"error":      aiInitError,
 	}
 	conn.WriteJSON(welcomeMsg)
 
@@ -479,10 +546,30 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 				// 3. Neural Network U-Net Inference (~50ms via CoreML/DirectML)
 				tNN := time.Now()
-				err = globalAI.session.Run()
+				runErr := globalAI.session.Run()
 				inferMs = float64(time.Since(tNN).Microseconds()) / 1000.0
 
-				if err != nil {
+				if runErr != nil {
+					if !globalAI.runErrorLogged {
+						fmt.Printf("[!] ONNX inference failed on %s at chunk #%d: %v\n", globalAI.deviceInfo, chunkIndex, runErr)
+						globalAI.runErrorLogged = true
+					}
+					if !globalAI.recoveryTried {
+						if recoveryErr := globalAI.recoverWithCPU(); recoveryErr == nil {
+							// The replacement session owns a new input tensor; replay the
+							// current normalized chunk instead of dropping it.
+							copy(globalAI.inputTensor.GetData(), normInput)
+							runErr = globalAI.session.Run()
+							if runErr != nil {
+								fmt.Printf("[!] CPU recovery inference failed at chunk #%d: %v\n", chunkIndex, runErr)
+							}
+						} else {
+							fmt.Printf("[!] CPU recovery unavailable at chunk #%d: %v\n", chunkIndex, recoveryErr)
+						}
+					}
+				}
+
+				if runErr != nil {
 					outL = make([]float32, len(leftSamples))
 					outR = make([]float32, len(rightSamples))
 					respPayload = packSilentSamples(chunkIndex, mode, len(leftSamples), outBuf)
@@ -586,6 +673,7 @@ func main() {
 	// 3. Initialize AI Engine
 	ai, err := initAIEngine(selectedDev)
 	if err != nil {
+		aiInitError = err.Error()
 		fmt.Printf("\033[1;33mWARNING\033[0m: %v\n", err)
 		fmt.Println("[!] Running in High-Speed Loopback Mode (without AI).")
 	} else {

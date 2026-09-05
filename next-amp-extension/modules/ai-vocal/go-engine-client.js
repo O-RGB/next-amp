@@ -128,7 +128,12 @@ export class GoEngineClient {
           this.deviceInfo = msg.device || "Go Native Core";
           console.log("[NextAmp Go Engine] Handshake READY:", msg);
           if (this.onStatusChange) {
-            this.onStatusChange(`⚡ GO ENGINE (${this.deviceInfo})`);
+            if (msg.ai_enabled === false) {
+              const reason = msg.error ? `: ${String(msg.error).slice(0, 80)}` : "";
+              this.onStatusChange(`⚠️ GO AI unavailable${reason}`);
+            } else {
+              this.onStatusChange(`⚡ GO ENGINE (${this.deviceInfo})`);
+            }
           }
         }
       } catch (_) {}
