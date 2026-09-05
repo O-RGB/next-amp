@@ -157,6 +157,67 @@
       </div>
     </div>
 
+    <!-- AI Performance / Slow GPU Alert Modal -->
+    <div id="ai-slow-overlay" class="z-[170000]">
+      <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">
+        <div class="theme-bar justify-between mb-2">
+          <span class="flex items-center gap-1 font-bold text-yellow-300">
+            <i class="ph-bold ph-warning-octagon text-yellow-400"></i>
+            <span>AI PERFORMANCE ALERT</span>
+          </span>
+          <button id="btn-ai-slow-close" class="win-btn text-red-900 font-bold bg-[#e0e0e0]">X</button>
+        </div>
+        <div class="bg-[#222] p-3 flex flex-col gap-2.5 items-center text-center">
+          <div class="w-11 h-11 rounded-full border border-yellow-500/60 bg-yellow-500/10 flex items-center justify-center text-yellow-400 text-2xl">
+            <i class="ph-bold ph-gauge"></i>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[10px] font-bold text-yellow-300 font-pixel uppercase tracking-wide">
+              Slow GPU Detected
+            </span>
+            <span class="text-[7.5px] text-gray-400 font-pixel">
+              HARDWARE BENCHMARK
+            </span>
+          </div>
+          
+          <div class="win-border-in bg-[#181818] p-2 w-full flex flex-col gap-1 text-[8px] font-pixel text-left">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-1">
+              <span class="text-gray-400">Device:</span>
+              <span id="txt-ai-slow-device" class="text-white font-bold truncate max-w-[150px]">Detecting...</span>
+            </div>
+            <div class="flex justify-between items-center border-b border-gray-800 py-0.5">
+              <span class="text-gray-400">Measured Latency:</span>
+              <span id="txt-ai-slow-ms" class="text-red-400 font-bold">564ms / chunk</span>
+            </div>
+            <div class="flex justify-between items-center pt-0.5">
+              <span class="text-gray-400">Real-time Quota:</span>
+              <span class="text-green-400 font-bold">185ms (Max)</span>
+            </div>
+          </div>
+
+          <p class="text-gray-300 text-[8px] font-pixel leading-relaxed text-left">
+            Your GPU takes longer than real-time audio playback (185ms). Running AI vocal separation will cause audio stuttering or dropouts.
+          </p>
+
+          <div class="flex flex-col gap-1.5 w-full mt-1">
+            <button
+              id="btn-ai-slow-bypass"
+              class="win-btn h-7 bg-gradient-to-b from-[#4CAF50] to-[#2E7D32] hover:from-[#66BB6A] hover:to-[#388E3C] text-white font-bold font-pixel text-[8.5px] flex items-center justify-center gap-1 border border-[#1B5E20] shadow cursor-pointer active:scale-95"
+            >
+              <i class="ph-bold ph-music-notes text-[10px]"></i>
+              <span>KEEP ORIGINAL AUDIO (RECOMMENDED)</span>
+            </button>
+            <button
+              id="btn-ai-slow-continue"
+              class="win-btn h-6 bg-gray-700 hover:bg-gray-600 text-gray-300 font-pixel text-[8px] cursor-pointer"
+            >
+              CONTINUE ANYWAY
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="modal-overlay">
        <div class="win-border-out modal-window shadow-2xl">
         <div class="theme-bar">
@@ -229,6 +290,10 @@
                 <option value="48000">48,000 Hz (Standard)</option>
                 <option value="auto">Auto (Device Default)</option>
               </select>
+            </div>
+            <div class="setting-row">
+              <span>Show FPS / Stats</span>
+              <input type="checkbox" id="chk-show-stats" class="accent-green-500" />
             </div>
           </div>
           <div id="tab-advanced" class="tab-content">
@@ -329,6 +394,20 @@
                 class="win-btn w-full py-0.5 text-red-900 font-bold bg-[#e0e0e0]"
               >
                 FACTORY RESET
+              </button>
+            </div>
+            <div
+              class="text-[9px] font-bold text-emerald-400 mb-0.5 mt-1.5 border-b border-gray-700"
+            >
+              AI & GPU DIAGNOSTICS
+            </div>
+            <div class="flex flex-col gap-1 mt-0.5">
+              <button
+                id="btn-ai-diagnostics"
+                class="win-btn w-full py-1 text-emerald-400 font-bold bg-[#1a1a1a] hover:bg-[#282828] border border-emerald-600 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <i class="ph-bold ph-activity text-emerald-400 text-[10px]"></i>
+                <span>RUN AI & GPU BENCHMARK</span>
               </button>
             </div>
           </div>
@@ -591,18 +670,18 @@
         <div class="flex items-center gap-2">
           <button
             id="btn-toggle-vocal"
-            class="win-btn h-3 w-8 text-[8px] font-bold"
+            class="win-btn h-3 w-8 text-[8px] font-bold text-gray-500"
           >
-            ON
+            OFF
           </button>
           <i class="ph-bold ph-microphone-stage"></i>
           <span>AI VOCAL</span>
         </div>
         <div class="flex items-center gap-1.5 overflow-hidden">
-          <span id="txt-vocal-status" class="text-[8px] font-pixel text-yellow-300 font-bold truncate max-w-[130px]" title="AI Vocal Status">ORIGINAL</span>
+          <span id="txt-vocal-status" class="text-[8px] font-pixel text-gray-500 font-bold truncate max-w-[130px]" title="AI Vocal Status">ORIGINAL</span>
         </div>
       </div>
-      <div class="p-1 flex flex-col gap-1 bg-[#222]" id="vocal-controls-area">
+      <div class="p-1 flex flex-col gap-1 bg-[#222]" id="vocal-controls-area" style="opacity: 0.4; filter: grayscale(100%); pointer-events: none;">
         <!-- Modes & Diff Level Controls -->
         <div class="win-border-in bg-[#1a1a1a] p-1 flex items-center justify-between gap-1">
           <div class="flex items-center gap-0.5">

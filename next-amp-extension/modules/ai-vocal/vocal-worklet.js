@@ -52,6 +52,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.targetMode = data.mode;
           // Purge all audio queues and state on ANY mode transition
           this.isAiReady = false;
+          this.readyThreshold = READY_QUEUE_THRESHOLD;
           this.outQueueL = [];
           this.outQueueR = [];
           this.currChunkL = null;
@@ -67,8 +68,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         if (this.targetMode === "bypass") return;
         this.outQueueL.push(new Float32Array(data.outL));
         this.outQueueR.push(new Float32Array(data.outR));
-        // Hard Latency Ceiling: Keep queue strictly capped at MAX_QUEUE_THRESHOLD (~0.92s)
-        // Completely prevents delay from ever accumulating while providing 2 chunks of jitter cushion!
+        // Hard Latency Ceiling: Keep queue strictly capped at MAX_QUEUE_THRESHOLD (~1.1s)
+        // Completely prevents delay from ever accumulating while providing jitter cushion!
         while (this.outQueueL.length > MAX_QUEUE_THRESHOLD) {
           this.outQueueL.shift();
           this.outQueueR.shift();
@@ -80,7 +81,13 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
   process(inputs, outputs) {
     const input = inputs[0];
     const output = outputs[0];
-    if (!input || !input[0]) return true;
+    if (!input || !input[0]) {
+      if (output && output[0]) {
+        output[0].fill(0);
+        if (output[1]) output[1].fill(0);
+      }
+      return true;
+    }
 
     const inL = input[0];
     const inR = input[1] || input[0];
@@ -178,10 +185,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           } else {
             this.currChunkL = null;
             this.currChunkR = null;
-            // Starvation safety: re-arm buffering threshold (3 chunks) to rebuild cushion
-            // Completely stops the knife-edge 180ms on/off stutter cycle!
+            // Starvation safety: fast re-arm threshold (2 chunks ~0.37s) to rebuild minimal cushion
             this.isAiReady = false;
-            this.readyThreshold = 3;
+            this.readyThreshold = 2;
           }
         }
 

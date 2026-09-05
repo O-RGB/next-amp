@@ -161,6 +161,53 @@ body {
   border-color: #c084fc !important;
 }
 
+/* ACTIVE ACCENT THEMES (AI VOCAL: Emerald, Cyan, Amber, Rose) */
+.win-btn.active-emerald {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+  border-top: 2px solid #047857 !important;
+  border-left: 2px solid #047857 !important;
+  border-right: 2px solid #34d399 !important;
+  border-bottom: 2px solid #34d399 !important;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
+}
+
+.win-btn.active-cyan {
+  background-color: #0891b2 !important;
+  color: #ffffff !important;
+  border-top: 2px solid #0e7490 !important;
+  border-left: 2px solid #0e7490 !important;
+  border-right: 2px solid #22d3ee !important;
+  border-bottom: 2px solid #22d3ee !important;
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
+}
+
+.win-btn.active-amber {
+  background-color: #d97706 !important;
+  color: #ffffff !important;
+  border-top: 2px solid #b45309 !important;
+  border-left: 2px solid #b45309 !important;
+  border-right: 2px solid #fbbf24 !important;
+  border-bottom: 2px solid #fbbf24 !important;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+}
+
+.win-btn.active-rose {
+  background-color: #e11d48 !important;
+  color: #ffffff !important;
+  border-top: 2px solid #be123c !important;
+  border-left: 2px solid #be123c !important;
+  border-right: 2px solid #fb7185 !important;
+  border-bottom: 2px solid #fb7185 !important;
+  box-shadow: 0 0 10px rgba(251, 113, 133, 0.5);
+}
+
+.btn-vocal-action:active {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+  border-color: #34d399 !important;
+}
+
 .theme-text-main {
   color: var(--theme-text);
   text-shadow: 0 0 4px rgba(0, 255, 0, 0.4);
@@ -176,6 +223,9 @@ body {
   width: 100%;
   margin-top: 6px;
   margin-bottom: 4px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 input[type="range"].h-slider {
@@ -186,7 +236,9 @@ input[type="range"].h-slider {
   width: 100%;
   margin: 0;
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 input[type="range"].h-slider:focus {
@@ -218,10 +270,11 @@ input[type="range"].h-slider::-webkit-slider-thumb {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
 }
 
-input[type="range"].h-slider:active::-webkit-slider-thumb {
-  background: #00ff00;
-  border-color: #008800;
-  box-shadow: 0 0 8px #00ff00;
+input[type="range"].h-slider:active::-webkit-slider-thumb,
+input[type="range"].h-slider.is-dragging::-webkit-slider-thumb {
+  background: #00ff00 !important;
+  border-color: #008800 !important;
+  box-shadow: 0 0 8px #00ff00 !important;
 }
 
 /* 10-BAND EQ (AUTO-FIT NO SCROLL) */
@@ -245,6 +298,9 @@ input[type="range"].h-slider:active::-webkit-slider-thumb {
   border-right: 1px solid #444;
   border-bottom: 1px solid #444;
   gap: 1px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .eq-col {
@@ -257,6 +313,10 @@ input[type="range"].h-slider:active::-webkit-slider-thumb {
   flex-direction: column;
   align-items: center;
   box-sizing: border-box;
+  touch-action: none;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .eq-bar-wrapper {
@@ -264,7 +324,7 @@ input[type="range"].h-slider:active::-webkit-slider-thumb {
   max-width: 8px;
   flex: 1;
   position: relative;
-  margin: 0 auto;
+  margin: 7px auto 5px;
   border-radius: 1px;
   background: linear-gradient(
     to top,
@@ -288,30 +348,50 @@ input[type="range"].h-slider:active::-webkit-slider-thumb {
 }
 
 .eq-thumb {
-  height: 10px;
-  width: 16px;
-  max-width: 90%;
-  background: #c0c0c0;
-  border-top: 1.5px solid #fff;
-  border-left: 1.5px solid #fff;
-  border-right: 1.5px solid #000;
-  border-bottom: 1.5px solid #000;
+  height: 14px;
+  width: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #c0c0c0 100%);
+  border-top: 1.5px solid #ffffff;
+  border-left: 1.5px solid #ffffff;
+  border-right: 1.5px solid #000000;
+  border-bottom: 1.5px solid #000000;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   pointer-events: none;
   z-index: 40;
-  margin-bottom: -5px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  border-radius: 1px;
+  transition: background 0.1s ease, box-shadow 0.1s ease;
+}
+
+.eq-thumb::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  right: 2px;
+  height: 1.5px;
+  background: #222222;
+  border-bottom: 1px solid #ffffff;
+  transform: translateY(-50%);
+}
+
+.eq-thumb.active,
+.eq-col:has(.v-input:active) .eq-thumb {
+  background: #00ff00;
+  border-color: #008800;
+  box-shadow: 0 0 8px #00ff00;
 }
 
 .eq-label {
   font-family: "Chakra Petch", sans-serif;
-  font-size: 8px;
+  font-size: 9px;
+  font-weight: bold;
   color: #888;
   text-align: center;
   width: 100%;
-  margin-top: 4px;
+  margin-top: 3px;
   cursor: default;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -320,8 +400,9 @@ input[type="range"].h-slider:active::-webkit-slider-thumb {
 }
 
 .eq-val-badge {
-  font-size: 8px;
+  font-size: 9px;
   font-family: monospace;
+  font-weight: bold;
   color: #ffcc00;
   margin-bottom: 2px;
   letter-spacing: -0.3px;
@@ -341,8 +422,8 @@ input[type="range"].v-input {
   opacity: 0;
   margin: 0;
   z-index: 50;
-  cursor: pointer;
-  touch-action: pan-y;
+  pointer-events: none;
+  touch-action: none;
 }
 
 /* RECONNECT NOTIFICATION */
@@ -377,6 +458,40 @@ input[type="range"].v-input {
   font-weight: 900;
   letter-spacing: 2px;
   text-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
+}
+
+/* RETRO VCR VOCAL STATUS DISPLAY */
+.vocal-display-box {
+  background: #070a07;
+  border: 2px solid #000;
+  border-right: 1px solid #444;
+  border-bottom: 1px solid #444;
+  padding: 6px 12px;
+  border-radius: 2px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+
+.vocal-digits {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.vocal-digits.karaoke {
+  color: #34d399;
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.6);
+}
+
+.vocal-digits.acapella {
+  color: #22d3ee;
+  text-shadow: 0 0 10px rgba(34, 211, 238, 0.6);
+}
+
+.vocal-digits.bypass {
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.6);
 }
 
 /* VIDEO 2-COLUMN GRID */
@@ -448,6 +563,19 @@ select {
   border-radius: 2px;
   outline: none;
   cursor: pointer;
+}
+
+#btn-donate-remote:hover {
+  filter: brightness(1.08);
+}
+
+#btn-donate-remote:active {
+  transform: translateY(1px);
+  filter: brightness(0.95);
+  border-top: 2px solid #735100 !important;
+  border-left: 2px solid #735100 !important;
+  border-right: 2px solid #fff2b2 !important;
+  border-bottom: 2px solid #fff2b2 !important;
 }
 `,
 
@@ -546,6 +674,20 @@ select {
     </div>
   </div>
 
+  <!-- DONATE BUTTON (FULL WIDTH, NO HEADER PANEL) -->
+  <a
+    href="https://ganknow.com/nextfeeder/tip"
+    target="_blank"
+    rel="noopener noreferrer"
+    id="btn-donate-remote"
+    class="win-btn flex items-center justify-center gap-2 py-2 px-3 text-[12px] font-bold shadow-md w-full"
+    style="width:100%; box-sizing:border-box; background:linear-gradient(180deg, #ffd966 0%, #f1c232 100%); color:#3b1e08; text-decoration:none; border-top:2px solid #fff2b2; border-left:2px solid #fff2b2; border-right:2px solid #735100; border-bottom:2px solid #735100; border-radius:2px; font-family:'Chakra Petch', sans-serif; letter-spacing:0.5px; transition:filter 0.15s ease, transform 0.1s ease;"
+  >
+    <i class="ph-bold ph-coffee" style="font-size:16px; color:#5c310c;"></i>
+    <span>DONATE / BUY ME A COFFEE</span>
+    <i class="ph-bold ph-heart" style="font-size:14px; color:#b91c1c;"></i>
+  </a>
+
   <!-- BLOCK 2: EQUALIZER (10 BANDS) -->
   <div class="win-border-out" id="block-eq">
     <div id="bar-eq" class="theme-bar">
@@ -579,41 +721,48 @@ select {
   <div class="win-border-out" id="block-vocal">
     <div id="bar-vocal" class="theme-bar">
       <div class="flex items-center gap-2">
-        <button id="btn-toggle-vocal" class="win-btn win-btn-sm" style="min-width:48px">ON</button>
+        <button id="btn-toggle-vocal" class="win-btn win-btn-sm pressed active-green" style="min-width:48px">ON</button>
         <div class="flex items-center gap-1.5">
           <i class="ph-bold ph-microphone-stage"></i>
           <span>AI VOCAL</span>
         </div>
       </div>
-      <span id="txt-vocal-status" style="font-family:monospace;font-size:12px;color:#ffff00;font-weight:bold">ORIGINAL</span>
+      <div class="flex items-center gap-2">
+        <span id="txt-vocal-status" class="font-pixel" style="font-size:11px;color:#fbbf24;font-weight:bold">ORIGINAL</span>
+        <button class="win-btn win-btn-sm" style="color:#f87171" title="Reset" onclick="resetVocalFull()">
+          <i class="ph-bold ph-arrow-counter-clockwise"></i>
+        </button>
+      </div>
     </div>
 
-    <div id="body-vocal" class="p-2 flex flex-col gap-2" style="background:#222">
-      <div class="win-border-in p-3 flex flex-col gap-3" style="background:#181818">
-        <!-- Separation Modes -->
-        <div class="flex flex-col">
-          <div class="flex justify-between items-center font-pixel" style="color:#bbb;margin-bottom:6px">
-            <span class="section-label"><i class="ph-bold ph-waveform"></i> SEPARATION MODE</span>
-          </div>
-          <div class="grid grid-cols-3 gap-1-5">
-            <button id="btn-vocal-bypass" class="win-btn win-btn-sm pressed">ORIG</button>
-            <button id="btn-vocal-karaoke" class="win-btn win-btn-sm">KARAOKE</button>
-            <button id="btn-vocal-acapella" class="win-btn win-btn-sm">ACAPELLA</button>
-          </div>
+    <div id="body-vocal" class="p-2 flex flex-col" style="background:#222">
+      <div class="win-border-in p-2.5 flex flex-col gap-2" style="background:#181818">
+        <!-- Row 1: MODE -->
+        <div class="flex justify-between items-center font-pixel">
+          <span class="section-label" style="color:#34d399"><i class="ph-bold ph-waveform"></i> MODE</span>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button id="btn-vocal-bypass" class="win-btn win-btn-sm pressed active-amber" onclick="setVocal('bypass')">
+            <i class="ph-bold ph-speaker-high"></i> ORIG
+          </button>
+          <button id="btn-vocal-karaoke" class="win-btn win-btn-sm" onclick="setVocal('karaoke')">
+            <i class="ph-bold ph-microphone-slash"></i> KARAOKE
+          </button>
+          <button id="btn-vocal-acapella" class="win-btn win-btn-sm" onclick="setVocal('acapella')">
+            <i class="ph-bold ph-music-notes-simple"></i> ACAPELLA
+          </button>
         </div>
 
-        <!-- Diff Level 1-4 -->
-        <div class="flex flex-col" style="border-top:1px solid #333;padding-top:10px">
-          <div class="flex justify-between items-center font-pixel" style="color:#bbb;margin-bottom:6px">
-            <span class="section-label"><i class="ph-bold ph-gauge"></i> DIFF LEVEL</span>
-            <span id="txt-diff-desc" style="font-size:12px;font-family:monospace;color:#80d0ff;font-weight:bold">2: STD (1.0x)</span>
-          </div>
-          <div class="grid grid-cols-4 gap-1">
-            <button class="win-btn win-btn-sm btn-remote-diff" data-level="1">1: SOFT</button>
-            <button class="win-btn win-btn-sm btn-remote-diff pressed" data-level="2">2: STD</button>
-            <button class="win-btn win-btn-sm btn-remote-diff" data-level="3">3: DEEP</button>
-            <button class="win-btn win-btn-sm btn-remote-diff" data-level="4">4: ULTRA</button>
-          </div>
+        <!-- Row 2: DIFF -->
+        <div class="flex justify-between items-center font-pixel" style="border-top:1px solid #333;padding-top:6px;margin-top:2px">
+          <span class="section-label" style="color:#f43f5e"><i class="ph-bold ph-gauge"></i> DIFF</span>
+          <span id="txt-diff-desc" class="font-pixel" style="color:#f43f5e;font-size:11px;font-weight:bold">2: STD (1.0x)</span>
+        </div>
+        <div class="grid grid-cols-4 gap-1.5">
+          <button id="btn-diff-1" class="win-btn win-btn-sm btn-remote-diff" data-level="1" onclick="setDiff(1)">1: SOFT</button>
+          <button id="btn-diff-2" class="win-btn win-btn-sm btn-remote-diff pressed active-rose" data-level="2" onclick="setDiff(2)">2: STD</button>
+          <button id="btn-diff-3" class="win-btn win-btn-sm btn-remote-diff" data-level="3" onclick="setDiff(3)">3: DEEP</button>
+          <button id="btn-diff-4" class="win-btn win-btn-sm btn-remote-diff" data-level="4" onclick="setDiff(4)">4: ULTRA</button>
         </div>
       </div>
     </div>
@@ -739,20 +888,6 @@ select {
       </div>
     </div>
   </div>
-
-  <!-- FOOTER: BUY ME A COFFEE -->
-  <div class="flex justify-center items-center py-2.5 mt-1">
-    <a
-      href="https://ganknow.com/nextfeeder/tip"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="win-btn flex items-center justify-center gap-1.5 px-3 py-1 text-[11px] font-bold shadow-sm"
-      style="background:linear-gradient(to bottom, #ffd966, #f1c232); color:#4a2810; text-decoration:none; border:1px solid #b48608;"
-    >
-      <i class="ph-bold ph-coffee" style="font-size:13px"></i>
-      <span>BUY ME A COFFEE</span>
-    </a>
-  </div>
 </div>
 `,
 
@@ -795,6 +930,60 @@ function snd(key, value, index = null) {
 
 // 10-BAND EQ FREQUENCIES
 const FREQS = ["32","64","125","250","500","1k","2k","4k","8k","16k"];
+
+function bindEqPointer(col, idx) {
+  let isDragging = false;
+  const thumb = col.querySelector(".eq-thumb");
+  const barWrapper = col.querySelector(".eq-bar-wrapper");
+  const input = col.querySelector(".v-input");
+
+  function updateFromPointer(e) {
+    const bar = barWrapper || col;
+    const rect = bar.getBoundingClientRect();
+    if (rect.height <= 0) return;
+
+    const ratio = Math.max(0, Math.min(1, (rect.bottom - e.clientY) / rect.height));
+    let val = -12 + ratio * 24;
+    val = Math.round(val * 2) / 2;
+    val = parseFloat(val.toFixed(1));
+    val = Math.max(-12, Math.min(12, val));
+
+    if (input) input.value = val;
+    updateBandView(idx, val);
+
+    if (!state.eq || !Array.isArray(state.eq)) state.eq = new Array(10).fill(0);
+    if (state.eq[idx] !== val) {
+      state.eq[idx] = val;
+      state.eqPreset = "custom";
+      if (G("eq-preset")) G("eq-preset").value = "custom";
+      snd("eq", val, idx);
+    }
+  }
+
+  col.addEventListener("pointerdown", e => {
+    if (e.button !== undefined && e.button !== 0) return;
+    isDragging = true;
+    try { col.setPointerCapture(e.pointerId); } catch (_) {}
+    if (thumb) thumb.classList.add("active");
+    updateFromPointer(e);
+  });
+
+  col.addEventListener("pointermove", e => {
+    if (!isDragging) return;
+    updateFromPointer(e);
+  });
+
+  const stopDrag = e => {
+    if (!isDragging) return;
+    isDragging = false;
+    try { col.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (thumb) thumb.classList.remove("active");
+  };
+
+  col.addEventListener("pointerup", stopDrag);
+  col.addEventListener("pointercancel", stopDrag);
+}
+
 function setupEqBands() {
   const container = G("eq-container");
   if (!container) return;
@@ -806,14 +995,15 @@ function setupEqBands() {
       <span class="eq-val-badge" id="t-eq-\${idx}">0dB</span>
       <div class="eq-bar-wrapper">
         <div class="eq-bar-mask" id="eq-mask-\${idx}" style="height:50%"></div>
-        <div class="eq-thumb" id="eq-thumb-\${idx}" style="top:calc(50% - 6px)"></div>
+        <div class="eq-thumb" id="eq-thumb-\${idx}" style="top:calc(50% - 7px)"></div>
       </div>
       <span class="eq-label">\${freq}</span>
       <input type="range" class="v-input" id="eq-input-\${idx}" min="-12" max="12" step="0.5" value="0">
     \`;
     container.appendChild(col);
 
-    col.querySelector("input").oninput = function() {
+    const input = col.querySelector("input");
+    input.oninput = function() {
       const val = +this.value;
       updateBandView(idx, val);
       if (!state.eq || !Array.isArray(state.eq)) state.eq = new Array(10).fill(0);
@@ -822,6 +1012,8 @@ function setupEqBands() {
       if (G("eq-preset")) G("eq-preset").value = "custom";
       snd("eq", val, idx);
     };
+
+    bindEqPointer(col, idx);
   });
 }
 
@@ -835,7 +1027,7 @@ function updateBandView(idx, val) {
   const pct = Math.max(0, Math.min(100, ((val + 12) / 24) * 100));
   const maskHeight = 100 - pct;
   if (mask) mask.style.height = maskHeight + "%";
-  if (thumb) thumb.style.top = "calc(" + maskHeight + "% - 6px)";
+  if (thumb) thumb.style.top = "calc(" + maskHeight + "% - 7px)";
   if (badge) badge.textContent = (val > 0 ? "+" : "") + Math.round(val) + "dB";
 }
 
@@ -913,6 +1105,7 @@ function syncView(k, v, index = null) {
     const bodyA = G("body-audio");
     if (bodyA) bodyA.classList.toggle("panel-disabled", !on);
     updateEqState();
+    updateVocalState();
   } else if (k === "isVideoMasterOn") {
     const on = !!v;
     const btn = G("btn-toggle-video");
@@ -946,51 +1139,60 @@ function syncView(k, v, index = null) {
     }
   } else if (k === "eqPreset") {
     if (G("eq-preset")) G("eq-preset").value = v;
+  } else if (k === "isVocalOn") {
+    updateVocalState();
   } else if (k === "vocalMode") {
     const mode = v || "bypass";
     const btnBypass = G("btn-vocal-bypass");
     const btnKaraoke = G("btn-vocal-karaoke");
     const btnAcapella = G("btn-vocal-acapella");
-    const btnToggle = G("btn-toggle-vocal");
     const txtStatus = G("txt-vocal-status");
 
-    [btnBypass, btnKaraoke, btnAcapella].forEach((b) => b && b.classList.remove("pressed"));
-    const on = (mode !== "bypass");
-    const bar = G("bar-vocal");
-    const bodyV = G("body-vocal");
+    [btnBypass, btnKaraoke, btnAcapella].forEach((b) => {
+      if (b) b.classList.remove("pressed", "active-amber", "active-emerald", "active-cyan");
+    });
+
+    if (txtStatus) {
+      if (mode === "karaoke") {
+        txtStatus.textContent = "KARAOKE";
+        txtStatus.style.color = "#34d399";
+      } else if (mode === "acapella") {
+        txtStatus.textContent = "ACAPELLA";
+        txtStatus.style.color = "#22d3ee";
+      } else {
+        txtStatus.textContent = "ORIGINAL";
+        txtStatus.style.color = "#fbbf24";
+      }
+    }
 
     if (mode === "karaoke") {
-      if (btnKaraoke) btnKaraoke.classList.add("pressed");
-      if (txtStatus) txtStatus.textContent = "KARAOKE (CUT)";
+      if (btnKaraoke) btnKaraoke.classList.add("pressed", "active-emerald");
     } else if (mode === "acapella") {
-      if (btnAcapella) btnAcapella.classList.add("pressed");
-      if (txtStatus) txtStatus.textContent = "ACAPELLA (ISO)";
+      if (btnAcapella) btnAcapella.classList.add("pressed", "active-cyan");
     } else {
-      if (btnBypass) btnBypass.classList.add("pressed");
-      if (txtStatus) txtStatus.textContent = "ORIGINAL";
+      if (btnBypass) btnBypass.classList.add("pressed", "active-amber");
     }
-
-    if (btnToggle) {
-      btnToggle.className = "win-btn win-btn-sm" + (on ? " pressed active-green" : "");
-      btnToggle.textContent = on ? "ON" : "OFF";
-    }
-    if (bar) bar.classList.toggle("theme-bar-off", !on);
-    if (bodyV) bodyV.classList.toggle("panel-disabled", !on);
   } else if (k === "vocalDiff") {
     const lvl = Number(v) || 2;
     const descs = {
-      1: "1: SOFT (Fast)",
-      2: "2: STD (Optimal)",
-      3: "3: DEEP (Cleaner)",
-      4: "4: ULTRA (Max Context)"
+      1: "1: SOFT (0.8x)",
+      2: "2: STD (1.0x)",
+      3: "3: DEEP (1.3x)",
+      4: "4: ULTRA (1.6x)"
     };
-    if (G("txt-diff-desc")) G("txt-diff-desc").textContent = descs[lvl] || "2: STD (Optimal)";
-    document.querySelectorAll(".btn-remote-diff").forEach((b) => {
-      if (Number(b.dataset.level) === lvl) {
-        b.classList.add("pressed");
-      } else {
-        b.classList.remove("pressed");
+    if (G("txt-diff-desc")) G("txt-diff-desc").textContent = descs[lvl] || "2: STD (1.0x)";
+    [1, 2, 3, 4].forEach((l) => {
+      const b = G("btn-diff-" + l);
+      if (b) {
+        const isMatch = (l === lvl);
+        b.classList.toggle("pressed", isMatch);
+        b.classList.toggle("active-rose", isMatch);
       }
+    });
+    document.querySelectorAll(".btn-remote-diff").forEach((b) => {
+      const isMatch = (Number(b.dataset.level) === lvl);
+      b.classList.toggle("pressed", isMatch);
+      b.classList.toggle("active-rose", isMatch);
     });
   }
 }
@@ -1004,10 +1206,81 @@ function updateEqState() {
   if (G("eq-preset")) G("eq-preset").disabled = !active;
 }
 
+function updateVocalState() {
+  const vocalOn = !!(state.isVocalOn ?? true);
+  const audioOn = !!(state.isAudioMasterOn ?? true);
+  const active = vocalOn && audioOn;
+
+  const btnToggle = G("btn-toggle-vocal");
+  if (btnToggle) {
+    btnToggle.className = "win-btn win-btn-sm" + (vocalOn ? " pressed active-green" : "");
+    btnToggle.textContent = vocalOn ? "ON" : "OFF";
+  }
+  const bar = G("bar-vocal");
+  if (bar) bar.classList.toggle("theme-bar-off", !vocalOn);
+  const bodyV = G("body-vocal");
+  if (bodyV) bodyV.classList.toggle("panel-disabled", !active);
+}
+
 function applyFull(s) {
   isProg = true;
   for (let k in s) syncView(k, s[k]);
   isProg = false;
+}
+
+function bindSliderPointer(id, key) {
+  const input = G(id);
+  if (!input) return;
+  const wrap = input.closest(".slider-wrap") || input;
+
+  let isDragging = false;
+
+  function updateFromPointer(e) {
+    const rect = input.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const min = parseFloat(input.min) || 0;
+    const max = parseFloat(input.max) || 1;
+    const step = parseFloat(input.step) || 0.01;
+
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    let val = min + ratio * (max - min);
+
+    if (step > 0) {
+      val = Math.round((val - min) / step) * step + min;
+      const stepStr = step.toString();
+      const decimals = stepStr.includes(".") ? stepStr.split(".")[1].length : 0;
+      val = parseFloat(val.toFixed(decimals));
+    }
+
+    val = Math.max(min, Math.min(max, val));
+    if (parseFloat(input.value) !== val) {
+      input.value = val;
+      snd(key, val);
+    }
+  }
+
+  wrap.addEventListener("pointerdown", e => {
+    if (e.button !== undefined && e.button !== 0) return;
+    isDragging = true;
+    try { wrap.setPointerCapture(e.pointerId); } catch (_) {}
+    input.classList.add("is-dragging");
+    updateFromPointer(e);
+  });
+
+  wrap.addEventListener("pointermove", e => {
+    if (!isDragging) return;
+    updateFromPointer(e);
+  });
+
+  const stopDrag = e => {
+    if (!isDragging) return;
+    isDragging = false;
+    try { wrap.releasePointerCapture(e.pointerId); } catch (_) {}
+    input.classList.remove("is-dragging");
+  };
+
+  wrap.addEventListener("pointerup", stopDrag);
+  wrap.addEventListener("pointercancel", stopDrag);
 }
 
 // BIND CONTROLS
@@ -1017,6 +1290,13 @@ G("main-pitch").oninput = function() { snd("pitch", +this.value); };
 G("main-verb").oninput = function() { snd("reverb", +this.value); };
 G("video-delay").oninput = function() { snd("videoDelay", +this.value); };
 G("video-zoom").oninput = function() { snd("videoZoom", +this.value); };
+
+bindSliderPointer("main-vol", "volume");
+bindSliderPointer("main-pan", "pan");
+bindSliderPointer("main-pitch", "pitch");
+bindSliderPointer("main-verb", "reverb");
+bindSliderPointer("video-delay", "videoDelay");
+bindSliderPointer("video-zoom", "videoZoom");
 
 G("btn-toggle-audio").onclick = function() {
   vib(18);
@@ -1042,9 +1322,7 @@ G("btn-normalize").onclick = function() {
 if (G("btn-toggle-vocal")) {
   G("btn-toggle-vocal").onclick = function() {
     vib(18);
-    const isPressed = this.classList.contains("pressed");
-    const next = isPressed ? "bypass" : "karaoke";
-    snd("vocalMode", next);
+    snd("isVocalOn", !(state.isVocalOn ?? true));
   };
 }
 if (G("btn-vocal-bypass")) {
@@ -1098,6 +1376,15 @@ window.resetVideoFull = () => {
   snd("videoZoom", 1);
   snd("videoRotate", 0);
   snd("videoDelay", 0);
+};
+
+window.setVocal = m => { vib(15); snd("vocalMode", m); };
+window.setDiff = lvl => { vib(15); snd("vocalDiff", lvl); };
+window.resetVocalFull = () => {
+  vib(20);
+  snd("isVocalOn", true);
+  snd("vocalMode", "bypass");
+  snd("vocalDiff", 2);
 };
 
 const PRESETS = {

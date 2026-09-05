@@ -104,9 +104,7 @@ async function init(wasmUrl, modelUrl) {
         await tf.setBackend("webgl");
         tf.env().set("WEBGL_PACK", true);
         tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
-        tf.env().set("WEBGL_PACK_NORMALIZATION", true);
         tf.env().set("WEBGL_CPU_FORWARD", false);
-        tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
         tf.env().set("PROD", true);
       } catch (webglErr) {
         console.warn("[NextAmp AI] WebGL failed in worker, falling back to CPU:", webglErr);
@@ -135,6 +133,15 @@ async function init(wasmUrl, modelUrl) {
 
     model = await tf.loadGraphModel(ioHandler);
     resetState();
+
+    // GPU Shader Pre-Compilation (Warm-Up) in Worker
+    try {
+      const dummy = tf.zeros([1, _, 64, 2]);
+      const wOut = model.execute(dummy);
+      await wOut.data();
+      dummy.dispose();
+      wOut.dispose();
+    } catch (_) {}
 
     console.log(`[NextAmp AI] Initialized successfully with backend: ${activeBackend.toUpperCase()}`);
     self.postMessage({ type: "READY", backend: activeBackend });

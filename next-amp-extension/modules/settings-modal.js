@@ -95,6 +95,16 @@ const MODAL_HTML = `
           </div>
           <button id="btn-reset" class="win-btn w-full py-0.5 text-red-900 font-bold bg-[#e0e0e0]">FACTORY RESET</button>
         </div>
+        <div class="text-[9px] font-bold text-emerald-400 mb-0.5 mt-1.5 border-b border-gray-700">AI & GPU DIAGNOSTICS</div>
+        <div class="flex flex-col gap-1 mt-0.5">
+          <button
+            id="btn-ai-diagnostics"
+            class="win-btn w-full py-1 text-emerald-400 font-bold bg-[#1a1a1a] hover:bg-[#282828] border border-emerald-600 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+          >
+            <i class="ph-bold ph-activity text-emerald-400 text-[10px]"></i>
+            <span>RUN AI & GPU BENCHMARK</span>
+          </button>
+        </div>
       </div>
 
       <div id="tab-record" class="tab-content">
@@ -158,24 +168,32 @@ export class SettingsModal {
   }
 
   init() {
-    // Inject HTML
-    const overlay = document.createElement("div");
-    overlay.id = "modal-overlay";
-    overlay.innerHTML = MODAL_HTML;
-    document.body.appendChild(overlay);
-
-    this.setupListeners();
-
-    // Set Extension ID
     try {
-      const extId = chrome.runtime.id;
-      if (extId) $("#txt-ext-id").value = extId;
-    } catch (e) {}
+      // Inject HTML if not already present in DOM
+      let overlay = $("#modal-overlay");
+      if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "modal-overlay";
+        overlay.innerHTML = MODAL_HTML;
+        document.body.appendChild(overlay);
+      }
+
+      this.setupListeners();
+
+      // Set Extension ID
+      try {
+        const extId = chrome.runtime.id;
+        const txtExtId = $("#txt-ext-id");
+        if (extId && txtExtId) txtExtId.value = extId;
+      } catch (e) {}
+    } catch (err) {
+      console.error("[SettingsModal] Init error:", err);
+    }
   }
 
   toggle(show) {
     const overlay = $("#modal-overlay");
-    overlay.classList.toggle("active", show);
+    if (overlay) overlay.classList.toggle("active", show);
   }
 
   switchTab(id) {
@@ -189,14 +207,22 @@ export class SettingsModal {
 
   setupListeners() {
     const overlay = $("#modal-overlay");
-    $("#btn-settings").onclick = () => {
-      this.toggle(true);
-      this.switchTab("tab-general");
-    };
-    $("#btn-modal-close").onclick = () => this.toggle(false);
-    overlay.onclick = (e) => {
-      if (e.target === overlay) this.toggle(false);
-    };
+    const btnSettings = $("#btn-settings");
+    if (btnSettings) {
+      btnSettings.onclick = () => {
+        this.toggle(true);
+        this.switchTab("tab-general");
+      };
+    }
+    const btnClose = $("#btn-modal-close");
+    if (btnClose) {
+      btnClose.onclick = () => this.toggle(false);
+    }
+    if (overlay) {
+      overlay.onclick = (e) => {
+        if (e.target === overlay) this.toggle(false);
+      };
+    }
 
     $$(".tab-btn").forEach(
       (btn) => (btn.onclick = () => this.switchTab(btn.dataset.tab))
@@ -220,49 +246,79 @@ export class SettingsModal {
     });
 
     // General Settings
-    $("#sel-startup-vol").onchange = (e) =>
-      this.callbacks.onSettingChange({ startupVol: e.target.value });
-    $("#sel-latency").onchange = (e) =>
-      this.callbacks.onSettingChange({ latencyHint: e.target.value });
-    $("#sel-sample-rate").onchange = (e) =>
-      this.callbacks.onSettingChange({ sampleRate: e.target.value });
-    $("#chk-show-stats").onchange = (e) => {
-      this.callbacks.onSettingChange({ showStats: e.target.checked });
-      // toggleStats logic if needed
-    };
+    const selStartupVol = $("#sel-startup-vol");
+    if (selStartupVol) {
+      selStartupVol.onchange = (e) =>
+        this.callbacks.onSettingChange({ startupVol: e.target.value });
+    }
+    const selLatency = $("#sel-latency");
+    if (selLatency) {
+      selLatency.onchange = (e) =>
+        this.callbacks.onSettingChange({ latencyHint: e.target.value });
+    }
+    const selSampleRate = $("#sel-sample-rate");
+    if (selSampleRate) {
+      selSampleRate.onchange = (e) =>
+        this.callbacks.onSettingChange({ sampleRate: e.target.value });
+    }
+    const chkStats = $("#chk-show-stats");
+    if (chkStats) {
+      chkStats.onchange = (e) => {
+        this.callbacks.onSettingChange({ showStats: e.target.checked });
+      };
+    }
 
     // Advanced Settings (Reverb/Dyn)
-    $("#adv-rev-time").addEventListener("change", (e) => {
+    $("#adv-rev-time")?.addEventListener("change", (e) => {
       const v = parseFloat(e.target.value);
-      $("#txt-rev-time").textContent = v + "s";
+      const txt = $("#txt-rev-time");
+      if (txt) txt.textContent = v + "s";
       this.callbacks.onSendParam("reverbTime", v);
     });
-    $("#adv-rev-decay").addEventListener("change", (e) => {
+    $("#adv-rev-decay")?.addEventListener("change", (e) => {
       const v = parseFloat(e.target.value);
-      $("#txt-rev-decay").textContent = v;
+      const txt = $("#txt-rev-decay");
+      if (txt) txt.textContent = v;
       this.callbacks.onSendParam("reverbDecay", v);
     });
-    $("#adv-dyn-boost").addEventListener("input", (e) => {
+    $("#adv-dyn-boost")?.addEventListener("input", (e) => {
       const v = parseInt(e.target.value);
-      $("#txt-dyn-boost").textContent = v + "%";
+      const txt = $("#txt-dyn-boost");
+      if (txt) txt.textContent = v + "%";
       this.callbacks.onSendParam("dynBoost", v);
     });
-    $("#adv-dyn-limit").addEventListener("input", (e) => {
+    $("#adv-dyn-limit")?.addEventListener("input", (e) => {
       const v = parseInt(e.target.value);
-      $("#txt-dyn-limit").textContent = v + "%";
+      const txt = $("#txt-dyn-limit");
+      if (txt) txt.textContent = v + "%";
       this.callbacks.onSendParam("dynLimit", v);
     });
 
     // Utilities
-    $("#btn-copy-id").onclick = () => {
-      const input = $("#txt-ext-id");
-      input.select();
-      navigator.clipboard.writeText(input.value);
-    };
-    $("#btn-reset").addEventListener("click", this.callbacks.onReset);
+    const btnCopy = $("#btn-copy-id");
+    if (btnCopy) {
+      btnCopy.onclick = () => {
+        const input = $("#txt-ext-id");
+        if (input) {
+          input.select();
+          navigator.clipboard.writeText(input.value);
+        }
+      };
+    }
+    $("#btn-reset")?.addEventListener("click", this.callbacks.onReset);
+
+    const btnDiag = $("#btn-ai-diagnostics");
+    if (btnDiag) {
+      btnDiag.onclick = () => {
+        chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
+      };
+    }
 
     // Recording
-    $("#btn-rec-action").onclick = this.callbacks.onToggleRecord;
+    const btnRecAction = $("#btn-rec-action");
+    if (btnRecAction) {
+      btnRecAction.onclick = this.callbacks.onToggleRecord;
+    }
   }
 
   async renderRecordingList() {
@@ -354,28 +410,40 @@ export class SettingsModal {
   }
 
   setValues(state) {
-    if (state.reverbTime !== undefined) {
-      $("#adv-rev-time").value = state.reverbTime;
-      $("#txt-rev-time").textContent = state.reverbTime + "s";
-    }
-    if (state.reverbDecay !== undefined) {
-      $("#adv-rev-decay").value = state.reverbDecay;
-      $("#txt-rev-decay").textContent = state.reverbDecay;
-    }
-    if (state.dynBoost !== undefined) {
-      $("#adv-dyn-boost").value = state.dynBoost;
-      $("#txt-dyn-boost").textContent = state.dynBoost + "%";
-    }
-    if (state.dynLimit !== undefined) {
-      $("#adv-dyn-limit").value = state.dynLimit;
-      $("#txt-dyn-limit").textContent = state.dynLimit + "%";
-    }
-    if (state.startupVol) $("#sel-startup-vol").value = state.startupVol;
-    if (state.latencyHint) $("#sel-latency").value = state.latencyHint;
-    if (state.sampleRate) $("#sel-sample-rate").value = state.sampleRate;
-    if (state.currentSampleRate) this.updateActiveSampleRate(state.currentSampleRate);
-    if (state.showStats !== undefined) {
-      $("#chk-show-stats").checked = state.showStats;
+    try {
+      if (state.reverbTime !== undefined) {
+        const el = $("#adv-rev-time");
+        if (el) el.value = state.reverbTime;
+        const txt = $("#txt-rev-time");
+        if (txt) txt.textContent = state.reverbTime + "s";
+      }
+      if (state.reverbDecay !== undefined) {
+        const el = $("#adv-rev-decay");
+        if (el) el.value = state.reverbDecay;
+        const txt = $("#txt-rev-decay");
+        if (txt) txt.textContent = state.reverbDecay;
+      }
+      if (state.dynBoost !== undefined) {
+        const el = $("#adv-dyn-boost");
+        if (el) el.value = state.dynBoost;
+        const txt = $("#txt-dyn-boost");
+        if (txt) txt.textContent = state.dynBoost + "%";
+      }
+      if (state.dynLimit !== undefined) {
+        const el = $("#adv-dyn-limit");
+        if (el) el.value = state.dynLimit;
+        const txt = $("#txt-dyn-limit");
+        if (txt) txt.textContent = state.dynLimit + "%";
+      }
+      if (state.startupVol && $("#sel-startup-vol")) $("#sel-startup-vol").value = state.startupVol;
+      if (state.latencyHint && $("#sel-latency")) $("#sel-latency").value = state.latencyHint;
+      if (state.sampleRate && $("#sel-sample-rate")) $("#sel-sample-rate").value = state.sampleRate;
+      if (state.currentSampleRate) this.updateActiveSampleRate(state.currentSampleRate);
+      if (state.showStats !== undefined && $("#chk-show-stats")) {
+        $("#chk-show-stats").checked = state.showStats;
+      }
+    } catch (err) {
+      console.warn("[SettingsModal] setValues warning:", err);
     }
   }
 

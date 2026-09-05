@@ -1,3 +1,5 @@
+import { AIVocalManager } from "./modules/ai-vocal/ai-vocal-manager.js";
+
 const out = document.getElementById("output");
 
 function log(msg, cls = "") {
@@ -34,13 +36,19 @@ export async function runDiagnostics() {
       await tf.setBackend("webgl");
       tf.env().set("WEBGL_PACK", true);
       tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
-      tf.env().set("WEBGL_PACK_NORMALIZATION", true);
       tf.env().set("WEBGL_CPU_FORWARD", false);
-      tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
       tf.env().set("PROD", true);
     }
     await tf.ready();
+    const gl = tf.backend()?.gpgpu?.gl;
+    let unmasked = "Unknown";
+    if (gl) {
+      const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+      if (dbg) unmasked = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "Unknown";
+    }
+    const isGoodGpu = unmasked.includes("NVIDIA") || unmasked.includes("Apple") || unmasked.includes("Radeon");
     log("✓ TFJS Backend Ready: " + tf.getBackend().toUpperCase(), "log-ok");
+    log("  Hardware Device: " + unmasked, isGoodGpu ? "log-ok" : "log-warn");
   } catch (e) {
     log("✗ TFJS Backend Failed: " + e.message, "log-err");
     return;
@@ -69,13 +77,37 @@ export async function runDiagnostics() {
   log("\n[4/5] Testing U-Net Inference Execution...");
   try {
     const dummyInput = tf.zeros([1, 1024, 64, 2]);
-    const t0 = performance.now();
-    const result = model.execute(dummyInput);
-    const data = await result.data();
-    const duration = (performance.now() - t0).toFixed(1);
+
+    // Pass 1: Warmup & GLSL Shader Compilation (JIT)
+    log("  [Warmup] Pre-compiling GPU shaders on device...");
+    const tWarmup0 = performance.now();
+    const warmupResult = model.execute(dummyInput);
+    await warmupResult.data();
+    const warmupDuration = (performance.now() - tWarmup0).toFixed(1);
+    warmupResult.dispose();
+    log(`  ✓ Shader JIT Compilation Done: ${warmupDuration}ms (One-time GPU compile)`);
+
+    // Pass 2: Steady-State Inference (3 iterations)
+    log("  [Benchmark] Measuring steady-state inference latency (3 runs)...");
+    let totalTime = 0;
+    const RUNS = 3;
+    for (let i = 0; i < RUNS; i++) {
+      const t0 = performance.now();
+      const res = model.execute(dummyInput);
+      await res.data();
+      totalTime += (performance.now() - t0);
+      res.dispose();
+    }
     dummyInput.dispose();
-    result.dispose();
-    log("✓ Inference Success! Output length: " + data.length + " | Time: " + duration + "ms", "log-ok");
+
+    const avgDuration = (totalTime / RUNS).toFixed(1);
+    const isRealTime = parseFloat(avgDuration) < 185;
+    log(`✓ Steady-State Inference: ${avgDuration}ms / chunk (Quota: 185ms) - ${isRealTime ? "Real-time OK! ✓" : "TOO SLOW! ✗"}`, isRealTime ? "log-ok" : "log-err");
+    if (!isRealTime) {
+      log("\n⚠ DIAGNOSIS: Steady-state inference took " + avgDuration + "ms which is slower than audio playback (185ms).", "log-err");
+      log("👉 If on Windows with dual GPU (Intel + NVIDIA): Chrome is using Intel iGPU instead of NVIDIA GTX 1050 Ti.", "log-warn");
+      log("👉 Open Windows 'Graphics Settings' -> Add Google Chrome -> Select 'High Performance (NVIDIA)' -> Restart Chrome.", "log-warn");
+    }
   } catch (e) {
     log("✗ Inference Failed: " + e.message, "log-err");
     return;
@@ -83,15 +115,15 @@ export async function runDiagnostics() {
 
   log("\n[5/5] Testing AIVocalManager Pipeline...");
   try {
-    const { AIVocalManager } = await import("./modules/ai-vocal/ai-vocal-manager.js");
     const actx = new (window.AudioContext || window.webkitAudioContext)();
     const mgr = new AIVocalManager(actx);
     const node = await mgr.init();
     if (node) {
       log("✓ AIVocalManager Initialized successfully! Status: " + mgr.getStatus(), "log-ok");
     } else {
-      log("✗ AIVocalManager returned null node. Error: " + mgr.lastError, "log-err");
+      log("✗ AIVocalManager returned null node. Error: " + (mgr.lastError || "Unknown error"), "log-err");
     }
+    try { await actx.close(); } catch (_) {}
   } catch (e) {
     log("✗ AIVocalManager Failed: " + e.message, "log-err");
   }

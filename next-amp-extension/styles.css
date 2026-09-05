@@ -246,7 +246,8 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 #modal-overlay,
 #session-mode-overlay,
 #tab-status-overlay,
-#first-launch-overlay {
+#first-launch-overlay,
+#ai-slow-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
@@ -260,7 +261,8 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 #modal-overlay.active,
 #session-mode-overlay.active,
 #tab-status-overlay.active,
-#first-launch-overlay.active {
+#first-launch-overlay.active,
+#ai-slow-overlay.active {
   display: flex;
 }
 

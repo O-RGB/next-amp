@@ -8,7 +8,6 @@ const A = 16;       // 16 magnitude frames per chunk
 const _ = 1024;     // 1024 frequency bins
 const F = 8192;     // 8,192 samples per chunk (16 hops of 512)
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
-const VOCAL_ENERGY_THRESHOLD = 0.005;
 
 export class AIVocalManager {
   constructor(audioCtx) {
@@ -54,14 +53,32 @@ export class AIVocalManager {
     this.isBusy = false;
     this.chunkQueue = [];
     this.maxHistory = [1e-4, 1e-4, 1e-4, 1e-4];
+
+    this.lastInferMs = 0;
+    this.backendName = "GPU";
+    this.benchmarkMs = 0;
+    this.isHardwareSlow = false;
   }
 
   setStatus(status) {
-    if (this.currentStatus === status) return; // Deduplicate: Stop writing to storage 10x/sec!
+    if (this.currentStatus === status) return;
     this.currentStatus = status;
-    try {
-      chrome.storage.local.set({ aiVocalStatus: status }).catch(() => {});
-    } catch (_) {}
+
+    // Only write to chrome.storage.local on significant state transitions,
+    // NOT on high-frequency (90ms) buffering progress, preventing tab IPC flooding.
+    const shouldPersist = status.startsWith("ERR") || 
+                          status.startsWith("⚠️") ||
+                          status === "ORIGINAL" || 
+                          status.startsWith("ORIGINAL") || 
+                          status.startsWith("KARAOKE") || 
+                          status.startsWith("ACAPELLA") ||
+                          status.startsWith("Loading");
+    if (shouldPersist) {
+      try {
+        chrome.storage.local.set({ aiVocalStatus: status }).catch(() => {});
+      } catch (_) {}
+    }
+
     if (this.onStatusChange) {
       this.onStatusChange(status);
     }
@@ -113,10 +130,9 @@ export class AIVocalManager {
         if (data.type === "PROCESS_CHUNK") {
           if (this.isReady && this.currentMode !== "bypass") {
             this.chunkQueue.push(data);
-            if (this.chunkQueue.length > 4) {
+            if (this.chunkQueue.length > 8) {
               // Tab was suspended or heavily lagged; keep newest chunks to avoid backlog
-              this.chunkQueue = this.chunkQueue.slice(-2);
-              this.resetState();
+              this.chunkQueue = this.chunkQueue.slice(-3);
             }
             if (!this.isBusy) {
               this.runChunkQueue();
@@ -152,6 +168,10 @@ export class AIVocalManager {
       while (this.chunkQueue.length > 0 && this.currentMode !== "bypass") {
         const chunk = this.chunkQueue.shift();
         await this.processChunk(chunk.chunkIndex, chunk.rawL, chunk.rawR, chunk.mode);
+        // Yield momentarily to event loop without Windows timer quantization penalty
+        if (this.chunkQueue.length > 0) {
+          await new Promise((resolve) => queueMicrotask(resolve));
+        }
       }
     } catch (err) {
       console.error("[NextAmp AI] Queue processing error:", err);
@@ -166,18 +186,45 @@ export class AIVocalManager {
     try {
       this.setStatus("Loading DSP...");
 
-      // 1. Load our in-house stft_simd.wasm (with scalar fallback)
-      let wasmRes;
-      const simdUrl = chrome.runtime.getURL("modules/ai-vocal/stft_simd.wasm");
+      // 0. Fast Pre-Check: Detect SwiftShader CPU Software Emulation immediately
       try {
-        wasmRes = await fetch(simdUrl);
-      } catch (_) {
-        const scalarUrl = chrome.runtime.getURL("modules/ai-vocal/stft_scalar.wasm");
-        wasmRes = await fetch(scalarUrl);
-      }
-      const wasmBuf = await wasmRes.arrayBuffer();
+        const testCanvas = document.createElement("canvas");
+        const testGl = testCanvas.getContext("webgl2") || testCanvas.getContext("webgl");
+        if (testGl) {
+          const dbg = testGl.getExtension("WEBGL_debug_renderer_info");
+          if (dbg) {
+            const rend = testGl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "";
+            if (rend.includes("SwiftShader")) {
+              this.isHardwareSlow = true;
+              this.benchmarkMs = 1500;
+              this.backendName = "SwiftShader (CPU)";
+              this.broadcastHardwareWarning(1500, this.backendName);
+              this.setStatus("⚠️ CPU SLOW (No GPU)");
+              this.engineLoading = false;
+              return;
+            }
+          }
+        }
+      } catch (_) {}
 
-      const { instance } = await WebAssembly.instantiate(wasmBuf, { env: {} });
+      // 1. Load in-house STFT WASM (SIMD128 with robust Scalar fallback)
+      let instance;
+      try {
+        const simdUrl = chrome.runtime.getURL("modules/ai-vocal/stft_simd.wasm");
+        const wasmRes = await fetch(simdUrl);
+        const wasmBuf = await wasmRes.arrayBuffer();
+        const instantiated = await WebAssembly.instantiate(wasmBuf, { env: {} });
+        instance = instantiated.instance;
+        console.log("[NextAmp AI] Loaded SIMD STFT WASM");
+      } catch (simdErr) {
+        console.warn("[NextAmp AI] SIMD WASM failed, falling back to scalar:", simdErr);
+        const scalarUrl = chrome.runtime.getURL("modules/ai-vocal/stft_scalar.wasm");
+        const wasmRes = await fetch(scalarUrl);
+        const wasmBuf = await wasmRes.arrayBuffer();
+        const instantiated = await WebAssembly.instantiate(wasmBuf, { env: {} });
+        instance = instantiated.instance;
+        console.log("[NextAmp AI] Loaded Scalar STFT WASM fallback");
+      }
       this.wasmInstance = instance;
       this.exp = instance.exports;
       this.mem = new Float32Array(this.exp.memory.buffer);
@@ -199,21 +246,77 @@ export class AIVocalManager {
 
       this.setStatus("Starting GPU...");
 
-      // 2. Hardware-Accelerated WebGL Backend with Packed Textures & Float16
+      // 2. Hardware-Accelerated WebGL Backend with Incremental Flushing & Texture Pooling
       try {
-        await tf.setBackend("webgl");
         tf.env().set("WEBGL_PACK", true);
         tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
-        tf.env().set("WEBGL_PACK_NORMALIZATION", true);
         tf.env().set("WEBGL_CPU_FORWARD", false);
-        tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
-        tf.env().set("WEBGL_DELETE_TEXTURE_THRESHOLD", 0);
+        tf.env().set("WEBGL_LAZILY_UNPACK", true);
+        // Texture pooling: MUST be -1 (never delete) to avoid ~1,000 DirectX 11 CreateTexture2D/Release calls per second!
+        tf.env().set("WEBGL_DELETE_TEXTURE_THRESHOLD", -1);
         tf.env().set("PROD", true);
+
+        // Try WebGL 2 first (best performance); if blocked by Chrome on Windows, fall back to WebGL 1
+        try {
+          tf.env().set("WEBGL_VERSION", 2);
+          await tf.setBackend("webgl");
+          await tf.ready();
+        } catch (e2) {
+          console.warn("[NextAmp AI] WebGL 2 failed, falling back to WebGL 1:", e2);
+          tf.env().set("WEBGL_VERSION", 1);
+          await tf.setBackend("webgl");
+          await tf.ready();
+        }
       } catch (webglErr) {
-        console.warn("[NextAmp AI] WebGL failed, falling back to CPU:", webglErr);
+        console.warn("[NextAmp AI] WebGL failed completely, falling back to CPU:", webglErr);
         await tf.setBackend("cpu");
+        await tf.ready();
       }
-      await tf.ready();
+
+      // Detect GPU hardware device label early before loading model
+      const currentBackend = tf.getBackend() || "webgl";
+      let deviceLabel = currentBackend.toUpperCase();
+      try {
+        const gl = tf.backend()?.gpgpu?.gl;
+        if (gl) {
+          const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+          if (dbg) {
+            const unmasked = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "";
+            if (unmasked.includes("SwiftShader")) deviceLabel = "SwiftShader (CPU)";
+            else if (unmasked.includes("GeForce") || unmasked.includes("NVIDIA")) {
+              const m = unmasked.match(/NVIDIA GeForce [^,)]+/);
+              deviceLabel = m ? m[0] : "NVIDIA";
+            } else if (unmasked.includes("Intel")) {
+              const m = unmasked.match(/Intel\(R\) [^,)]+/);
+              deviceLabel = m ? m[0] : "Intel HD";
+            } else if (unmasked.includes("AMD") || unmasked.includes("Radeon")) {
+              const m = unmasked.match(/(AMD|Radeon) [^,)]+/);
+              deviceLabel = m ? m[0] : "AMD";
+            } else if (unmasked.includes("Apple")) {
+              deviceLabel = "Apple GPU";
+            }
+          }
+        }
+      } catch (_) {}
+      this.backendName = deviceLabel;
+
+      // Early fast check before loading model:
+      // If software CPU / SwiftShader is used, or if cached benchmark says slow, alert user immediately!
+      if (currentBackend === "cpu" || deviceLabel.includes("SwiftShader")) {
+        console.warn("[NextAmp AI] Software rendering detected (CPU / SwiftShader)");
+        this.isHardwareSlow = true;
+        this.benchmarkMs = 2500;
+        this.broadcastHardwareWarning(2500, deviceLabel);
+      } else {
+        try {
+          const cached = (await chrome.storage.local.get("cachedGpuBenchmark"))?.cachedGpuBenchmark;
+          if (cached && cached.deviceLabel === deviceLabel && cached.isHardwareSlow) {
+            this.isHardwareSlow = true;
+            this.benchmarkMs = cached.benchmarkMs;
+            this.broadcastHardwareWarning(cached.benchmarkMs, cached.deviceLabel);
+          }
+        } catch (_) {}
+      }
 
       // 3. Register custom IO handler for chrome-extension:// scheme
       if (tf.io && tf.io.registerLoadRouter) {
@@ -233,32 +336,82 @@ export class AIVocalManager {
         : modelUrl;
 
       this.model = await tf.loadGraphModel(ioHandler);
+
+      // Check if cancelled/unloaded while downloading/loading model
+      if (!this.engineLoading) {
+        if (this.model) {
+          try { this.model.dispose(); } catch (_) {}
+          this.model = null;
+        }
+        return;
+      }
+
       this.resetState();
 
       // GPU Shader Pre-Compilation (Warm-Up):
-      // Pre-compiles all WebGL kernels (conv2d, divNoNan, transpose, slice, sigmoid)
-      // to eliminate the initial 300-500ms JIT compilation stutter on first audio chunks!
+      // Pre-compiles all WebGL kernels (conv2d, depthwise, resize, concat, slice, transpose, sigmoid)
+      // using the exact graph and dimensions of runtime processChunk to prevent initial JIT compilation freezes!
       this.setStatus("Warming up GPU...");
       try {
         const dummyInput = tf.zeros([1, _, 64, 2]);
-        const normInput = dummyInput.divNoNan(dummyInput.max());
-        const outTensor = this.model.execute(normInput);
-        const transposed = outTensor.transpose([0, 3, 2, 1]).reshape([2, 64, _]);
-        const maskTensor = transposed.slice([0, 31, 0], [2, A, _]).sigmoid();
-        await maskTensor.data();
-
+        const outTensor = this.model.execute(dummyInput);
         dummyInput.dispose();
-        normInput.dispose();
+
+        // Exact slice and transpose matching processChunk runtime (diffLevel 2 default: frame 32)
+        const maskTensor = tf.tidy(() => {
+          const sliced = outTensor.slice([0, 0, 32, 0], [1, _, A, 2]);
+          return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
+        });
         outTensor.dispose();
-        transposed.dispose();
+
+        // Flush GPU pipeline and await readback
+        await maskTensor.data();
         maskTensor.dispose();
         console.log("[NextAmp AI] GPU pipeline pre-warmed (all WebGL shaders compiled)");
       } catch (warmErr) {
         console.warn("[NextAmp AI] Warmup pass error:", warmErr);
       }
 
-      const currentBackend = tf.getBackend() || "webgl";
-      console.log(`[NextAmp AI] Engine ready with backend: ${currentBackend.toUpperCase()}`);
+      // 3. One-Time 1-Chunk Hardware Benchmark: Measure actual steady-state latency
+      let benchmarkMs = 0;
+      try {
+        const tBench0 = performance.now();
+        const benchIn = tf.zeros([1, _, 64, 2]);
+        const benchOut = this.model.execute(benchIn);
+        benchIn.dispose();
+        const benchMask = tf.tidy(() => {
+          const sliced = benchOut.slice([0, 0, 32, 0], [1, _, A, 2]);
+          return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
+        });
+        benchOut.dispose();
+        await benchMask.data();
+        benchMask.dispose();
+        benchmarkMs = Math.round(performance.now() - tBench0);
+        this.benchmarkMs = benchmarkMs;
+        console.log(`[NextAmp AI] Hardware benchmark 1-chunk: ${benchmarkMs}ms on ${this.backendName}`);
+
+        if (benchmarkMs > 185) {
+          this.isHardwareSlow = true;
+          this.broadcastHardwareWarning(benchmarkMs, this.backendName);
+        } else {
+          this.isHardwareSlow = false;
+        }
+
+        try {
+          chrome.storage.local.set({
+            cachedGpuBenchmark: {
+              deviceLabel: this.backendName,
+              benchmarkMs: benchmarkMs,
+              isHardwareSlow: this.isHardwareSlow,
+              timestamp: Date.now()
+            }
+          }).catch(() => {});
+        } catch (_) {}
+      } catch (benchErr) {
+        console.warn("[NextAmp AI] Benchmark test error:", benchErr);
+      }
+
+      console.log(`[NextAmp AI] Engine ready with hardware: ${this.backendName}`);
       this.isReady = true;
       this.engineLoading = false;
 
@@ -267,9 +420,13 @@ export class AIVocalManager {
       }
 
       if (this.currentMode === "bypass") {
-        this.setStatus("ORIGINAL");
+        this.setStatus(this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "ORIGINAL (AI Ready)");
       } else {
-        this.setStatus("Buffering...");
+        if (this.isHardwareSlow) {
+          this.setStatus(`⚠️ GPU SLOW (${this.benchmarkMs}ms)`);
+        } else {
+          this.setStatus("Buffering...");
+        }
       }
     } catch (err) {
       this.engineLoading = false;
@@ -292,11 +449,18 @@ export class AIVocalManager {
       this.setStatus("Loading Model (15MB)...");
       return;
     }
+    const backend = this.backendName || "GPU";
+    const msStr = this.lastInferMs ? ` (${backend} ${this.lastInferMs}ms)` : ` [${backend}]`;
     if (!data.isAiReady) {
-      const targetSec = ((data.readyThreshold || 4) * 8192 / 44100).toFixed(1);
-      this.setStatus(`Buffering AI: ${data.bufferedSec}s / ${targetSec}s`);
+      const targetSec = ((data.readyThreshold || 5) * 8192 / 44100).toFixed(1);
+      if (parseFloat(data.bufferedSec) === 0 && this.lastInferMs === 0) {
+        const modeLabel = data.mode === "karaoke" ? "KARAOKE" : "ACAPELLA";
+        this.setStatus(`${modeLabel} (Ready - Play audio) [${backend}]`);
+      } else {
+        this.setStatus(`Buffering AI: ${data.bufferedSec}s / ${targetSec}s [${backend}]`);
+      }
     } else {
-      this.setStatus(data.mode === "karaoke" ? "KARAOKE (CUT)" : "ACAPELLA (ISO)");
+      this.setStatus(data.mode === "karaoke" ? `KARAOKE (CUT)${msStr}` : `ACAPELLA (ISO)${msStr}`);
     }
   }
 
@@ -323,6 +487,12 @@ export class AIVocalManager {
       this.exp.stft_forward(A);
 
       const modeCode = mode === "karaoke" ? 1 : mode === "acapella" ? 0 : 2;
+
+      // Lookahead Depth & Exact Time Alignment
+      // diffLevel: 1=Soft (0 delay, real-time), 2=Standard (1 chunk delay), 3=Deep (2 chunks), 4=Ultra (3 chunks)
+      const depth = Math.max(1, Math.min(4, Number(this.diffLevel) || 2));
+      const delayChunks = depth - 1;
+      const sliceStart = 48 - 16 * delayChunks; // Level 2 (Standard) = Frame 32 (100% time-aligned to Chunk N-1!)
 
       // 3. Peak Tracking and Global Normalization Factor
       let chunkPeak = 1e-5;
@@ -365,12 +535,6 @@ export class AIVocalManager {
         normInput = nIn;
       }
 
-      // Lookahead Depth & Exact Time Alignment
-      // diffLevel: 1=Soft (0 delay, real-time), 2=Standard (1 chunk delay), 3=Deep (2 chunks), 4=Ultra (3 chunks)
-      const depth = Math.max(1, Math.min(4, Number(this.diffLevel) || 2));
-      const delayChunks = depth - 1;
-      const sliceStart = 48 - 16 * delayChunks; // Level 2 (Standard) = Frame 32 (100% time-aligned to Chunk N-1!)
-
       // 5. Hardware-Accelerated U-Net Inference (Single GPU Shader Pipeline)
       const outTensor = this.model.execute(normInput);
       normInput.dispose(); // Free normalized input immediately
@@ -385,11 +549,11 @@ export class AIVocalManager {
       const maskData = await maskTensor.data();
       maskTensor.dispose(); // Free mask tensor immediately!
 
-      // 6. Write pure neural network mask directly into WASM mask buffer
+      // 7. Write pure neural network mask directly into WASM mask buffer
       this.mem.subarray(this.maskPtr0, this.maskPtr0 + A * _).set(maskData.subarray(0, A * _));
       this.mem.subarray(this.maskPtr1, this.maskPtr1 + A * _).set(maskData.subarray(A * _, 2 * A * _));
 
-      // 7. Pure Mask Application via C/WASM
+      // 8. Pure Mask Application via C/WASM
       this.exp.stft_apply_mask_delayed(delayChunks, A, modeCode, this.strength);
 
       // 9. Inverse STFT with SIMD128
@@ -411,6 +575,8 @@ export class AIVocalManager {
       // Save overlap tail for next chunk
       this.outTailL.set(synthL.subarray(F, F + TAIL));
       this.outTailR.set(synthR.subarray(F, F + TAIL));
+
+      this.lastInferMs = Math.round(performance.now() - tStart);
 
       // Chunk 0 primes the WASM lookahead ring buffer (reads from uninitialized delay slot)
       // Discard Chunk 0 so it never injects 185ms of digital silence into the playback stream!
@@ -439,11 +605,64 @@ export class AIVocalManager {
     this.strength = 1.0;
   }
 
+  broadcastHardwareWarning(benchmarkMs, deviceLabel) {
+    try {
+      chrome.storage.local.set({
+        aiHardwareWarning: {
+          benchmarkMs: benchmarkMs,
+          deviceLabel: deviceLabel,
+          timestamp: Date.now()
+        }
+      }).catch(() => {});
+      chrome.runtime.sendMessage({
+        type: "AI_HARDWARE_WARNING",
+        benchmarkMs: benchmarkMs,
+        deviceLabel: deviceLabel
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
+  async preloadEngine() {
+    if (this.isReady || this.engineLoading) return;
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({ type: "SET_MODE", mode: "bypass" });
+    }
+    this.setStatus("ORIGINAL (Loading AI...)");
+    await this.loadEngine();
+  }
+
+  unloadEngine() {
+    this.isReady = false;
+    this.engineLoading = false;
+    this.chunkQueue = [];
+    this.resetState();
+    if (this.model) {
+      try {
+        this.model.dispose();
+      } catch (_) {}
+      this.model = null;
+    }
+    if (typeof tf !== "undefined") {
+      try {
+        tf.disposeVariables();
+      } catch (_) {}
+    }
+    this.currentMode = "bypass";
+    this.setStatus("ORIGINAL");
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({ type: "SET_MODE", mode: "bypass" });
+    }
+    console.log("[NextAmp AI] Model unloaded & GPU memory freed");
+  }
+
   setMode(mode) {
     this.currentMode = mode;
     this.chunkQueue = [];
     this.resetState();
     if (mode !== "bypass") {
+      if (this.isHardwareSlow) {
+        this.broadcastHardwareWarning(this.benchmarkMs, this.backendName);
+      }
       if (!this.isReady) {
         this.setStatus("Loading Model (15MB)...");
         if (!this.engineLoading) {
@@ -452,10 +671,10 @@ export class AIVocalManager {
           });
         }
       } else {
-        this.setStatus("Buffering...");
+        this.setStatus(this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "Buffering...");
       }
     } else {
-      this.setStatus("ORIGINAL");
+      this.setStatus(this.isReady ? (this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "ORIGINAL (AI Ready)") : "ORIGINAL");
     }
     if (this.workletNode) {
       this.workletNode.port.postMessage({ type: "SET_MODE", mode });

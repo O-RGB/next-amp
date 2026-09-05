@@ -126,6 +126,7 @@ const createDefaultParams = () => ({
   reverbDecay: 2.0,
   dynBoost: 40,
   dynLimit: 60,
+  isVocalOn: false,
   vocalMode: "bypass", // "bypass", "karaoke", "acapella"
   vocalDiff: 2,        // 1, 2, 3, 4
 });
@@ -537,10 +538,28 @@ function applyParamToSession(session, key, value, index, source) {
         }
       }
       break;
+    case "isVocalOn":
+      params.isVocalOn = !!value;
+      if (session.aiVocal) {
+        if (!params.isVocalOn) {
+          session.aiVocal.unloadEngine();
+        } else {
+          if (params.vocalMode && params.vocalMode !== "bypass") {
+            session.aiVocal.setMode(params.vocalMode);
+          } else {
+            session.aiVocal.preloadEngine();
+          }
+        }
+      }
+      break;
     case "vocalMode":
       params.vocalMode = value;
       if (session.aiVocal) {
-        session.aiVocal.setMode(value);
+        if (!params.isVocalOn) {
+          session.aiVocal.setMode("bypass");
+        } else {
+          session.aiVocal.setMode(value);
+        }
       }
       break;
     case "vocalDiff":
@@ -744,8 +763,16 @@ function applyAllParams(session) {
 
   // Apply AI Vocal parameters
   if (session.aiVocal) {
-    if (params.vocalMode) session.aiVocal.setMode(params.vocalMode);
     if (params.vocalDiff) session.aiVocal.setDiffLevel(params.vocalDiff);
+    if (!params.isVocalOn) {
+      session.aiVocal.unloadEngine();
+    } else {
+      if (params.vocalMode && params.vocalMode !== "bypass") {
+        session.aiVocal.setMode(params.vocalMode);
+      } else {
+        session.aiVocal.preloadEngine();
+      }
+    }
   }
 }
 

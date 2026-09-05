@@ -30,6 +30,7 @@ let isAudioMasterOn = true;
 let isVideoMasterOn = true;
 
 let isEqOn = true;
+let isVocalOn = false;
 let currentVocalMode = "bypass";
 
 let isNormalizeOn = false;
@@ -236,12 +237,14 @@ async function finalizeInitialization() {
     "isAudioMasterOn",
     "isVideoMasterOn",
     "isEqOn",
+    "isVocalOn",
   ]);
   if (savedToggles.isAudioMasterOn !== undefined)
     isAudioMasterOn = savedToggles.isAudioMasterOn;
   if (savedToggles.isVideoMasterOn !== undefined)
     isVideoMasterOn = savedToggles.isVideoMasterOn;
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
+  if (savedToggles.isVocalOn !== undefined) isVocalOn = savedToggles.isVocalOn;
 
   if (sessionManager.sessionMode === "shared") {
     // [NEW] Add videoPosX and videoPosY to load
@@ -306,8 +309,13 @@ async function finalizeInitialization() {
         isNormalizeOn = sharedParams.normalize;
         updateNormalizeButton();
       }
+      if (sharedParams.isVocalOn !== undefined) {
+        isVocalOn = sharedParams.isVocalOn;
+      }
       if (sharedParams.vocalMode) {
         updateVocalUI(sharedParams.vocalMode);
+      } else {
+        updateVocalMasterUI();
       }
 
       if (sharedParams.reverbTime)
@@ -633,6 +641,8 @@ async function initCapture(mode) {
           sendParam("videoRotate", parseFloat($("#video-rotate")?.value || 0));
           sendParam("videoQuality", $("#video-quality")?.value || "max");
           sendParam("isVideoMasterOn", isVideoMasterOn);
+          sendParam("isVocalOn", isVocalOn);
+          sendParam("vocalMode", currentVocalMode);
         })
         .catch((e) => console.warn(e));
     }
@@ -655,6 +665,8 @@ chrome.runtime.onMessage.addListener((msg) => {
     }
   } else if (msg.type === "RECORDING_SAVED") {
     handleRecordingSaved();
+  } else if (msg.type === "AI_HARDWARE_WARNING") {
+    showAiSlowModal(msg.benchmarkMs, msg.deviceLabel);
   }
 });
 
@@ -666,20 +678,32 @@ chrome.storage.onChanged.addListener((changes) => {
       txtStatus.title = "AI Vocal: " + changes.aiVocalStatus.newValue;
     }
   }
+  if (changes.aiHardwareWarning && changes.aiHardwareWarning.newValue) {
+    const val = changes.aiHardwareWarning.newValue;
+    if (val && val.benchmarkMs > 185) {
+      showAiSlowModal(val.benchmarkMs, val.deviceLabel);
+    }
+  }
 });
+
+function showAiSlowModal(benchmarkMs, deviceLabel) {
+  const overlay = $("#ai-slow-overlay");
+  if (!overlay) return;
+  const txtDevice = $("#txt-ai-slow-device");
+  const txtMs = $("#txt-ai-slow-ms");
+  if (txtDevice) txtDevice.textContent = deviceLabel || "GPU";
+  if (txtMs) txtMs.textContent = `${benchmarkMs}ms / chunk`;
+  overlay.classList.add("active");
+}
 
 function updateVocalUI(mode) {
   currentVocalMode = mode || "bypass";
   const btnBypass = $("#btn-vocal-bypass");
   const btnKaraoke = $("#btn-vocal-karaoke");
   const btnAcapella = $("#btn-vocal-acapella");
-  const btnToggle = $("#btn-toggle-vocal");
-  const vocalArea = $("#vocal-controls-area");
   const txtStatus = $("#txt-vocal-status");
 
   if (!btnBypass || !btnKaraoke || !btnAcapella) return;
-
-  const isBypass = (currentVocalMode === "bypass");
 
   [btnBypass, btnKaraoke, btnAcapella].forEach((btn) => {
     btn.classList.remove("pressed");
@@ -688,36 +712,49 @@ function updateVocalUI(mode) {
 
   if (currentVocalMode === "karaoke") {
     btnKaraoke.classList.add("pressed");
+    if (txtStatus) txtStatus.textContent = "KARAOKE";
   } else if (currentVocalMode === "acapella") {
     btnAcapella.classList.add("pressed");
+    if (txtStatus) txtStatus.textContent = "ACAPELLA";
   } else {
     btnBypass.classList.add("pressed");
+    if (txtStatus) txtStatus.textContent = "ORIGINAL";
   }
 
+  updateVocalMasterUI();
+}
+
+function updateVocalMasterUI() {
+  const btnToggle = $("#btn-toggle-vocal");
+  const vocalArea = $("#vocal-controls-area");
+  const txtStatus = $("#txt-vocal-status");
+
   if (btnToggle) {
-    if (isBypass) {
-      btnToggle.textContent = "OFF";
-      btnToggle.classList.remove("pressed", "text-white");
-      btnToggle.classList.add("text-gray-500");
-    } else {
+    if (isVocalOn) {
       btnToggle.textContent = "ON";
       btnToggle.classList.add("pressed", "text-white");
       btnToggle.classList.remove("text-gray-500");
+    } else {
+      btnToggle.textContent = "OFF";
+      btnToggle.classList.remove("pressed", "text-white");
+      btnToggle.classList.add("text-gray-500");
     }
   }
 
   if (vocalArea) {
-    if (isBypass) {
+    if (!isVocalOn) {
       vocalArea.style.opacity = "0.4";
       vocalArea.style.filter = "grayscale(100%)";
+      vocalArea.style.pointerEvents = "none";
     } else {
       vocalArea.style.opacity = "1";
       vocalArea.style.filter = "none";
+      vocalArea.style.pointerEvents = "auto";
     }
   }
 
   if (txtStatus) {
-    if (isBypass) {
+    if (!isVocalOn) {
       txtStatus.classList.remove("text-yellow-300");
       txtStatus.classList.add("text-gray-500");
     } else {
@@ -797,6 +834,9 @@ function updateUIFromExternal(key, value, index) {
   } else if (key === "normalize") {
     isNormalizeOn = value;
     updateNormalizeButton();
+  } else if (key === "isVocalOn") {
+    isVocalOn = value;
+    updateVocalMasterUI();
   } else if (key === "vocalMode") {
     updateVocalUI(value);
   } else if (key === "vocalDiff") {
@@ -972,20 +1012,30 @@ function setupListeners() {
 
   // --- AI VOCAL SEPARATOR CONTROLS ---
   $("#btn-toggle-vocal")?.addEventListener("click", () => {
-    const isOff = (currentVocalMode === "bypass");
-    const nextMode = isOff ? "karaoke" : "bypass";
-    sendParam("vocalMode", nextMode);
-    updateVocalUI(nextMode);
+    isVocalOn = !isVocalOn;
+    updateVocalMasterUI();
+    sessionManager.setSetting({ isVocalOn });
+    sendParam("isVocalOn", isVocalOn);
   });
   $("#btn-vocal-bypass")?.addEventListener("click", () => {
     sendParam("vocalMode", "bypass");
     updateVocalUI("bypass");
   });
   $("#btn-vocal-karaoke")?.addEventListener("click", () => {
+    chrome.storage.local.get("aiHardwareWarning").then((res) => {
+      if (res?.aiHardwareWarning?.benchmarkMs > 185) {
+        showAiSlowModal(res.aiHardwareWarning.benchmarkMs, res.aiHardwareWarning.deviceLabel);
+      }
+    }).catch(() => {});
     sendParam("vocalMode", "karaoke");
     updateVocalUI("karaoke");
   });
   $("#btn-vocal-acapella")?.addEventListener("click", () => {
+    chrome.storage.local.get("aiHardwareWarning").then((res) => {
+      if (res?.aiHardwareWarning?.benchmarkMs > 185) {
+        showAiSlowModal(res.aiHardwareWarning.benchmarkMs, res.aiHardwareWarning.deviceLabel);
+      }
+    }).catch(() => {});
     sendParam("vocalMode", "acapella");
     updateVocalUI("acapella");
   });
@@ -995,6 +1045,20 @@ function setupListeners() {
       sendParam("vocalDiff", lvl);
       updateDiffUI(lvl);
     });
+  });
+
+  // AI Slow Hardware Modal buttons
+  $("#btn-ai-slow-close")?.addEventListener("click", () => {
+    $("#ai-slow-overlay")?.classList.remove("active");
+  });
+  $("#btn-ai-slow-continue")?.addEventListener("click", () => {
+    $("#ai-slow-overlay")?.classList.remove("active");
+  });
+  $("#btn-ai-slow-bypass")?.addEventListener("click", () => {
+    $("#ai-slow-overlay")?.classList.remove("active");
+    currentVocalMode = "bypass";
+    sendParam("vocalMode", "bypass");
+    updateVocalUI("bypass");
   });
 
 
@@ -1014,6 +1078,9 @@ function setupListeners() {
   });
 
   $("#btn-reset").addEventListener("click", handleReset);
+  $("#btn-ai-diagnostics")?.addEventListener("click", () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
+  });
 
   $("#btn-close").addEventListener("click", async () => {
     if (currentTabId) {
@@ -1456,8 +1523,13 @@ function loadAudioState(state) {
   }
   isNormalizeOn = state.normalize || false;
   updateNormalizeButton();
+  if (state.isVocalOn !== undefined) {
+    isVocalOn = state.isVocalOn;
+  }
   if (state.vocalMode) {
     updateVocalUI(state.vocalMode);
+  } else {
+    updateVocalMasterUI();
   }
   if (state.vocalDiff !== undefined) {
     updateDiffUI(state.vocalDiff);

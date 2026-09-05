@@ -13,7 +13,7 @@ body{background:#000;color:#00ff00;padding:8px;user-select:none;-webkit-user-sel
 .row{display:flex;justify-content:space-between;align-items:center;margin:5px 0}
 .label{min-width:55px;color:#00ff00;font-weight:bold}
 .val{min-width:45px;text-align:right;color:#ffff00}
-input[type=range]{accent-color:#00ff00;flex:1;height:22px;margin:0 6px;cursor:pointer}
+input[type=range]{accent-color:#00ff00;flex:1;height:22px;margin:0 6px;cursor:pointer;touch-action:none}
 input[type=text],select{background:#000;color:#00ff00;border:1px solid #00aa00;padding:3px 5px;outline:none}
 select{cursor:pointer}
 button{background:#001100;color:#00ff00;border:1px solid #00aa00;padding:4px 8px;cursor:pointer;font-weight:bold}
@@ -73,7 +73,7 @@ button:active,button.active{background:#00ff00;color:#000}
 
 <div class="box">
   <div class="title">
-    <span>AI VOCAL (KARAOKE)</span>
+    <span>AI VOCAL</span>
     <span id="t-vocal">ORIGINAL</span>
   </div>
   <div class="btn-grid-3">
@@ -295,7 +295,7 @@ function syncKey(k, v) {
     G("btn-vocal-karaoke")?.classList.toggle("active", m === "karaoke");
     G("btn-vocal-acapella")?.classList.toggle("active", m === "acapella");
     const t = G("t-vocal");
-    if (t) t.textContent = m === "karaoke" ? "KARAOKE (CUT)" : m === "acapella" ? "ACAPELLA (ISO)" : "ORIGINAL";
+    if (t) t.textContent = m === "karaoke" ? "KARAOKE" : m === "acapella" ? "ACAPELLA" : "ORIGINAL";
   } else if (k === "vocalDiff") {
     if (G("sel-diff")) G("sel-diff").value = v;
   } else if (k === "isAudioMasterOn") {

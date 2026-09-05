@@ -171,7 +171,9 @@ replaceInFile(vocalWorkerTemp, '/model/model.json', '/' + FILE_NAMES.modelJson);
 
 // Rewrite in debug-ai bundle
 const debugAiTemp = path.join(TEMP_DIR, 'debug-ai.tmp.js');
+replaceInFile(debugAiTemp, 'modules/ai-vocal/vocal-worklet.js', FILE_NAMES.vocalWorklet);
 replaceInFile(debugAiTemp, 'modules/ai-vocal/stft_simd.wasm', FILE_NAMES.stftSimd);
+replaceInFile(debugAiTemp, 'modules/ai-vocal/stft_scalar.wasm', FILE_NAMES.stftScalar);
 replaceInFile(debugAiTemp, 'model/model.json', FILE_NAMES.modelJson);
 
 // Inject Security Guard into popup & offscreen
