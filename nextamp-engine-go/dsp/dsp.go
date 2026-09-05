@@ -11,12 +11,12 @@ import (
 )
 
 const (
-	FFTSize     = 2048
-	HopSize     = 512
-	NumBins     = 1024
-	ChunkFrames = 16
-	ChunkSamples = ChunkFrames * HopSize // 8192
-	TailSamples  = 1536                  // 3 * 512
+	FFTSize      = 2048
+	HopSize      = 512
+	NumBins      = 1024
+	ChunkFrames  = 16
+	ChunkSamples = ChunkFrames * HopSize      // 8192
+	TailSamples  = 1536                       // 3 * 512
 	TotalInput   = ChunkSamples + TailSamples // 9728
 	TotalOutput  = ChunkSamples + TailSamples // 9728
 	MaxFrames    = 64
@@ -99,7 +99,7 @@ func (e *Engine) StepForward(rawL, rawR []float32) []float32 {
 
 // StepBackward applies the neural network output, inverse STFTs, and overlap-adds
 // outData: raw ONNX output of shape [1, 1024, 64, 2] (131,072 floats)
-// mode: 0=bypass, 1=karaoke, 2=acapella
+// mode: 0=bypass, 1=karaoke, 2=acapella (wire protocol values)
 // delayChunks: 0 for instant zero-delay real-time, 1 for 1-chunk lookahead
 func (e *Engine) StepBackward(rawOutput []float32, delayChunks int, mode int, strength float32) ([]float32, []float32) {
 	sliceStart := 48 - (16 * delayChunks)
@@ -110,10 +110,15 @@ func (e *Engine) StepBackward(rawOutput []float32, delayChunks int, mode int, st
 	// Fast C SIMD Sigmoid extraction (0.04ms)
 	C.stft_extract_sigmoid_mask((*C.float)(unsafe.Pointer(&rawOutput[0])), C.int(sliceStart))
 
-	// Apply mask: 0=cut/karaoke, 1=isolate/acapella
-	cMode := 0
-	if mode == 2 {
+	// The model outputs the accompaniment/instrumental mask. Keep this mapping
+	// identical to the app's WASM path: Karaoke applies that mask (native mode 1)
+	// while Acapella applies its complement (native mode 0).
+	cMode := 2 // native mode 2 = bypass for invalid/bypass protocol values
+	switch mode {
+	case 1: // Karaoke: keep accompaniment, remove vocals.
 		cMode = 1
+	case 2: // Acapella: keep vocals, remove accompaniment.
+		cMode = 0
 	}
 	if delayChunks == 0 {
 		C.stft_apply_mask(C.int(ChunkFrames), C.int(cMode), C.float(strength))
