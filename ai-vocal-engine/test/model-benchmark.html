@@ -1,0 +1,118 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>NextAmp model equivalence and timing</title>
+<p>Local diagnostic: compares unchanged weights and output masks. Timings are not power measurements.</p>
+<button id="webgpu">Test WebGPU</button>
+<button id="webgl">Test WebGL</button>
+<pre id="result">Choose a backend. Keep this page visible for timing.</pre>
+<script src="../../next-amp-extension/assets/libs/js/tf.min.js"></script>
+<script src="../../next-amp-extension/assets/libs/js/tf-backend-webgpu.min.js"></script>
+<script type="module">
+import { optimizeVocalModelArtifacts } from '../../next-amp-extension/modules/ai-vocal/model-optimizer.mjs';
+import { compareStreamingModels, measureFrameIndexedContinuity } from './stream-model-equivalence.mjs';
+
+const display = document.querySelector('#result');
+const pause = () => new Promise(resolve => setTimeout(resolve, 0));
+window.runModelValidation = async (backend = 'webgpu', rounds = 24) => {
+  if (window.validation?.running) throw new Error('Validation already running');
+  const state = window.validation = { running: true, backend, quality: [], timings: [[], []] };
+  const update = stage => { state.stage = stage; display.textContent = JSON.stringify(state, null, 2); };
+  const models = [];
+  let benchInput;
+  try {
+    update('loading');
+    tf.env().set('WEBGPU_CPU_FORWARD', false);
+    tf.env().set('WEBGL_CPU_FORWARD', false);
+    tf.env().set('WEBGL_PACK', true);
+    tf.env().set('WEBGL_PACK_BINARY_OPERATIONS', true);
+    tf.env().set('WEBGL_LAZILY_UNPACK', true);
+    tf.env().set('WEBGL_DELETE_TEXTURE_THRESHOLD', -1);
+    if (!await tf.setBackend(backend)) throw new Error(`${backend} unavailable`);
+    await tf.ready();
+    const artifacts = await tf.io.browserHTTPRequest('../../next-amp-extension/model/model.json').load();
+    const optimized = optimizeVocalModelArtifacts(artifacts);
+    state.foldedCount = optimized.foldedCount;
+    if (optimized.foldedCount !== 12) throw new Error('Expected all 12 branches to be optimized');
+    for (const item of [artifacts, optimized.artifacts]) models.push(await tf.loadGraphModel({ load: async () => item }));
+    let seed = 0x51a7;
+    const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+    for (const kind of ['silence', 'sparse', 'dense', 'quiet']) {
+      update(`quality: ${kind}`);
+      const values = Float32Array.from({ length: 1024 * 64 * 2 }, () =>
+        kind === 'silence' ? 0 : kind === 'sparse' ? (random() < 0.02 ? random() : 0.0001) : random() * (kind === 'quiet' ? 0.001 : 1));
+      const input = tf.tensor4d(values, [1, 1024, 64, 2]);
+      const outputs = [];
+      try {
+        for (const model of models) {
+          const out = model.execute(input);
+          try { outputs.push(await out.data()); } finally { out.dispose(); }
+        }
+      } finally { input.dispose(); }
+      let maxLogitError = 0, maxMaskError = 0, squaredMaskError = 0;
+      for (let i = 0; i < outputs[0].length; i++) {
+        const a = outputs[0][i], b = outputs[1][i];
+        if (!Number.isFinite(a) || !Number.isFinite(b)) throw new Error('Non-finite output');
+        maxLogitError = Math.max(maxLogitError, Math.abs(a - b));
+        const maskError = Math.abs(1 / (1 + Math.exp(-a)) - 1 / (1 + Math.exp(-b)));
+        maxMaskError = Math.max(maxMaskError, maskError);
+        squaredMaskError += maskError * maskError;
+      }
+      state.quality.push({ kind, maxLogitError, maxMaskError, rmsMaskError: Math.sqrt(squaredMaskError / outputs[0].length) });
+      if (maxMaskError > 1e-5) throw new Error(`Mask mismatch on ${kind}: ${maxMaskError}`);
+      await pause();
+    }
+    update('streaming PCM equivalence');
+    state.pcm = {
+      baseline16: await compareStreamingModels(tf, models, 16),
+      candidate15: await compareStreamingModels(tf, models, 15)
+    };
+    update('frame-indexed continuity diagnostic');
+    state.continuity = await measureFrameIndexedContinuity(tf, models[1], {
+      numFrames: 15,
+      chunks: 6,
+      boundaryFrames: 3
+    });
+    benchInput = tf.tensor4d(Float32Array.from({ length: 1024 * 64 * 2 }, () => random()), [1, 1024, 64, 2]);
+    const infer = async model => {
+      const start = performance.now();
+      const mask = tf.tidy(() => model.execute(benchInput)
+        .slice([0, 0, 34, 0], [1, 1024, 15, 2]).transpose([0, 3, 2, 1]).reshape([2, 15, 1024]).sigmoid());
+      try { await mask.data(); } finally { mask.dispose(); }
+      return performance.now() - start;
+    };
+    for (let i = 0; i < 3; i++) for (const model of models) await infer(model);
+    state.profiles = [];
+    for (const model of models) {
+      const profile = await tf.profile(() => model.execute(benchInput));
+      const counts = {};
+      for (const kernel of profile.kernels) counts[kernel.name] = (counts[kernel.name] || 0) + 1;
+      state.profiles.push({ kernelCount: profile.kernels.length, peakBytes: profile.peakBytes, counts });
+      profile.result.dispose();
+    }
+    state.steadyTensorCount = tf.memory().numTensors;
+    for (let i = 0; i < rounds; i++) {
+      update(`timing: ${i + 1}/${rounds}`);
+      // Alternate order to reduce systematic bias from load/temperature.
+      for (const index of (i % 2 ? [1, 0] : [0, 1])) state.timings[index].push(await infer(models[index]));
+      await pause();
+    }
+    if (tf.memory().numTensors !== state.steadyTensorCount) throw new Error('Inference leaked tensors');
+    state.summary = state.timings.map(values => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return { medianMs: sorted[Math.floor(sorted.length / 2)], p95Ms: sorted[Math.ceil(sorted.length * 0.95) - 1] };
+    });
+    update('passed');
+  } catch (error) {
+    state.error = error.stack || String(error);
+    update('failed');
+  } finally {
+    benchInput?.dispose();
+    models.forEach(model => model.dispose());
+    state.remainingTensors = tf.memory().numTensors;
+    state.running = false;
+    display.textContent = JSON.stringify(state, null, 2);
+  }
+  return state;
+};
+for (const name of ['webgpu', 'webgl']) document.querySelector(`#${name}`).onclick = () => window.runModelValidation(name);
+</script>

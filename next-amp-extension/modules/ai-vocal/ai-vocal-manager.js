@@ -5,18 +5,39 @@
  */
 
 import { GoEngineClient } from "./go-engine-client.js";
+import { createVocalModelLoader } from "./model-optimizer.mjs";
 
-const A = 16;       // 16 magnitude frames per chunk
+const A = 15;       // ai remove cadence: 15 magnitude frames per chunk
 const _ = 1024;     // 1024 frequency bins
-const F = 8192;     // 8,192 samples per chunk (16 hops of 512)
+const F = 7680;     // 7,680 samples per browser chunk (15 hops of 512)
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
 // stft_core adds 1e-9 before sqrt() when calculating magnitudes, so a truly
 // empty chunk is approximately 3.16e-5. Only bypass inference at that floor;
 // quiet but audible material still follows the original model path.
 const DIGITAL_SILENCE_PEAK = 3.25e-5;
 const WEBGPU_BACKEND_ASSET = "assets/libs/js/tf-backend-webgpu.min.js";
-const MAX_BROWSER_PENDING_CHUNKS = 2; // Keep at most ~370ms pending; drop stale work under interruption.
+const MAX_BROWSER_PENDING_CHUNKS = 2; // Keep at most ~348ms pending; drop stale work under interruption.
+const DIAGNOSTIC_SAMPLE_LIMIT = 120;
 let webGpuBackendPromise = null;
+
+function pushDiagnosticSample(samples, value) {
+  if (!Number.isFinite(value) || value <= 0) return;
+  if (samples.length >= DIAGNOSTIC_SAMPLE_LIMIT) samples.shift();
+  samples.push(value);
+}
+
+function summarizeDiagnosticSamples(samples) {
+  if (!samples.length) return { count: 0, p50Ms: null, p95Ms: null, p99Ms: null, maxMs: null };
+  const sorted = [...samples].sort((a, b) => a - b);
+  const percentile = ratio => sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)];
+  return {
+    count: samples.length,
+    p50Ms: Number(percentile(0.50).toFixed(2)),
+    p95Ms: Number(percentile(0.95).toFixed(2)),
+    p99Ms: Number(percentile(0.99).toFixed(2)),
+    maxMs: Number(sorted[sorted.length - 1].toFixed(2))
+  };
+}
 
 async function ensureWebGpuBackend() {
   if (typeof tf === "undefined" || typeof document === "undefined") return false;
@@ -128,8 +149,38 @@ export class AIVocalManager {
 
     this.lastInferMs = 0;
     this.backendName = "GPU";
+    this.backendType = "unknown";
     this.benchmarkMs = 0;
     this.isHardwareSlow = false;
+    this.modelGraphFoldedBranches = 0;
+    this.diagnostics = {
+      startedAt: Date.now(),
+      enabled: false,
+      inputChunks: 0,
+      goChunks: 0,
+      queuedChunks: 0,
+      processedChunks: 0,
+      intentionalWarmupDrops: 0,
+      staleWorkDrops: 0,
+      staleResultDrops: 0,
+      generationDrops: 0,
+      resyncs: 0,
+      streamResets: 0,
+      processErrors: 0,
+      maxPendingQueue: 0,
+      lastInputChunkIndex: null,
+      lastProcessed: null,
+      lastWorkletStatus: null,
+      timings: {
+        stftForward: [],
+        normalization: [],
+        modelLaunch: [],
+        modelReadback: [],
+        inference: [],
+        synthesis: [],
+        total: []
+      }
+    };
   }
 
   setStatus(status) {
@@ -204,8 +255,11 @@ export class AIVocalManager {
         const data = e.data;
         if (data.type === "PROCESS_CHUNK") {
           if (this.currentMode === "bypass") return;
+          this.diagnostics.inputChunks++;
+          this.diagnostics.lastInputChunkIndex = data.chunkIndex;
 
           if (this.engineType === "go_native") {
+            this.diagnostics.goChunks++;
             const depth = Math.max(1, Math.min(4, Number(this.diffLevel) || 2));
             const delayChunks = depth - 1;
             this.goClient.sendChunk(data.chunkIndex, data.rawL, data.rawR, data.mode, delayChunks);
@@ -219,12 +273,18 @@ export class AIVocalManager {
               // processing every old chunk only creates growing latency. Keep
               // the newest chunk and restart DSP state at that point.
               if (this.queueNeedsResync) {
+                this.diagnostics.staleWorkDrops += this.chunkQueue.length;
                 this.chunkQueue = [data];
                 this.resyncChunkIndex = data.chunkIndex;
               } else {
                 this.chunkQueue.push(data);
               }
+              this.diagnostics.queuedChunks++;
+              this.diagnostics.maxPendingQueue = Math.max(
+                this.diagnostics.maxPendingQueue, this.chunkQueue.length
+              );
               if (this.chunkQueue.length > MAX_BROWSER_PENDING_CHUNKS) {
+                this.diagnostics.staleWorkDrops += this.chunkQueue.length - 1;
                 this.chunkQueue = [data];
                 this.queueNeedsResync = true;
                 this.resyncChunkIndex = data.chunkIndex;
@@ -235,11 +295,23 @@ export class AIVocalManager {
             }
           }
         } else if (data.type === "WORKLET_STATUS") {
+          this.diagnostics.lastWorkletStatus = {
+            mode: data.mode,
+            isAiReady: !!data.isAiReady,
+            bufferedSec: data.bufferedSec,
+            queueLen: data.queueLen,
+            chunkSize: data.chunkSize,
+            sampleRate: data.sampleRate,
+            inputFrame: data.inputFrame,
+            playbackFrame: data.playbackFrame,
+            diagnostics: data.diagnostics || null
+          };
           this.handleWorkletStatus(data);
         } else if (data.type === "STREAM_RESET") {
           // Flush the browser-side scheduler immediately. Then reset the
           // native DSP after all packets already sent before this marker.
           this.streamGeneration++;
+          this.diagnostics.streamResets++;
           this.streamChunkFloor = Number.isInteger(data.nextChunkIndex)
             ? data.nextChunkIndex
             : null;
@@ -282,6 +354,7 @@ export class AIVocalManager {
           const nextChunkIndex = Number.isInteger(this.resyncChunkIndex)
             ? this.resyncChunkIndex : chunk.chunkIndex;
           this.queueNeedsResync = false;
+          this.diagnostics.resyncs++;
           this.resyncChunkIndex = null;
           this.resetState();
           if (this.workletNode) {
@@ -413,6 +486,7 @@ export class AIVocalManager {
 
       // Detect GPU hardware device label early before loading model
       currentBackend = tf.getBackend() || currentBackend || "webgl";
+      this.backendType = currentBackend;
       let deviceLabel = currentBackend.toUpperCase();
       try {
         const gl = tf.backend()?.gpgpu?.gl;
@@ -477,6 +551,7 @@ export class AIVocalManager {
       const ioHandler = (tf.io && tf.io.browserHTTPRequest)
         ? tf.io.browserHTTPRequest(modelUrl)
         : modelUrl;
+      const modelLoader = createVocalModelLoader(tf, ioHandler);
 
       const runWarmup = async () => {
         const dummyInput = tf.zeros([1, _, 64, 2]);
@@ -485,7 +560,7 @@ export class AIVocalManager {
         try {
           outTensor = this.model.execute(dummyInput);
           maskTensor = tf.tidy(() => {
-            const sliced = outTensor.slice([0, 0, 32, 0], [1, _, A, 2]);
+            const sliced = outTensor.slice([0, 0, 34, 0], [1, _, A, 2]);
             return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
           });
           // Flush the accelerator pipeline and compile the readback path too.
@@ -497,6 +572,21 @@ export class AIVocalManager {
         }
       };
 
+      const warmupWithOriginalFallback = async () => {
+        try {
+          await runWarmup();
+        } catch (error) {
+          if (!modelLoader.foldedCount) throw error;
+          console.warn("[NextAmp AI] Native dilation warmup failed; retrying original graph", error);
+          if (this.model) this.model.dispose();
+          this.model = null;
+          modelLoader.disableOptimization();
+          this.model = await modelLoader.load();
+          this.modelGraphFoldedBranches = modelLoader.foldedCount;
+          await runWarmup();
+        }
+      };
+
       const fallbackToWebGL = async () => {
         if (currentBackend !== "webgpu") return false;
         console.warn("[NextAmp AI] WebGPU model path failed; retrying with WebGL");
@@ -505,20 +595,26 @@ export class AIVocalManager {
           this.model = null;
         }
         currentBackend = await configureWebGL();
+        this.backendType = currentBackend;
         deviceLabel = currentBackend.toUpperCase();
         this.backendName = deviceLabel;
         if (currentBackend === "cpu") {
           throw new Error("WebGPU unavailable and WebGL fell back to CPU");
         }
         this.setStatus("Loading Model (15MB)...");
-        this.model = await tf.loadGraphModel(ioHandler);
+        this.model = await modelLoader.load();
+        this.modelGraphFoldedBranches = modelLoader.foldedCount;
         this.resetState();
         this.setStatus("Warming up GPU...");
-        await runWarmup();
+        await warmupWithOriginalFallback();
         return true;
       };
 
-      this.model = await tf.loadGraphModel(ioHandler);
+      this.model = await modelLoader.load();
+      this.modelGraphFoldedBranches = modelLoader.foldedCount;
+      if (modelLoader.foldedCount) {
+        console.log(`[NextAmp AI] Removed ${modelLoader.foldedCount * 2} model data-reordering nodes (unchanged weights)`);
+      }
 
       // Check if cancelled/unloaded while downloading/loading model
       if (!this.engineLoading) {
@@ -537,11 +633,11 @@ export class AIVocalManager {
       // using the exact graph and dimensions of runtime processChunk to prevent initial JIT compilation freezes!
       this.setStatus("Warming up GPU...");
       try {
-        await runWarmup();
+        await warmupWithOriginalFallback();
         console.log(`[NextAmp AI] ${currentBackend.toUpperCase()} pipeline pre-warmed`);
       } catch (warmErr) {
         if (!(await fallbackToWebGL())) {
-          console.warn("[NextAmp AI] Warmup pass error:", warmErr);
+          throw warmErr;
         }
       }
 
@@ -553,7 +649,7 @@ export class AIVocalManager {
         const benchOut = this.model.execute(benchIn);
         benchIn.dispose();
         const benchMask = tf.tidy(() => {
-          const sliced = benchOut.slice([0, 0, 32, 0], [1, _, A, 2]);
+          const sliced = benchOut.slice([0, 0, 34, 0], [1, _, A, 2]);
           return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
         });
         benchOut.dispose();
@@ -625,7 +721,7 @@ export class AIVocalManager {
     const backend = this.backendName || "GPU";
     const msStr = this.lastInferMs ? ` (${backend} ${this.lastInferMs}ms)` : ` [${backend}]`;
     if (!data.isAiReady) {
-      const targetSec = ((data.readyThreshold || 5) * 8192 / 44100).toFixed(1);
+      const targetSec = ((data.readyThreshold || 5) * (data.chunkSize || F) / 44100).toFixed(1);
       if (parseFloat(data.bufferedSec) === 0 && this.lastInferMs === 0) {
         const modeLabel = data.mode === "karaoke" ? "KARAOKE" : "ACAPELLA";
         this.setStatus(`${modeLabel} (Ready - Play audio) [${backend}]`);
@@ -639,16 +735,26 @@ export class AIVocalManager {
 
   async processChunk(chunkIndex, rawL, rawR, mode, strength = 1.0, generation = this.streamGeneration) {
     if (!this.exp || !this.model || !this.workletNode) return;
-    if (generation !== this.streamGeneration || this.currentMode === "bypass" || mode !== this.currentMode) return;
+    if (generation !== this.streamGeneration || this.currentMode === "bypass" || mode !== this.currentMode) {
+      this.diagnostics.generationDrops++;
+      return;
+    }
 
     const tStart = performance.now();
+    const diagnosticsEnabled = this.diagnostics.enabled;
+    let stftForwardMs = 0;
+    let normalizationMs = 0;
+    let modelLaunchMs = 0;
+    let modelReadbackMs = 0;
+    let inferenceMs = 0;
+    let synthesisStart = 0;
 
     try {
       if (this.mem.buffer !== this.exp.memory.buffer) {
         this.mem = new Float32Array(this.exp.memory.buffer);
       }
 
-      // 1. Zero-Copy Input Sliding: 1,536 history + 8,192 current = 9,728 samples
+      // 1. Zero-Copy Input Sliding: 1,536 history + 7,680 current = 9,216 samples
       this.mem.subarray(this.inPtr0, this.inPtr0 + TAIL).set(this.inHistoryL);
       this.mem.subarray(this.inPtr0 + TAIL, this.inPtr0 + TAIL + F).set(rawL);
       this.inHistoryL.set(rawL.subarray(F - TAIL, F));
@@ -657,8 +763,10 @@ export class AIVocalManager {
       this.mem.subarray(this.inPtr1 + TAIL, this.inPtr1 + TAIL + F).set(rawR);
       this.inHistoryR.set(rawR.subarray(F - TAIL, F));
 
-      // 2. SIMD128 Forward STFT: computes 16 frames & stores to C circular ring buffer
+      // 2. SIMD128 Forward STFT: computes 15 frames & stores to C circular ring buffer
+      const stftStart = diagnosticsEnabled ? performance.now() : 0;
       this.exp.stft_forward(A);
+      if (diagnosticsEnabled) stftForwardMs = performance.now() - stftStart;
 
       const modeCode = mode === "karaoke" ? 1 : mode === "acapella" ? 0 : 2;
 
@@ -666,7 +774,7 @@ export class AIVocalManager {
       // diffLevel: 1=Soft (0 delay, real-time), 2=Standard (1 chunk delay), 3=Deep (2 chunks), 4=Ultra (3 chunks)
       const depth = Math.max(1, Math.min(4, Number(this.diffLevel) || 2));
       const delayChunks = depth - 1;
-      const sliceStart = 48 - 16 * delayChunks; // Level 2 (Standard) = Frame 32 (100% time-aligned to Chunk N-1!)
+      const sliceStart = 49 - 15 * delayChunks; // 15-hop timeline; Level 2 (Standard) = Frame 34
 
       // 3. Peak Tracking and Global Normalization Factor
       let chunkPeak = 1e-5;
@@ -697,6 +805,7 @@ export class AIVocalManager {
         this.exp.stft_apply_mask_delayed(delayChunks, A, 2, 0.0);
       } else {
         // 4. Zero-GPU-Overhead Rolling Window & Ingestion
+        const normalizationStart = diagnosticsEnabled ? performance.now() : 0;
         let normInput;
         if (this.normInputPtr && this.exp.stft_prepare_norm_input) {
           // Native compiled C SIMD slides 48 frames and normalizes 131,072 floats in 0.02ms!
@@ -719,16 +828,21 @@ export class AIVocalManager {
           if (!this.rollingMags) this.rollingMags = tf.zeros([1, _, 64, 2]);
           const [newRolling, nIn] = tf.tidy(() => {
             const newMags = tf.tensor4d(this.interleavedMags, [1, _, A, 2]);
-            const rolled = this.rollingMags.slice([0, 0, 16, 0], [1, _, 48, 2]).concat(newMags, 2);
+            const rolled = this.rollingMags
+              .slice([0, 0, A, 0], [1, _, 64 - A, 2])
+              .concat(newMags, 2);
             return [rolled, rolled.mul(invMax)];
           });
           if (this.rollingMags) this.rollingMags.dispose();
           this.rollingMags = newRolling;
           normInput = nIn;
         }
+        if (diagnosticsEnabled) normalizationMs = performance.now() - normalizationStart;
 
         // 5. Hardware-Accelerated U-Net Inference (Single GPU Shader Pipeline)
+        const modelStart = diagnosticsEnabled ? performance.now() : 0;
         const outTensor = this.model.execute(normInput);
+        if (diagnosticsEnabled) modelLaunchMs = performance.now() - modelStart;
         normInput.dispose(); // Free normalized input immediately
 
         // 6. Slice time-aligned window & compute sigmoid mask in tidy
@@ -738,12 +852,18 @@ export class AIVocalManager {
           return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
         });
 
+        const readbackStart = diagnosticsEnabled ? performance.now() : 0;
         const maskData = await maskTensor.data();
+        if (diagnosticsEnabled) {
+          modelReadbackMs = performance.now() - readbackStart;
+          inferenceMs = performance.now() - modelStart;
+        }
         maskTensor.dispose(); // Free mask tensor immediately!
 
         // A mode/song/engine switch can happen while GPU readback is pending.
         // Do not let that old inference mutate the new stream or emit stale audio.
         if (generation !== this.streamGeneration || this.currentMode === "bypass" || mode !== this.currentMode) {
+          this.diagnostics.staleResultDrops++;
           return;
         }
 
@@ -756,6 +876,7 @@ export class AIVocalManager {
       }
 
       // 9. Inverse STFT with SIMD128
+      synthesisStart = diagnosticsEnabled ? performance.now() : 0;
       this.exp.stft_backward(A);
 
       // 10. Overlap-Add synthesis: add previous tail to first 1,536 samples
@@ -767,13 +888,34 @@ export class AIVocalManager {
         synthR[i] += this.outTailR[i];
       }
 
-      // Extract exactly 8,192 continuous samples
+      // Extract exactly one browser cadence: 7,680 continuous samples
       const outL = new Float32Array(synthL.subarray(0, F));
       const outR = new Float32Array(synthR.subarray(0, F));
 
       // Save overlap tail for next chunk
       this.outTailL.set(synthL.subarray(F, F + TAIL));
       this.outTailR.set(synthR.subarray(F, F + TAIL));
+
+      this.diagnostics.processedChunks++;
+      if (diagnosticsEnabled) {
+        this.diagnostics.lastProcessed = {
+          inputChunkIndex: chunkIndex,
+          generation,
+          inputFrame: chunkIndex * A,
+          targetChunkIndex,
+          targetFrame: targetChunkIndex * A,
+          depth,
+          chunkSamples: F,
+          digitalSilenceBypass: targetIsDigitalSilence
+        };
+        pushDiagnosticSample(this.diagnostics.timings.stftForward, stftForwardMs);
+        pushDiagnosticSample(this.diagnostics.timings.normalization, normalizationMs);
+        pushDiagnosticSample(this.diagnostics.timings.modelLaunch, modelLaunchMs);
+        pushDiagnosticSample(this.diagnostics.timings.modelReadback, modelReadbackMs);
+        pushDiagnosticSample(this.diagnostics.timings.inference, inferenceMs);
+        pushDiagnosticSample(this.diagnostics.timings.synthesis, performance.now() - synthesisStart);
+        pushDiagnosticSample(this.diagnostics.timings.total, performance.now() - tStart);
+      }
 
       this.lastInferMs = Math.round(performance.now() - tStart);
 
@@ -782,8 +924,9 @@ export class AIVocalManager {
       }
 
       // Chunk 0 primes the WASM lookahead ring buffer (reads from uninitialized delay slot)
-      // Discard Chunk 0 so it never injects 185ms of digital silence into the playback stream!
+      // Discard Chunk 0 so it never injects one cadence of digital silence into playback.
       if (chunkIndex === 0) {
+        this.diagnostics.intentionalWarmupDrops++;
         return;
       }
 
@@ -798,6 +941,7 @@ export class AIVocalManager {
         [outL.buffer, outR.buffer]
       );
     } catch (err) {
+      this.diagnostics.processErrors++;
       console.error("[NextAmp AI] processChunk error:", err);
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: " + this.lastError.substring(0, 16));
@@ -934,6 +1078,68 @@ export class AIVocalManager {
 
   getNode() {
     return this.workletNode;
+  }
+
+  enableDiagnostics() {
+    this.diagnostics.enabled = true;
+    return this.getDiagnostics();
+  }
+
+  getDiagnostics() {
+    const timingMs = {};
+    for (const [name, samples] of Object.entries(this.diagnostics.timings)) {
+      timingMs[name] = summarizeDiagnosticSamples(samples);
+    }
+    let tensorCount = null;
+    try { tensorCount = typeof tf !== "undefined" ? tf.memory().numTensors : null; } catch (_) {}
+    let texturePrecision = null;
+    try {
+      texturePrecision = typeof tf !== "undefined" && this.backendType === "webgl"
+        ? { forceF16: !!tf.env().get("WEBGL_FORCE_F16_TEXTURES") }
+        : null;
+    } catch (_) {}
+    const chunkSamples = this.engineType === "go_native" ? 8192 : F;
+    const sampleRate = this.audioCtx?.sampleRate || 44100;
+    return {
+      version: 1,
+      enabled: this.diagnostics.enabled,
+      engine: this.engineType,
+      backendType: this.backendType,
+      backend: this.backendName,
+      sampleRate,
+      texturePrecision,
+      modelGraphFoldedBranches: this.modelGraphFoldedBranches,
+      cadence: {
+        chunkSamples,
+        frames: this.engineType === "go_native" ? 16 : A,
+        hopSamples: 512,
+        chunkMs: Number((chunkSamples / sampleRate * 1000).toFixed(2))
+      },
+      queue: {
+        pending: this.chunkQueue.length,
+        maxPending: this.diagnostics.maxPendingQueue,
+        staleWorkDrops: this.diagnostics.staleWorkDrops,
+        resyncs: this.diagnostics.resyncs
+      },
+      stream: {
+        generation: this.streamGeneration,
+        resets: this.diagnostics.streamResets,
+        generationDrops: this.diagnostics.generationDrops,
+        staleResultDrops: this.diagnostics.staleResultDrops,
+        lastInputChunkIndex: this.diagnostics.lastInputChunkIndex,
+        lastProcessed: this.diagnostics.lastProcessed
+      },
+      chunks: {
+        input: this.diagnostics.inputChunks,
+        go: this.diagnostics.goChunks,
+        processed: this.diagnostics.processedChunks,
+        intentionalWarmupDrops: this.diagnostics.intentionalWarmupDrops,
+        errors: this.diagnostics.processErrors
+      },
+      timingMs,
+      tensorCount,
+      worklet: this.diagnostics.lastWorkletStatus
+    };
   }
 
   destroy() {

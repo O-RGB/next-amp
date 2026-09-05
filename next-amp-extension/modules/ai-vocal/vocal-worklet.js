@@ -3,25 +3,28 @@
  * 
  * Clean Mute-Until-Ready Architecture:
  * - When switching to Karaoke / Acapella, output mutes immediately (smooth ~5.8ms micro-fade).
- * - Remains completely silent while AI model primes and buffers 2 real chunks (~0.37s).
+ * - Remains completely silent while AI model primes and buffers 2 real chunks (~0.35s in browser mode).
  * - Smoothly fades in directly to isolated Karaoke music once buffer is ready.
  * - Resets stream state at genuine song boundaries so old audio cannot leak
  *   into the next song.
  */
 
-const CHUNK_SIZE = 8192; // 16 frames * 512 hop (64 Web Audio blocks = ~185.7ms)
+const GO_CHUNK_SIZE = 8192; // 16 frames * 512 hop (GO wire protocol)
+const BROWSER_CHUNK_SIZE = 7680; // 15 hops * 512 (~174.1ms), ai remove cadence
+const MAX_CHUNK_SIZE = GO_CHUNK_SIZE;
 const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
 const FADE_IN_SPEED = 1.0 / 1024;  // ~23ms smooth fade-in
-const READY_QUEUE_THRESHOLD = 2;   // 2 chunks (~370ms) perfect cushion against latency spikes
-const MAX_QUEUE_THRESHOLD = 5;     // 5 chunks (~928ms) latency ceiling prevents delay accumulation
+const READY_QUEUE_THRESHOLD = 2;   // 2 browser chunks (~348ms) cushion against latency spikes
+const MAX_QUEUE_THRESHOLD = 5;     // 5 browser chunks (~871ms) latency ceiling prevents delay accumulation
 const GO_READY_QUEUE_THRESHOLD = 5; // Native GO gets a deeper cushion for OS scheduling spikes
 const GO_MAX_QUEUE_THRESHOLD = 8;   // ~1.48s ceiling before stale native output is discarded
 const BROWSER_MAX_LAG_CHUNKS = 3;   // Drop browser results that are already too far behind live audio
 const CONCEAL_FADE_OUT_SPEED = 1.0 / 256; // hide an unavoidable GO underrun without a click
 const CONCEAL_FADE_IN_SPEED = 1.0 / 512;  // restore processed audio smoothly after recovery
 const BOUNDARY_SILENCE_PEAK = 0.0003; // matches the native engine's near-silence floor
-const SILENCE_RESET_CHUNKS = 2;       // ~371ms at the default 44.1kHz sample rate
+const SILENCE_RESET_CHUNKS = 2;       // ~348ms in browser mode at 44.1kHz
 const MISSING_INPUT_RESET_BLOCKS = 128; // ~371ms when the source stops providing buffers
+const WORKLET_SAMPLE_RATE = typeof sampleRate === "number" ? sampleRate : 44100;
 
 class AIVocalWorkletProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -30,12 +33,13 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.mode = "bypass"; // "bypass", "karaoke", "acapella"
     this.targetMode = "bypass";
     this.engineType = "webgl";
+    this.chunkSize = BROWSER_CHUNK_SIZE;
     this.readyThreshold = READY_QUEUE_THRESHOLD;
     this.maxQueueThreshold = MAX_QUEUE_THRESHOLD;
 
     // Input accumulator
-    this.inAccumL = new Float32Array(CHUNK_SIZE);
-    this.inAccumR = new Float32Array(CHUNK_SIZE);
+    this.inAccumL = new Float32Array(MAX_CHUNK_SIZE);
+    this.inAccumR = new Float32Array(MAX_CHUNK_SIZE);
     this.inAccumPos = 0;
     this.chunkPeak = 0.0;
     this.silentChunks = 0;
@@ -65,14 +69,27 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
     this.chunkSeq = 0;
     this.statusCount = 0;
+    this.diagnostics = {
+      chunksSent: 0,
+      staleDrops: 0,
+      duplicateDrops: 0,
+      resyncs: 0,
+      streamResets: 0,
+      modeTransitions: 0,
+      underrunBlocks: 0,
+      lastInputChunkIndex: null,
+      lastPlaybackChunkIndex: null
+    };
 
     this.port.onmessage = (e) => {
       const data = e.data;
       if (data.type === "SET_MODE") {
         if (data.engineType === "go_native" || data.engineType === "webgl") {
           this.engineType = data.engineType;
+          this.setChunkSizeForEngine(this.engineType);
         }
         if (this.targetMode !== data.mode) {
+          this.diagnostics.modeTransitions++;
           this.targetMode = data.mode;
           // Purge all audio queues and state on ANY mode transition
           this.isAiReady = false;
@@ -105,6 +122,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         const nextEngine = data.engineType === "go_native" ? "go_native" : "webgl";
         if (this.engineType !== nextEngine) {
           this.engineType = nextEngine;
+          this.setChunkSizeForEngine(this.engineType);
           this.isAiReady = false;
           this.outQueueL = [];
           this.outQueueR = [];
@@ -117,6 +135,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.playbackChunkIndex = null;
           this.playbackSamples = 0;
           this.latestInputChunkIndex = null;
+          this.inAccumPos = 0;
+          this.chunkPeak = 0.0;
           this.aiGain = 0.0;
         }
         this.readyThreshold = this.engineType === "go_native"
@@ -129,6 +149,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         // instead of replaying audio from before the scheduling interruption.
         const nextChunkIndex = Number.isInteger(data.nextChunkIndex)
           ? data.nextChunkIndex : null;
+        this.diagnostics.resyncs++;
         this.isAiReady = false;
         this.readyThreshold = 1;
         this.outQueueL = [];
@@ -147,6 +168,16 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     };
   }
 
+  setChunkSizeForEngine(engineType) {
+    const nextSize = engineType === "go_native" ? GO_CHUNK_SIZE : BROWSER_CHUNK_SIZE;
+    if (this.chunkSize === nextSize) return;
+    this.chunkSize = nextSize;
+    // A partial packet belongs to the previous cadence. Drop it so a mode
+    // switch cannot produce a mixed-size packet.
+    this.inAccumPos = 0;
+    this.chunkPeak = 0.0;
+  }
+
   handleProcessedChunk(data) {
     if (this.targetMode === "bypass" || !data || !data.outL || !data.outR) return;
 
@@ -158,16 +189,19 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         chunkIndex !== null &&
         this.latestInputChunkIndex !== null &&
         chunkIndex < this.latestInputChunkIndex - BROWSER_MAX_LAG_CHUNKS) {
+      this.diagnostics.staleDrops++;
       return;
     }
 
     // If the same response is delivered twice, do not replay it after the
     // current chunk. This is cheap because the queue is intentionally small.
     if (chunkIndex !== null && this.playbackChunkIndex !== null && chunkIndex < this.playbackChunkIndex) {
+      this.diagnostics.staleDrops++;
       return;
     }
     if (chunkIndex !== null &&
         (chunkIndex === this.currChunkIndex || this.outQueueIndex.includes(chunkIndex))) {
+      this.diagnostics.duplicateDrops++;
       return;
     }
 
@@ -201,11 +235,12 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.latestInputChunkIndex = null;
     // Keep chunkSeq monotonic so late responses from the previous song can
     // be rejected without colliding with the new song's chunk indexes.
-    this.port.postMessage({
-      type: "STREAM_RESET",
-      nextChunkIndex,
-      reason: "sustained-silence"
-    });
+        this.port.postMessage({
+          type: "STREAM_RESET",
+          nextChunkIndex,
+          reason: "sustained-silence"
+        });
+        this.diagnostics.streamResets++;
   }
 
   observeChunkBoundary(chunkPeak, chunkIndex) {
@@ -268,15 +303,15 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
       let offset = 0;
       while (offset < len) {
-        const toCopy = Math.min(len - offset, CHUNK_SIZE - this.inAccumPos);
+        const toCopy = Math.min(len - offset, this.chunkSize - this.inAccumPos);
         this.inAccumL.set(inL.subarray(offset, offset + toCopy), this.inAccumPos);
         this.inAccumR.set(inR.subarray(offset, offset + toCopy), this.inAccumPos);
         this.inAccumPos += toCopy;
         offset += toCopy;
 
-        if (this.inAccumPos >= CHUNK_SIZE) {
-          const rawL = new Float32Array(this.inAccumL);
-          const rawR = new Float32Array(this.inAccumR);
+        if (this.inAccumPos >= this.chunkSize) {
+          const rawL = new Float32Array(this.inAccumL.subarray(0, this.chunkSize));
+          const rawR = new Float32Array(this.inAccumR.subarray(0, this.chunkSize));
           const chunkIndex = this.chunkSeq++;
           const chunkPeak = this.chunkPeak;
           this.chunkPeak = 0.0;
@@ -289,6 +324,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           };
           const transfer = [rawL.buffer, rawR.buffer];
           this.latestInputChunkIndex = chunkIndex;
+          this.diagnostics.chunksSent++;
+          this.diagnostics.lastInputChunkIndex = chunkIndex;
           this.port.postMessage(processMessage, transfer);
           this.inAccumPos = 0;
           this.observeChunkBoundary(chunkPeak, chunkIndex);
@@ -319,8 +356,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.statusCount++;
     if (this.statusCount >= 32) {
       this.statusCount = 0;
-      const totalBuffered = this.outQueueL.length * CHUNK_SIZE + (this.currChunkL ? this.currChunkL.length - this.currChunkPos : 0);
-      const bufferedSec = (totalBuffered / 44100).toFixed(1);
+      const totalBuffered = this.outQueueL.length * this.chunkSize + (this.currChunkL ? this.currChunkL.length - this.currChunkPos : 0);
+      const bufferedSec = (totalBuffered / WORKLET_SAMPLE_RATE).toFixed(1);
       this.port.postMessage({
         type: "WORKLET_STATUS",
         mode: this.targetMode,
@@ -328,7 +365,14 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         readyThreshold: this.readyThreshold,
         aiGain: this.aiGain,
         bufferedSec: bufferedSec,
-        queueLen: this.outQueueL.length
+        queueLen: this.outQueueL.length,
+        chunkSize: this.chunkSize,
+        sampleRate: WORKLET_SAMPLE_RATE,
+        inputFrame: this.latestInputChunkIndex === null
+          ? null : this.latestInputChunkIndex * (this.chunkSize / 512),
+        playbackFrame: this.playbackChunkIndex === null
+          ? null : this.playbackChunkIndex * (this.chunkSize / 512),
+        diagnostics: { ...this.diagnostics }
       });
     }
 
@@ -397,13 +441,14 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           aiSampleR = this.currChunkR[this.currChunkPos];
           this.currChunkPos++;
         } else {
-          // Never expose raw input during an AI underrun: karaoke raw input
-          // contains vocals. A short click-free mute is preferable to vocal
-          // leakage and avoids replaying stale audio while the model catches up.
-          concealTarget = 0.0;
-          aiSampleL = 0.0;
-          aiSampleR = 0.0;
-        }
+            // Never expose raw input during an AI underrun: karaoke raw input
+            // contains vocals. A short click-free mute is preferable to vocal
+            // leakage and avoids replaying stale audio while the model catches up.
+            concealTarget = 0.0;
+            aiSampleL = 0.0;
+            aiSampleR = 0.0;
+            this.diagnostics.underrunBlocks++;
+          }
 
         if (this.concealGain < concealTarget) {
           this.concealGain = Math.min(concealTarget, this.concealGain + CONCEAL_FADE_IN_SPEED);
@@ -412,10 +457,11 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         }
 
         this.playbackSamples++;
-        if (this.playbackSamples >= CHUNK_SIZE) {
+        if (this.playbackSamples >= this.chunkSize) {
           this.playbackSamples = 0;
           if (this.playbackChunkIndex !== null) this.playbackChunkIndex++;
         }
+        this.diagnostics.lastPlaybackChunkIndex = this.playbackChunkIndex;
       }
 
       outL[i] = this.liveGain * inL[i] + this.aiGain * this.concealGain * aiSampleL;

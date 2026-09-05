@@ -1,4 +1,5 @@
 import { AIVocalManager } from "./modules/ai-vocal/ai-vocal-manager.js";
+import { createVocalModelLoader } from "./modules/ai-vocal/model-optimizer.mjs";
 
 const out = document.getElementById("output");
 
@@ -67,8 +68,12 @@ export async function runDiagnostics() {
     }
     const modelUrl = chrome.runtime.getURL("model/model.json");
     const handler = tf.io.browserHTTPRequest(modelUrl);
-    model = await tf.loadGraphModel(handler);
-    log("✓ U-Net Model Loaded Successfully! Input shape: [1, 1024, 64, 2]", "log-ok");
+    const loader = createVocalModelLoader(tf, handler);
+    model = await loader.load();
+    const optimizationLabel = loader.foldedCount
+      ? ` Optimized graph: removed ${loader.foldedCount * 2} data-reordering nodes.`
+      : " Original graph fallback is active.";
+    log("✓ U-Net Model Loaded Successfully! Input shape: [1, 1024, 64, 2]." + optimizationLabel, "log-ok");
   } catch (e) {
     log("✗ Model Load Failed: " + e.message, "log-err");
     return;

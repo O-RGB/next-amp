@@ -86,7 +86,56 @@ async function runTest() {
     console.log("✓ EXCELLENT RECONSTRUCTION QUALITY: Studio-grade (> 40 dB SNR)!");
   }
 
-  // 5. Test Karaoke Mode (Apply Vocal Cut Mask)
+  // 5. Candidate cadence fixture: 15-hop streaming OLA must reconstruct cleanly.
+  const candidateFrames = 15;
+  const candidateSamples = candidateFrames * hopSize;
+  exp.stft_reset();
+  for (let i = 0; i < candidateSamples + 2048; i++) {
+    const t = i / sampleRate;
+    f32[inPtr0 + i] = Math.sin(2 * Math.PI * 440 * t) * 0.7;
+    f32[inPtr1 + i] = Math.sin(2 * Math.PI * 880 * t) * 0.7;
+  }
+  f32[inPtr0 + 4096] += 0.8;
+  f32[inPtr1 + 4096] += 0.8;
+  exp.stft_forward(candidateFrames);
+  exp.stft_apply_mask(candidateFrames, 2, 0.0);
+  exp.stft_backward(candidateFrames);
+  let candidateSignalPower = 0;
+  let candidateNoisePower = 0;
+  for (let i = 2048; i < candidateSamples; i++) {
+    const orig = f32[inPtr0 + i];
+    const recon = f32[outPtr0 + i];
+    candidateSignalPower += orig * orig;
+    candidateNoisePower += (orig - recon) ** 2;
+  }
+  const candidateSnr = 10 * Math.log10(candidateSignalPower / (candidateNoisePower + 1e-12));
+  console.log(`✓ Candidate 15-hop OLA fixture: SNR = ${candidateSnr.toFixed(2)} dB`);
+  if (candidateSnr < 40) throw new Error("15-hop OLA reconstruction is below 40 dB SNR");
+
+  // 6. Silence-floor fixture: epsilon must stay below the digital-silence gate,
+  // while a very quiet but audible tone must still take the model path.
+  exp.stft_reset();
+  for (let i = 0; i < candidateSamples + 2048; i++) {
+    f32[inPtr0 + i] = 0;
+    f32[inPtr1 + i] = 0;
+  }
+  exp.stft_forward(candidateFrames);
+  const silencePeak = exp.stft_get_chunk_peak();
+  console.log(`✓ Digital-silence epsilon peak: ${silencePeak.toExponential(3)}`);
+  if (silencePeak > 3.25e-5) throw new Error("Digital silence exceeds the configured gate");
+
+  exp.stft_reset();
+  for (let i = 0; i < candidateSamples + 2048; i++) {
+    const t = i / sampleRate;
+    f32[inPtr0 + i] = Math.sin(2 * Math.PI * 440 * t) * 1e-4;
+    f32[inPtr1 + i] = Math.sin(2 * Math.PI * 880 * t) * 1e-4;
+  }
+  exp.stft_forward(candidateFrames);
+  const quietPeak = exp.stft_get_chunk_peak();
+  console.log(`✓ Quiet-audio peak remains model-visible: ${quietPeak.toExponential(3)}`);
+  if (quietPeak <= 3.25e-5) throw new Error("Quiet audible signal was incorrectly gated");
+
+  // 7. Test Karaoke Mode (Apply Vocal Cut Mask)
   // Set synthetic vocal mask around 440 Hz (bin ~20 at 44.1kHz)
   for (let i = 0; i < numFrames * 1024; i++) {
     f32[maskPtr0 + i] = 1.0; // Mask all vocal frequency
@@ -102,7 +151,7 @@ async function runTest() {
   }
   console.log(`✓ Karaoke Vocal Cut Test: Remaining Energy = ${vocalCutEnergy.toFixed(4)} (Vocals suppressed by > 99%)`);
 
-  // 6. Benchmark Speed (1,000 runs)
+  // 8. Benchmark Speed (1,000 runs)
   console.log("\n--- BENCHMARK: 1,000 Full STFT+iSTFT Cycles ---");
   const iters = 1000;
   const benchStart = performance.now();

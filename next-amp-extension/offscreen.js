@@ -174,6 +174,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         mode: session.mode,
         currentSampleRate: session.audioCtx ? session.audioCtx.sampleRate : null,
         vocalStatus: session.aiVocal ? session.aiVocal.getStatus() : "ORIGINAL",
+        aiVocalDiagnostics: session.aiVocal ? session.aiVocal.getDiagnostics() : null,
       });
     } else {
       sendResponse({
@@ -182,6 +183,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         mode: null,
       });
     }
+  } else if (msg.type === "GET_AI_VOCAL_DIAGNOSTICS") {
+    const session = sessions.get(tabId);
+    session?.aiVocal?.enableDiagnostics();
+    sendResponse(session?.aiVocal ? session.aiVocal.getDiagnostics() : null);
+    return true;
   } else if (msg.type === "STOP_CAPTURE") {
     stopAudio(tabId);
     sendResponse({ success: true });
@@ -829,4 +835,3 @@ function startVisualizerLoop(tabId) {
   };
   loop();
 }
-

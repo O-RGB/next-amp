@@ -37,12 +37,12 @@ static float g_mask[2][MAX_FRAMES * NUM_BINS];
 static float g_spec_real[2][MAX_FRAMES][NUM_BINS];
 static float g_spec_imag[2][MAX_FRAMES][NUM_BINS];
 
-// Zero-Copy Internal Lookahead Ring Buffer for Complex Spectra (16 frames per chunk)
+// Zero-Copy Internal Lookahead Ring Buffer for Complex Spectra
 static float g_queue_real[2][QUEUE_CAPACITY][DEFAULT_CHUNK_FRAMES][NUM_BINS];
 static float g_queue_imag[2][QUEUE_CAPACITY][DEFAULT_CHUNK_FRAMES][NUM_BINS];
 static int g_queue_head = 0;
 
-// Direct Interleaved Magnitudes: [NUM_BINS][DEFAULT_CHUNK_FRAMES][2] (1024 * 16 * 2 = 32,768 floats)
+// Direct Interleaved Magnitudes: [NUM_BINS][DEFAULT_CHUNK_FRAMES][2]
 // Pre-formatted for zero-JS-overhead WebGL tensor ingestion
 static float g_interleaved_mags[NUM_BINS * DEFAULT_CHUNK_FRAMES * 2];
 static float g_chunk_peak = 1e-5f;
@@ -258,12 +258,12 @@ void stft_forward(int num_frames) {
     // Replaces all JavaScript tensor slice, concat, mul, and memory thrashing with 0.02ms C loop!
     float peak = 1e-5f;
     int p = 0;
-    int shift_frames = MAX_FRAMES - num_frames; // 48 frames
+    int shift_frames = MAX_FRAMES - num_frames;
     for (int k = 0; k < NUM_BINS; k++) {
         // 1. Shift previous 48 frames forward in linear memory
         memmove(&g_rolling_mags[k][0][0], &g_rolling_mags[k][num_frames][0], shift_frames * 2 * sizeof(float));
 
-        // 2. Append 16 new frames from current chunk into frames 48..63
+        // 2. Append the current chunk's frames into the tail of the 64-frame window
         for (int f = 0; f < num_frames; f++) {
             float v0 = g_magnitudes[0][f * NUM_BINS + k];
             float v1 = g_magnitudes[1][f * NUM_BINS + k];
