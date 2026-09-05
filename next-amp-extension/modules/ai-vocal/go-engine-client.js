@@ -206,7 +206,14 @@ export class GoEngineClient {
     }
 
     this.pendingChunks.set(chunkIndex, performance.now());
-    this.ws.send(bufferToSend);
-    return true;
+    try {
+      this.ws.send(bufferToSend);
+      return true;
+    } catch (_) {
+      // The socket can close between readyState checking and send(). Do not
+      // pass raw audio to the worklet; GO concealment will cover the gap.
+      this.pendingChunks.delete(chunkIndex);
+      return false;
+    }
   }
 }

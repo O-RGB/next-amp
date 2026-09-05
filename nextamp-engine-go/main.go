@@ -308,6 +308,28 @@ func packChannelSamples(chunkIndex uint32, mode uint8, left, right []float32, bu
 	return buf
 }
 
+// packSilentSamples is the safe failure output for an AI packet. Returning
+// the input here would leak the original vocal whenever ONNX Runtime has a
+// transient provider/scheduling error.
+func packSilentSamples(chunkIndex uint32, mode uint8, numSamples int, buf []byte) []byte {
+	totalBytes := HeaderBytes + (numSamples * 8)
+	if len(buf) < totalBytes {
+		buf = make([]byte, totalBytes)
+	} else {
+		buf = buf[:totalBytes]
+	}
+
+	binary.LittleEndian.PutUint32(buf[0:4], chunkIndex)
+	buf[4] = mode
+	buf[5] = 0
+	buf[6] = 0
+	buf[7] = 0
+	for i := HeaderBytes; i < totalBytes; i++ {
+		buf[i] = 0
+	}
+	return buf
+}
+
 // Lightweight Eco Status Display: updates smoothly once per second with zero terminal overhead
 func printEcoStatus(chunkIndex uint32, mode uint8, elapsedMs float64, leftSamples []float32) {
 	muStatus.Lock()
@@ -461,8 +483,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				inferMs = float64(time.Since(tNN).Microseconds()) / 1000.0
 
 				if err != nil {
-					outL, outR = leftSamples, rightSamples
-					respPayload = payload
+					outL = make([]float32, len(leftSamples))
+					outR = make([]float32, len(rightSamples))
+					respPayload = packSilentSamples(chunkIndex, mode, len(leftSamples), outBuf)
 				} else {
 					// 4. Inverse STFT + Fast C SIMD Sigmoid + Overlap-Add (~0.06ms via SIMD)
 					tDSP2 := time.Now()
@@ -477,9 +500,17 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				}
 				globalAI.mu.Unlock()
 			} else {
-				// Bypass Mode (raw zero-latency loopback)
-				outL, outR = leftSamples, rightSamples
-				respPayload = payload
+				if mode == 1 || mode == 2 {
+					// Never expose raw audio when an AI mode is requested but the
+					// native session is unavailable. Silence is the safe output.
+					outL = make([]float32, len(leftSamples))
+					outR = make([]float32, len(rightSamples))
+					respPayload = packSilentSamples(chunkIndex, mode, len(leftSamples), outBuf)
+				} else {
+					// Bypass Mode (raw zero-latency loopback)
+					outL, outR = leftSamples, rightSamples
+					respPayload = payload
+				}
 			}
 
 			elapsedMs := float64(time.Since(t0).Microseconds()) / 1000.0

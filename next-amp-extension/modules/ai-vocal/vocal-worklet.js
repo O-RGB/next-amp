@@ -14,7 +14,11 @@ const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
 const FADE_IN_SPEED = 1.0 / 1024;  // ~23ms smooth fade-in
 const READY_QUEUE_THRESHOLD = 2;   // 2 chunks (~370ms) perfect cushion against latency spikes
 const MAX_QUEUE_THRESHOLD = 5;     // 5 chunks (~928ms) latency ceiling prevents delay accumulation
+const GO_READY_QUEUE_THRESHOLD = 5; // Native GO gets a deeper cushion for OS scheduling spikes
+const GO_MAX_QUEUE_THRESHOLD = 8;   // ~1.48s ceiling before stale native output is discarded
 const FALLBACK_FADE_SPEED = 1.0 / 1024; // smooth raw/AI handoff if a bridge hiccup occurs
+const CONCEAL_FADE_OUT_SPEED = 1.0 / 256; // hide an unavoidable GO underrun without a click
+const CONCEAL_FADE_IN_SPEED = 1.0 / 512;  // restore processed audio smoothly after recovery
 const BOUNDARY_SILENCE_PEAK = 0.0003; // matches the native engine's near-silence floor
 const SILENCE_RESET_CHUNKS = 2;       // ~371ms at the default 44.1kHz sample rate
 const MISSING_INPUT_RESET_BLOCKS = 128; // ~371ms when the source stops providing buffers
@@ -25,7 +29,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
     this.mode = "bypass"; // "bypass", "karaoke", "acapella"
     this.targetMode = "bypass";
+    this.engineType = "webgl";
     this.readyThreshold = READY_QUEUE_THRESHOLD;
+    this.maxQueueThreshold = MAX_QUEUE_THRESHOLD;
 
     // Input accumulator
     this.inAccumL = new Float32Array(CHUNK_SIZE);
@@ -53,6 +59,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.aiGain = 0.0;
     this.isAiReady = false;
     this.fallbackMix = 0.0;
+    this.concealGain = 1.0;
     this.playbackChunkIndex = null;
     this.playbackSamples = 0;
 
@@ -62,11 +69,17 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (e) => {
       const data = e.data;
       if (data.type === "SET_MODE") {
+        if (data.engineType === "go_native" || data.engineType === "webgl") {
+          this.engineType = data.engineType;
+        }
         if (this.targetMode !== data.mode) {
           this.targetMode = data.mode;
           // Purge all audio queues and state on ANY mode transition
           this.isAiReady = false;
-          this.readyThreshold = READY_QUEUE_THRESHOLD;
+          this.readyThreshold = this.engineType === "go_native"
+            ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
+          this.maxQueueThreshold = this.engineType === "go_native"
+            ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
           this.outQueueL = [];
           this.outQueueR = [];
           this.outQueueIndex = [];
@@ -75,6 +88,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.currChunkIndex = null;
           this.currChunkPos = 0;
           this.fallbackMix = 0.0;
+          this.concealGain = 1.0;
           this.playbackChunkIndex = null;
           this.playbackSamples = 0;
           this.chunkPeak = 0.0;
@@ -87,6 +101,28 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
             this.aiGain = 0.0;
           }
         }
+      } else if (data.type === "SET_ENGINE") {
+        const nextEngine = data.engineType === "go_native" ? "go_native" : "webgl";
+        if (this.engineType !== nextEngine) {
+          this.engineType = nextEngine;
+          this.isAiReady = false;
+          this.outQueueL = [];
+          this.outQueueR = [];
+          this.outQueueIndex = [];
+          this.currChunkL = null;
+          this.currChunkR = null;
+          this.currChunkIndex = null;
+          this.currChunkPos = 0;
+          this.fallbackMix = 0.0;
+          this.concealGain = 1.0;
+          this.playbackChunkIndex = null;
+          this.playbackSamples = 0;
+          this.aiGain = 0.0;
+        }
+        this.readyThreshold = this.engineType === "go_native"
+          ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
+        this.maxQueueThreshold = this.engineType === "go_native"
+          ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
       } else if (data.type === "CHUNK_PROCESSED") {
         this.handleProcessedChunk(data);
       }
@@ -106,7 +142,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.outQueueL.push(data.outL instanceof Float32Array ? data.outL : new Float32Array(data.outL));
     this.outQueueR.push(data.outR instanceof Float32Array ? data.outR : new Float32Array(data.outR));
     this.outQueueIndex.push(chunkIndex);
-    while (this.outQueueL.length > MAX_QUEUE_THRESHOLD) {
+    while (this.outQueueL.length > this.maxQueueThreshold) {
       this.outQueueL.shift();
       this.outQueueR.shift();
       this.outQueueIndex.shift();
@@ -117,7 +153,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.inAccumPos = 0;
     this.chunkPeak = 0.0;
     this.isAiReady = false;
-    this.readyThreshold = READY_QUEUE_THRESHOLD;
+    this.readyThreshold = this.engineType === "go_native"
+      ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
     this.outQueueL = [];
     this.outQueueR = [];
     this.outQueueIndex = [];
@@ -126,6 +163,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.currChunkIndex = null;
     this.currChunkPos = 0;
     this.fallbackMix = 0.0;
+    this.concealGain = 1.0;
     this.aiGain = 0.0;
     this.playbackChunkIndex = null;
     this.playbackSamples = 0;
@@ -313,16 +351,31 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         }
 
         let usingFallback = false;
+        let concealTarget = 1.0;
         if (this.currChunkL) {
           aiSampleL = this.currChunkL[this.currChunkPos];
           aiSampleR = this.currChunkR[this.currChunkPos];
           this.currChunkPos++;
         } else {
-          // Seamless Fallback: Play original audio if AI chunk is momentarily delayed
-          // Completely eliminates dropouts and silence gaps!
-          aiSampleL = inL[i];
-          aiSampleR = inR[i];
-          usingFallback = true;
+          // A native GO underrun must never expose the original vocal signal.
+          // Briefly conceal it with silence; the deeper GO queue normally
+          // makes this path unreachable except during real CPU starvation.
+          if (this.engineType === "go_native") {
+            concealTarget = 0.0;
+            aiSampleL = 0.0;
+            aiSampleR = 0.0;
+          } else {
+            // Browser fallback keeps continuity when the WebGL path hiccups.
+            aiSampleL = inL[i];
+            aiSampleR = inR[i];
+            usingFallback = true;
+          }
+        }
+
+        if (this.concealGain < concealTarget) {
+          this.concealGain = Math.min(concealTarget, this.concealGain + CONCEAL_FADE_IN_SPEED);
+        } else if (this.concealGain > concealTarget) {
+          this.concealGain = Math.max(concealTarget, this.concealGain - CONCEAL_FADE_OUT_SPEED);
         }
 
         const fallbackTarget = usingFallback ? 1.0 : 0.0;
@@ -343,8 +396,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         }
       }
 
-      outL[i] = this.liveGain * inL[i] + this.aiGain * aiSampleL;
-      outR[i] = this.liveGain * inR[i] + this.aiGain * aiSampleR;
+      outL[i] = this.liveGain * inL[i] + this.aiGain * this.concealGain * aiSampleL;
+      outR[i] = this.liveGain * inR[i] + this.aiGain * this.concealGain * aiSampleR;
     }
 
     // Cleanup queue once completely switched back to bypass

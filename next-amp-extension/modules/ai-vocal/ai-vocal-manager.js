@@ -202,18 +202,10 @@ export class AIVocalManager {
           if (this.engineType === "go_native") {
             const depth = Math.max(1, Math.min(4, Number(this.diffLevel) || 2));
             const delayChunks = depth - 1;
-            const ok = this.goClient.sendChunk(data.chunkIndex, data.rawL, data.rawR, data.mode, delayChunks);
-            if (!ok && this.workletNode) {
-              // Fallback pass-through so audio never starves if Go is offline
-              this.workletNode.port.postMessage(
-                {
-                  type: "CHUNK_PROCESSED",
-                  outL: data.rawL,
-                  outR: data.rawR
-                },
-                [data.rawL.buffer, data.rawR.buffer]
-              );
-            }
+            this.goClient.sendChunk(data.chunkIndex, data.rawL, data.rawR, data.mode, delayChunks);
+            // Never feed raw audio back into the GO path when the bridge is
+            // unavailable. The worklet's GO concealment path will mute the
+            // brief underrun instead of leaking the original vocal signal.
           } else {
             if (this.isReady) {
               this.chunkQueue.push(data);
@@ -821,6 +813,9 @@ export class AIVocalManager {
     this.engineType = valid;
     this.streamChunkFloor = null;
     console.log("[NextAmp AI] Switched engine to:", this.engineType);
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({ type: "SET_ENGINE", engineType: this.engineType });
+    }
 
     if (this.engineType === "go_native") {
       this.goClient.enable();
@@ -877,7 +872,7 @@ export class AIVocalManager {
       }
     }
     if (this.workletNode) {
-      this.workletNode.port.postMessage({ type: "SET_MODE", mode });
+      this.workletNode.port.postMessage({ type: "SET_MODE", mode, engineType: this.engineType });
     }
   }
 
