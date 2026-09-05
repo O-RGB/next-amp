@@ -16,7 +16,7 @@ const READY_QUEUE_THRESHOLD = 2;   // 2 chunks (~370ms) perfect cushion against 
 const MAX_QUEUE_THRESHOLD = 5;     // 5 chunks (~928ms) latency ceiling prevents delay accumulation
 const GO_READY_QUEUE_THRESHOLD = 5; // Native GO gets a deeper cushion for OS scheduling spikes
 const GO_MAX_QUEUE_THRESHOLD = 8;   // ~1.48s ceiling before stale native output is discarded
-const FALLBACK_FADE_SPEED = 1.0 / 1024; // smooth raw/AI handoff if a bridge hiccup occurs
+const BROWSER_MAX_LAG_CHUNKS = 3;   // Drop browser results that are already too far behind live audio
 const CONCEAL_FADE_OUT_SPEED = 1.0 / 256; // hide an unavoidable GO underrun without a click
 const CONCEAL_FADE_IN_SPEED = 1.0 / 512;  // restore processed audio smoothly after recovery
 const BOUNDARY_SILENCE_PEAK = 0.0003; // matches the native engine's near-silence floor
@@ -58,10 +58,10 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.liveGain = 1.0;
     this.aiGain = 0.0;
     this.isAiReady = false;
-    this.fallbackMix = 0.0;
     this.concealGain = 1.0;
     this.playbackChunkIndex = null;
     this.playbackSamples = 0;
+    this.latestInputChunkIndex = null;
 
     this.chunkSeq = 0;
     this.statusCount = 0;
@@ -87,10 +87,10 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.currChunkR = null;
           this.currChunkIndex = null;
           this.currChunkPos = 0;
-          this.fallbackMix = 0.0;
           this.concealGain = 1.0;
           this.playbackChunkIndex = null;
           this.playbackSamples = 0;
+          this.latestInputChunkIndex = null;
           this.chunkPeak = 0.0;
           this.silentChunks = 0;
           this.inSilenceBoundary = false;
@@ -113,16 +113,34 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.currChunkR = null;
           this.currChunkIndex = null;
           this.currChunkPos = 0;
-          this.fallbackMix = 0.0;
           this.concealGain = 1.0;
           this.playbackChunkIndex = null;
           this.playbackSamples = 0;
+          this.latestInputChunkIndex = null;
           this.aiGain = 0.0;
         }
         this.readyThreshold = this.engineType === "go_native"
           ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
         this.maxQueueThreshold = this.engineType === "go_native"
           ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
+      } else if (data.type === "RESYNC") {
+        // The browser-side inference queue dropped old work. Flush every
+        // processed buffer so the next result starts at the newest live chunk
+        // instead of replaying audio from before the scheduling interruption.
+        const nextChunkIndex = Number.isInteger(data.nextChunkIndex)
+          ? data.nextChunkIndex : null;
+        this.isAiReady = false;
+        this.readyThreshold = 1;
+        this.outQueueL = [];
+        this.outQueueR = [];
+        this.outQueueIndex = [];
+        this.currChunkL = null;
+        this.currChunkR = null;
+        this.currChunkIndex = null;
+        this.currChunkPos = 0;
+        this.concealGain = 0.0;
+        this.playbackChunkIndex = nextChunkIndex;
+        this.playbackSamples = 0;
       } else if (data.type === "CHUNK_PROCESSED") {
         this.handleProcessedChunk(data);
       }
@@ -133,9 +151,23 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     if (this.targetMode === "bypass" || !data || !data.outL || !data.outR) return;
 
     const chunkIndex = Number.isInteger(data.chunkIndex) ? data.chunkIndex : null;
-    // If the worklet had to play live audio while a response was late, do not
-    // replay an old processed chunk and create an audible time jump.
+    // Do not allow a browser result that is already far behind live audio to
+    // enter the playback queue. Playing it would create a delayed vocal/music
+    // jump after a tab switch or a CPU-heavy page update.
+    if (this.engineType !== "go_native" &&
+        chunkIndex !== null &&
+        this.latestInputChunkIndex !== null &&
+        chunkIndex < this.latestInputChunkIndex - BROWSER_MAX_LAG_CHUNKS) {
+      return;
+    }
+
+    // If the same response is delivered twice, do not replay it after the
+    // current chunk. This is cheap because the queue is intentionally small.
     if (chunkIndex !== null && this.playbackChunkIndex !== null && chunkIndex < this.playbackChunkIndex) {
+      return;
+    }
+    if (chunkIndex !== null &&
+        (chunkIndex === this.currChunkIndex || this.outQueueIndex.includes(chunkIndex))) {
       return;
     }
 
@@ -162,11 +194,11 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.currChunkR = null;
     this.currChunkIndex = null;
     this.currChunkPos = 0;
-    this.fallbackMix = 0.0;
     this.concealGain = 1.0;
     this.aiGain = 0.0;
     this.playbackChunkIndex = null;
     this.playbackSamples = 0;
+    this.latestInputChunkIndex = null;
     // Keep chunkSeq monotonic so late responses from the previous song can
     // be rejected without colliding with the new song's chunk indexes.
     this.port.postMessage({
@@ -256,6 +288,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
             mode: this.targetMode
           };
           const transfer = [rawL.buffer, rawR.buffer];
+          this.latestInputChunkIndex = chunkIndex;
           this.port.postMessage(processMessage, transfer);
           this.inAccumPos = 0;
           this.observeChunkBoundary(chunkPeak, chunkIndex);
@@ -322,7 +355,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
       if (this.isAiReady) {
         if (!this.currChunkL || this.currChunkPos >= this.currChunkL.length) {
           // Discard responses that refer to audio already covered by the
-          // live fallback. This prevents a delayed GO response from replaying
+          // playback cursor. This prevents a delayed response from replaying
           // old audio after a tab-switch scheduling hiccup.
           while (this.outQueueL.length > 0 &&
                  this.playbackChunkIndex !== null &&
@@ -340,53 +373,42 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
             this.currChunkPos = 0;
             if (this.playbackChunkIndex === null && this.currChunkIndex !== null) {
               this.playbackChunkIndex = this.currChunkIndex;
+            } else if (this.currChunkIndex !== null &&
+                       this.playbackChunkIndex !== null &&
+                       this.currChunkIndex > this.playbackChunkIndex) {
+              // A resync may intentionally skip chunks. Move the cursor to
+              // the first fresh result rather than assigning it an old time.
+              this.playbackChunkIndex = this.currChunkIndex;
+              this.playbackSamples = 0;
             }
           } else {
             this.currChunkL = null;
             this.currChunkR = null;
             this.currChunkIndex = null;
-            // Never mute to complete silence! Maintain continuity while next chunk arrives
+            // Recover as soon as the next processed chunk arrives. During an
+            // underrun conceal with silence; raw input contains vocals.
             this.readyThreshold = 1;
           }
         }
 
-        let usingFallback = false;
         let concealTarget = 1.0;
         if (this.currChunkL) {
           aiSampleL = this.currChunkL[this.currChunkPos];
           aiSampleR = this.currChunkR[this.currChunkPos];
           this.currChunkPos++;
         } else {
-          // A native GO underrun must never expose the original vocal signal.
-          // Briefly conceal it with silence; the deeper GO queue normally
-          // makes this path unreachable except during real CPU starvation.
-          if (this.engineType === "go_native") {
-            concealTarget = 0.0;
-            aiSampleL = 0.0;
-            aiSampleR = 0.0;
-          } else {
-            // Browser fallback keeps continuity when the WebGL path hiccups.
-            aiSampleL = inL[i];
-            aiSampleR = inR[i];
-            usingFallback = true;
-          }
+          // Never expose raw input during an AI underrun: karaoke raw input
+          // contains vocals. A short click-free mute is preferable to vocal
+          // leakage and avoids replaying stale audio while the model catches up.
+          concealTarget = 0.0;
+          aiSampleL = 0.0;
+          aiSampleR = 0.0;
         }
 
         if (this.concealGain < concealTarget) {
           this.concealGain = Math.min(concealTarget, this.concealGain + CONCEAL_FADE_IN_SPEED);
         } else if (this.concealGain > concealTarget) {
           this.concealGain = Math.max(concealTarget, this.concealGain - CONCEAL_FADE_OUT_SPEED);
-        }
-
-        const fallbackTarget = usingFallback ? 1.0 : 0.0;
-        if (this.fallbackMix < fallbackTarget) {
-          this.fallbackMix = Math.min(fallbackTarget, this.fallbackMix + FALLBACK_FADE_SPEED);
-        } else if (this.fallbackMix > fallbackTarget) {
-          this.fallbackMix = Math.max(fallbackTarget, this.fallbackMix - FALLBACK_FADE_SPEED);
-        }
-        if (this.fallbackMix > 0.0 && !usingFallback) {
-          aiSampleL = (aiSampleL * (1.0 - this.fallbackMix)) + (inL[i] * this.fallbackMix);
-          aiSampleR = (aiSampleR * (1.0 - this.fallbackMix)) + (inR[i] * this.fallbackMix);
         }
 
         this.playbackSamples++;

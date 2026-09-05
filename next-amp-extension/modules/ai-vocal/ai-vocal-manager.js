@@ -15,6 +15,7 @@ const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
 // quiet but audible material still follows the original model path.
 const DIGITAL_SILENCE_PEAK = 3.25e-5;
 const WEBGPU_BACKEND_ASSET = "assets/libs/js/tf-backend-webgpu.min.js";
+const MAX_BROWSER_PENDING_CHUNKS = 2; // Keep at most ~370ms pending; drop stale work under interruption.
 let webGpuBackendPromise = null;
 
 async function ensureWebGpuBackend() {
@@ -118,6 +119,9 @@ export class AIVocalManager {
     // Concurrency Lock & Latency Ceiling: Prevents GPU backlog and WASM memory collision
     this.isBusy = false;
     this.chunkQueue = [];
+    this.queueNeedsResync = false;
+    this.resyncChunkIndex = null;
+    this.streamGeneration = 0;
     this.chunkPeakHistory = new Map();
     this.streamChunkFloor = null;
     this.maxHistory = [1e-4, 1e-4, 1e-4, 1e-4];
@@ -169,6 +173,8 @@ export class AIVocalManager {
     this.outTailL.fill(0);
     this.outTailR.fill(0);
     this.chunkQueue = [];
+    this.queueNeedsResync = false;
+    this.resyncChunkIndex = null;
     this.chunkPeakHistory.clear();
     this.maxHistory = [1e-4, 1e-4, 1e-4, 1e-4];
     if (this.exp && this.exp.stft_reset) {
@@ -208,10 +214,20 @@ export class AIVocalManager {
             // brief underrun instead of leaking the original vocal signal.
           } else {
             if (this.isReady) {
-              this.chunkQueue.push(data);
-              if (this.chunkQueue.length > 8) {
-                // Tab was suspended or heavily lagged; keep newest chunks to avoid backlog
-                this.chunkQueue = this.chunkQueue.slice(-3);
+              // Under a tab switch/page load, inference can temporarily stop
+              // while the worklet keeps collecting audio. Once that happens,
+              // processing every old chunk only creates growing latency. Keep
+              // the newest chunk and restart DSP state at that point.
+              if (this.queueNeedsResync) {
+                this.chunkQueue = [data];
+                this.resyncChunkIndex = data.chunkIndex;
+              } else {
+                this.chunkQueue.push(data);
+              }
+              if (this.chunkQueue.length > MAX_BROWSER_PENDING_CHUNKS) {
+                this.chunkQueue = [data];
+                this.queueNeedsResync = true;
+                this.resyncChunkIndex = data.chunkIndex;
               }
               if (!this.isBusy) {
                 this.runChunkQueue();
@@ -223,10 +239,13 @@ export class AIVocalManager {
         } else if (data.type === "STREAM_RESET") {
           // Flush the browser-side scheduler immediately. Then reset the
           // native DSP after all packets already sent before this marker.
+          this.streamGeneration++;
           this.streamChunkFloor = Number.isInteger(data.nextChunkIndex)
             ? data.nextChunkIndex
             : null;
           this.chunkQueue = [];
+          this.queueNeedsResync = false;
+          this.resyncChunkIndex = null;
           if (this.engineType === "go_native") {
             this.goClient.resetStream();
           } else {
@@ -259,7 +278,28 @@ export class AIVocalManager {
     try {
       while (this.chunkQueue.length > 0 && this.currentMode !== "bypass") {
         const chunk = this.chunkQueue.shift();
-        await this.processChunk(chunk.chunkIndex, chunk.rawL, chunk.rawR, chunk.mode);
+        if (this.queueNeedsResync) {
+          const nextChunkIndex = Number.isInteger(this.resyncChunkIndex)
+            ? this.resyncChunkIndex : chunk.chunkIndex;
+          this.queueNeedsResync = false;
+          this.resyncChunkIndex = null;
+          this.resetState();
+          if (this.workletNode) {
+            this.workletNode.port.postMessage({
+              type: "RESYNC",
+              nextChunkIndex
+            });
+          }
+        }
+        const generation = this.streamGeneration;
+        await this.processChunk(
+          chunk.chunkIndex,
+          chunk.rawL,
+          chunk.rawR,
+          chunk.mode,
+          1.0,
+          generation
+        );
         // Yield momentarily to event loop without Windows timer quantization penalty
         if (this.chunkQueue.length > 0) {
           await new Promise((resolve) => queueMicrotask(resolve));
@@ -597,8 +637,9 @@ export class AIVocalManager {
     }
   }
 
-  async processChunk(chunkIndex, rawL, rawR, mode, strength = 1.0) {
+  async processChunk(chunkIndex, rawL, rawR, mode, strength = 1.0, generation = this.streamGeneration) {
     if (!this.exp || !this.model || !this.workletNode) return;
+    if (generation !== this.streamGeneration || this.currentMode === "bypass" || mode !== this.currentMode) return;
 
     const tStart = performance.now();
 
@@ -700,6 +741,12 @@ export class AIVocalManager {
         const maskData = await maskTensor.data();
         maskTensor.dispose(); // Free mask tensor immediately!
 
+        // A mode/song/engine switch can happen while GPU readback is pending.
+        // Do not let that old inference mutate the new stream or emit stale audio.
+        if (generation !== this.streamGeneration || this.currentMode === "bypass" || mode !== this.currentMode) {
+          return;
+        }
+
         // 7. Write pure neural network mask directly into WASM mask buffer
         this.mem.subarray(this.maskPtr0, this.maskPtr0 + A * _).set(maskData.subarray(0, A * _));
         this.mem.subarray(this.maskPtr1, this.maskPtr1 + A * _).set(maskData.subarray(A * _, 2 * A * _));
@@ -729,6 +776,10 @@ export class AIVocalManager {
       this.outTailR.set(synthR.subarray(F, F + TAIL));
 
       this.lastInferMs = Math.round(performance.now() - tStart);
+
+      if (generation !== this.streamGeneration || this.currentMode === "bypass" || mode !== this.currentMode) {
+        return;
+      }
 
       // Chunk 0 primes the WASM lookahead ring buffer (reads from uninitialized delay slot)
       // Discard Chunk 0 so it never injects 185ms of digital silence into the playback stream!
@@ -810,6 +861,10 @@ export class AIVocalManager {
 
   setEngineType(type) {
     const valid = (type === "go_native") ? "go_native" : "webgl";
+    if (this.engineType !== valid) {
+      this.streamGeneration++;
+      this.resetState();
+    }
     this.engineType = valid;
     this.streamChunkFloor = null;
     console.log("[NextAmp AI] Switched engine to:", this.engineType);
@@ -838,6 +893,7 @@ export class AIVocalManager {
   }
 
   setMode(mode) {
+    this.streamGeneration++;
     this.currentMode = mode;
     this.streamChunkFloor = null;
     this.chunkQueue = [];
