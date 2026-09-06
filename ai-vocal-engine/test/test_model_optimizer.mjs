@@ -14,20 +14,30 @@ const original = {
   weightData: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
 };
 const before = JSON.stringify(original.modelTopology);
-const { artifacts: optimized, foldedCount } = optimizeVocalModelArtifacts(original);
+const { artifacts: optimized, foldedCount, explicitPadCount } = optimizeVocalModelArtifacts(original);
 assert.equal(foldedCount, 12);
-assert.equal(optimized.modelTopology.node.length, original.modelTopology.node.length - 24);
+assert.equal(explicitPadCount, 16);
+assert.equal(optimized.modelTopology.node.length, original.modelTopology.node.length - 40);
 assert.equal(optimized.weightData, original.weightData);
 assert.equal(optimized.weightSpecs, original.weightSpecs);
 assert.equal(JSON.stringify(original.modelTopology), before, 'optimizer mutated original graph');
 assert.equal(optimizeVocalModelArtifacts(optimized).foldedCount, 0);
+assert.equal(optimizeVocalModelArtifacts(optimized).explicitPadCount, 0);
 assert.equal(optimizeVocalModelArtifacts({ ...original, weightData: [original.weightData] }).foldedCount, 12);
+assert.equal(optimizeVocalModelArtifacts({ ...original, weightData: [original.weightData] }).explicitPadCount, 16);
 
 // An incompatible export must keep its original branch intact.
 const incompatible = structuredClone(original);
 const firstConv = incompatible.modelTopology.node.find(node => node.op === 'DepthwiseConv2dNative');
 firstConv.attr.strides.list.i = ['1', '2', '2', '1'];
 assert.equal(optimizeVocalModelArtifacts(incompatible).foldedCount, 11);
+const incompatiblePad = structuredClone(original);
+const firstPad = incompatiblePad.modelTopology.node.find(node => node.op === 'Pad');
+const firstPadConv = incompatiblePad.modelTopology.node.find(node => node.input?.[0] === firstPad.name);
+firstPadConv.attr.strides.list.i = ['1', '1', '1', '1'];
+const padResult = optimizeVocalModelArtifacts(incompatiblePad);
+assert.equal(padResult.foldedCount, 12);
+assert.equal(padResult.explicitPadCount, 15);
 assert.equal(optimizeVocalModelArtifacts({}).foldedCount, 0);
 
 await tf.setBackend('cpu');

@@ -13,7 +13,7 @@
 
 A ทำแล้วใน app และ build ผ่าน ส่วน B/C automated instrumentation ผ่านแล้ว ส่วน D และ E acceptance ยังต้องฟัง/วัดบนเครื่อง Windows/Apple และเพลงจริง
 
-ผลของ A ที่ตรวจแล้ว: graph เดิม 485 nodes เหลือ 461 nodes ในเส้นทางที่ปรับระหว่างโหลดโมเดล, weights ไม่เปลี่ยน, mask และ PCM ตรงกับ graph เดิมในชุดทดสอบ, WebGPU/WebGL ใช้งานได้ และ tensor ไม่รั่วหลัง inference การวัดเวลาบน Apple M2 ใน local browser ลดลงเล็กน้อยและมีความแกว่ง จึงยังไม่ใช่ตัวเลขประหยัดพลังงานที่รับรองสำหรับ Windows
+ผลของ A ที่ตรวจแล้ว: graph เดิม 485 nodes เหลือ 445 nodes ในเส้นทางที่ปรับระหว่างโหลดโมเดล (24 data-reordering nodes + 16 standalone padding nodes), weights ไม่เปลี่ยน, mask และ PCM ตรงกับ graph เดิมในชุดทดสอบ, WebGPU/WebGL ใช้งานได้ และ tensor ไม่รั่วหลัง inference จำนวน kernel ลดจาก 264 เหลือ 224 ใน benchmark ขณะที่ peak memory เท่าเดิม การวัดเวลาบน browser ลดลงเล็กน้อยและมีความแกว่ง จึงยังไม่ใช่ตัวเลขประหยัดพลังงานที่รับรองสำหรับ Windows
 
 ## เป้าหมายและขอบเขต
 
@@ -59,16 +59,18 @@ A ทำแล้วใน app และ build ผ่าน ส่วน B/C aut
 ## A — ลดงานภายในโมเดลโดยรักษาการคำนวณเดิม
 
 - [x] ตรวจพบ 12 ชุดของ `SpaceToBatchND → DepthwiseConv2dNative → BatchToSpaceND` ใน model graph เป็นรูปแบบการทำ dilated convolution โดยจัดข้อมูลไป/กลับ ใช้ dilation 4, 8, 16 และ filter 3×3
+- [x] ตรวจพบ 16 ชุดของ `Pad → stride-2 FusedConv2D` ที่พับเป็น `EXPLICIT` convolution padding ได้โดยรักษาขอบสัญญาณเดิม
 
 สถานะการทำ A:
 
 - [x] อ่าน block shape, padding, crop และ filter shape จาก artifacts เดิม
 - [x] แปลงเฉพาะ NHWC, stride 1, filter 3×3, channel multiplier 1 และ padding/crop ที่ตรงเงื่อนไข
+- [x] พับ explicit padding เฉพาะ NHWC, stride 2, dilation 1 และ padding tensor รูปร่าง/ค่าที่ตรวจได้เท่านั้น
 - [x] รักษาน้ำหนัก, precision, receptive field, output names และขนาด tensor เดิม
 - [x] ไม่แก้ไฟล์ weights และไม่ลดจำนวนเฟรมที่ predict
 - [x] ถ้าโครงสร้างไม่ผ่านหรือ backend มีปัญหา ใช้ graph ต้นฉบับผ่าน fallback
 
-การแปลงนี้ลด graph nodes ที่จัดเรียงข้อมูล 24 จุด และอาจลดงานบนบริเวณ padding ที่ถูกทิ้ง ขนาดผลประหยัดจริงขึ้นกับ kernel ของ backend ไม่ใช้จำนวน nodes เป็นเปอร์เซ็นต์ประหยัดพลังงาน
+การแปลงนี้ลด graph nodes ที่จัดเรียงข้อมูล 24 จุดและ standalone padding อีก 16 จุด ผล benchmark ลด kernel จาก 264 เหลือ 224 โดยไม่เปลี่ยน peak memory; ขนาดผลประหยัดจริงขึ้นกับ kernel ของ backend ไม่ใช้จำนวน nodes เป็นเปอร์เซ็นต์ประหยัดพลังงาน
 
 TensorFlow อธิบายความสัมพันธ์ของ space-to-batch กับ dilated operations ไว้ใน [เอกสาร `with_space_to_batch`](https://www.tensorflow.org/api_docs/python/tf/nn/with_space_to_batch) การใช้การแปลงกลับกับ graph นี้เป็นข้อเสนอจากการตรวจโค้ด ต้องยืนยันผลบน TF.js ที่ bundle อยู่จริงอีกครั้ง
 
@@ -86,6 +88,7 @@ TensorFlow อธิบายความสัมพันธ์ของ space
 ผลการตัดสิน A:
 
 - [x] ผลทำนายและ PCM ตรงกับ graph เดิมในชุดทดสอบ
+- [x] explicit padding candidate ให้ผลตรงกับ graph เดิมบน CPU, WebGPU และ WebGL
 - [x] ใช้ optimized graph ใน app พร้อม fallback ไป graph เดิม
 - [x] ใช้ optimized graph loader เดียวกันใน `debug-ai` เพื่อให้เส้นทางทดสอบตรงกับ production app
 - [x] ไม่ใช้ smoothing/transient guard เพื่อกลบความต่าง เพราะการทดลองก่อนหน้าทำให้เสียงร้องหลุดเพิ่ม
@@ -203,6 +206,7 @@ app เลือก 44.1 kHz เป็นค่าเริ่มต้น แ�
 | ความทำซ้ำได้ | มี baseline, backend, browser/driver, hardware, sample rate, input และผลดิบกำกับ |
 
 - [x] ทดสอบ smoke test บน Windows GTX 1050 Ti และ Apple ที่ใช้งานจริง
+- [x] accelerated 30-minute synthetic AudioWorklet stress ผ่าน: queue สูงสุด 5 ตามเพดาน, stale drops และ stream resets ทำงาน, output peak ไม่เกิน 0.2
 - [ ] ทดสอบรอบนิ่ง 10 นาที และรอบ 30 นาทีระหว่าง hide popup/scroll/change tabs/เปลี่ยนเพลง
 - [ ] ทดสอบพร้อมโหลด CPU/GPU ที่ทำซ้ำได้ และสลับ A/B อย่างน้อย 3 คู่หลังอุณหภูมินิ่ง
 - [ ] แยก cold start ออกจาก steady state

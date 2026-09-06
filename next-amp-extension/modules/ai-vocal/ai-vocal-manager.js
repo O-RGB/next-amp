@@ -154,6 +154,7 @@ export class AIVocalManager {
     this.benchmarkMs = 0;
     this.isHardwareSlow = false;
     this.modelGraphFoldedBranches = 0;
+    this.modelGraphExplicitPads = 0;
     this.diagnostics = {
       startedAt: Date.now(),
       enabled: false,
@@ -298,6 +299,7 @@ export class AIVocalManager {
         } else if (data.type === "WORKLET_STATUS") {
           this.diagnostics.lastWorkletStatus = {
             mode: data.mode,
+            generation: data.generation,
             isAiReady: !!data.isAiReady,
             bufferedSec: data.bufferedSec,
             queueLen: data.queueLen,
@@ -584,6 +586,7 @@ export class AIVocalManager {
           modelLoader.disableOptimization();
           this.model = await modelLoader.load();
           this.modelGraphFoldedBranches = modelLoader.foldedCount;
+          this.modelGraphExplicitPads = modelLoader.explicitPadCount;
           await runWarmup();
         }
       };
@@ -605,6 +608,7 @@ export class AIVocalManager {
         this.setStatus("Loading Model (15MB)...");
         this.model = await modelLoader.load();
         this.modelGraphFoldedBranches = modelLoader.foldedCount;
+        this.modelGraphExplicitPads = modelLoader.explicitPadCount;
         this.resetState();
         this.setStatus("Warming up GPU...");
         await warmupWithOriginalFallback();
@@ -613,8 +617,9 @@ export class AIVocalManager {
 
       this.model = await modelLoader.load();
       this.modelGraphFoldedBranches = modelLoader.foldedCount;
-      if (modelLoader.foldedCount) {
-        console.log(`[NextAmp AI] Removed ${modelLoader.foldedCount * 2} model data-reordering nodes (unchanged weights)`);
+      this.modelGraphExplicitPads = modelLoader.explicitPadCount;
+      if (modelLoader.foldedCount || modelLoader.explicitPadCount) {
+        console.log(`[NextAmp AI] Optimized model graph: removed ${modelLoader.foldedCount * 2} data-reordering nodes and ${modelLoader.explicitPadCount} standalone padding nodes (unchanged weights)`);
       }
 
       // Check if cancelled/unloaded while downloading/loading model
@@ -1128,6 +1133,7 @@ export class AIVocalManager {
       sampleRate,
       texturePrecision,
       modelGraphFoldedBranches: this.modelGraphFoldedBranches,
+      modelGraphExplicitPads: this.modelGraphExplicitPads,
       cadence: {
         chunkSamples,
         frames: this.engineType === "go_native" ? 16 : A,

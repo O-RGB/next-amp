@@ -15,11 +15,13 @@ test('browser IO loads optimized topology and can reload original after a driver
   const loader = createVocalModelLoader(tf, source);
   const optimized = await loader.load();
   assert.equal(loader.foldedCount, 12);
+  assert.equal(loader.explicitPadCount, 16);
   assert.equal(optimized.weightData, artifacts.weightData);
   assert.equal(optimized.modelTopology.node.filter(n => n.op === 'SpaceToBatchND').length, 0);
   loader.disableOptimization();
   assert.equal(await loader.load(), artifacts);
   assert.equal(loader.foldedCount, 0);
+  assert.equal(loader.explicitPadCount, 0);
 });
 
 test('a graph-load failure retries the original IO source and keeps it for subsequent loads', async () => {
@@ -34,6 +36,7 @@ test('a graph-load failure retries the original IO source and keeps it for subse
   assert.equal(await loader.load(), artifacts);
   assert.equal(await loader.load(), artifacts);
   assert.equal(loader.foldedCount, 0);
+  assert.equal(loader.explicitPadCount, 0);
   assert.equal(calls[1], source);
   assert.equal(calls[2], source);
 });
@@ -47,4 +50,5 @@ test('URL-only IO remains supported without graph rewriting', async () => {
   const loader = createVocalModelLoader({ loadGraphModel: async url => url }, '/model.json');
   assert.equal(await loader.load(), '/model.json');
   assert.equal(loader.foldedCount, 0);
+  assert.equal(loader.explicitPadCount, 0);
 });

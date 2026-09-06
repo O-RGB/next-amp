@@ -70,8 +70,8 @@ export async function runDiagnostics() {
     const handler = tf.io.browserHTTPRequest(modelUrl);
     const loader = createVocalModelLoader(tf, handler);
     model = await loader.load();
-    const optimizationLabel = loader.foldedCount
-      ? ` Optimized graph: removed ${loader.foldedCount * 2} data-reordering nodes.`
+    const optimizationLabel = loader.foldedCount || loader.explicitPadCount
+      ? ` Optimized graph: removed ${loader.foldedCount * 2} data-reordering nodes and ${loader.explicitPadCount} standalone padding nodes.`
       : " Original graph fallback is active.";
     log("✓ U-Net Model Loaded Successfully! Input shape: [1, 1024, 64, 2]." + optimizationLabel, "log-ok");
   } catch (e) {

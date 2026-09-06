@@ -10,7 +10,7 @@ export function optimizeVocalModelArtifacts(artifacts) {
     ? artifacts.weightData[0] : artifacts.weightData;
   if (!Array.isArray(nodes) || !Array.isArray(specs) ||
       !(weightData instanceof ArrayBuffer)) {
-    return { artifacts, foldedCount: 0 };
+    return { artifacts, foldedCount: 0, explicitPadCount: 0 };
   }
 
   const weights = new Map();
@@ -21,10 +21,10 @@ export function optimizeVocalModelArtifacts(artifacts) {
     const count = spec.shape.reduce((a, b) => a * b, 1);
     const bytes = byteSizes[spec.quantization?.dtype || spec.dtype];
     if (!bytes || offset + count * bytes > data.byteLength) {
-      return { artifacts, foldedCount: 0 };
+      return { artifacts, foldedCount: 0, explicitPadCount: 0 };
     }
     let values;
-    if (spec.dtype === "int32" && !spec.quantization && count <= 4) {
+    if (spec.dtype === "int32" && !spec.quantization && count <= 16) {
       values = Array.from({ length: count }, (_, i) => data.getInt32(offset + i * 4, true));
     }
     weights.set(spec.name, { shape: spec.shape, values });
@@ -44,6 +44,7 @@ export function optimizeVocalModelArtifacts(artifacts) {
   const constants = name => byName.get(name)?.op === "Const" ? weights.get(name)?.values : undefined;
   const replacements = new Map();
   const removed = new Set();
+  let explicitPadCount = 0;
 
   for (const output of nodes) {
     if (output.op !== "BatchToSpaceND" || output.input?.length !== 3) continue;
@@ -85,7 +86,44 @@ export function optimizeVocalModelArtifacts(artifacts) {
     removed.add(conv.name);
   }
 
-  if (!replacements.size) return { artifacts, foldedCount: 0 };
+  // Fold the model's explicit symmetric Pad into the following stride-2
+  // convolution. This preserves the exact boundary samples while removing a
+  // standalone padding kernel and its intermediate tensor. Do not rewrite
+  // SAME convolutions or any non-NHWC/unknown padding shape.
+  for (const pad of nodes) {
+    if (pad.op !== "Pad" || pad.input?.length !== 2 || uses.get(pad.name) !== 1) continue;
+    const padValues = constants(pad.input[1]);
+    if (!Array.isArray(padValues) || padValues.length !== 8 ||
+        !padValues.every(v => Number.isInteger(v) && v >= 0) ||
+        padValues[0] !== 0 || padValues[1] !== 0 ||
+        padValues[6] !== 0 || padValues[7] !== 0) continue;
+
+    const consumers = nodes.filter(node => node.input?.[0] === pad.name);
+    if (consumers.length !== 1) continue;
+    const conv = consumers[0];
+    if (conv.op !== "_FusedConv2D" && conv.op !== "Conv2D") continue;
+    if (conv.attr?.data_format?.s !== "TkhXQw==" ||
+        conv.attr?.padding?.s !== "VkFMSUQ=" ||
+        !same(conv.attr?.strides?.list?.i, [1, 2, 2, 1]) ||
+        !same(conv.attr?.dilations?.list?.i, [1, 1, 1, 1])) continue;
+    const explicit = conv.attr?.explicit_paddings?.list?.i;
+    if (Array.isArray(explicit) && explicit.length) continue;
+
+    const current = replacements.get(conv.name) || conv;
+    replacements.set(conv.name, {
+      ...current,
+      input: [pad.input[0], ...current.input.slice(1)],
+      attr: {
+        ...current.attr,
+        padding: { s: "RVhQTElDSVQ=" }, // EXPLICIT
+        explicit_paddings: { list: { i: padValues.map(String) } }
+      }
+    });
+    removed.add(pad.name);
+    explicitPadCount++;
+  }
+
+  if (!replacements.size) return { artifacts, foldedCount: 0, explicitPadCount: 0 };
   return {
     artifacts: {
       ...artifacts,
@@ -94,7 +132,11 @@ export function optimizeVocalModelArtifacts(artifacts) {
         node: nodes.filter(node => !removed.has(node.name)).map(node => replacements.get(node.name) || node)
       }
     },
-    foldedCount: replacements.size
+    foldedCount: [...replacements.keys()].filter(name => {
+      const node = byName.get(name);
+      return node?.op === "BatchToSpaceND";
+    }).length,
+    explicitPadCount
   };
 }
 
@@ -102,9 +144,11 @@ export function optimizeVocalModelArtifacts(artifacts) {
 export function createVocalModelLoader(tf, source) {
   let enabled = typeof source?.load === "function";
   let foldedCount = 0;
+  let explicitPadCount = 0;
   return {
     get foldedCount() { return foldedCount; },
-    disableOptimization() { enabled = false; foldedCount = 0; },
+    get explicitPadCount() { return explicitPadCount; },
+    disableOptimization() { enabled = false; foldedCount = 0; explicitPadCount = 0; },
     async load() {
       if (!enabled) return tf.loadGraphModel(source);
       try {
@@ -112,12 +156,14 @@ export function createVocalModelLoader(tf, source) {
           load: async () => {
             const result = optimizeVocalModelArtifacts(await source.load());
             foldedCount = result.foldedCount;
+            explicitPadCount = result.explicitPadCount || 0;
             return result.artifacts;
           }
         });
       } catch (error) {
         enabled = false;
         foldedCount = 0;
+        explicitPadCount = 0;
         console.warn("[NextAmp AI] Optimized model load failed; loading original graph", error);
         return tf.loadGraphModel(source);
       }

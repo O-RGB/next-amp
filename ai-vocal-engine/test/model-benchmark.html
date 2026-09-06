@@ -32,7 +32,9 @@ window.runModelValidation = async (backend = 'webgpu', rounds = 24) => {
     const artifacts = await tf.io.browserHTTPRequest('../../next-amp-extension/model/model.json').load();
     const optimized = optimizeVocalModelArtifacts(artifacts);
     state.foldedCount = optimized.foldedCount;
+    state.explicitPadCount = optimized.explicitPadCount;
     if (optimized.foldedCount !== 12) throw new Error('Expected all 12 branches to be optimized');
+    if (optimized.explicitPadCount !== 16) throw new Error('Expected all 16 padding nodes to be folded');
     for (const item of [artifacts, optimized.artifacts]) models.push(await tf.loadGraphModel({ load: async () => item }));
     let seed = 0x51a7;
     const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);

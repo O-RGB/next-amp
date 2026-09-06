@@ -376,6 +376,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
       this.port.postMessage({
         type: "WORKLET_STATUS",
         mode: this.targetMode,
+        generation: this.streamGeneration,
         isAiReady: this.isAiReady,
         readyThreshold: this.readyThreshold,
         aiGain: this.aiGain,
