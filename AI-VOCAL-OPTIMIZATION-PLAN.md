@@ -97,6 +97,7 @@ TensorFlow อธิบายความสัมพันธ์ของ space
 
 - [x] เวลา STFT/normalization, model+readback, iSTFT/OLA แยกจากเวลารอ queue ใน manager telemetry
 - [x] absolute input/target frame, generation, queue depth, stale-drop, resync และ underrun telemetry
+- [x] ใส่ generation stamp ใน worklet PROCESS/RESULT/RESET เพื่อทิ้งผลจาก stream หรือ mode เก่าโดยตรง
 - [x] sample rate จริง, backend, inference p50/p95/p99 และ tensor count มีช่องรายงานใน diagnostics
 - [x] มีช่องรายงาน texture precision ใน diagnostics
 - [ ] เก็บค่า diagnostics จากการใช้งานจริงระหว่าง scenario ยาว
@@ -134,6 +135,7 @@ app เลือก 44.1 kHz เป็นค่าเริ่มต้น แ�
 - [x] สร้าง 15-hop fixture ที่มี transient ตำแหน่งแน่นอนและตรวจ SNR หลัง OLA
 - [x] ตรวจ mask กับ complex spectrum ของ frame เดียวกันสำหรับ depth 1–4
 - [ ] ตรวจการเริ่มเพลง, seek, reset, silence และ chunk ที่ถูกทิ้ง
+- [x] ตรวจ lifecycle contract ของ worklet สำหรับ mode start, sustained silence, missing input, stale/duplicate result และ cadence switch
 
 - [x] ตรวจ OLA tail ข้าม chunk และช่วงหลัง reset ด้วย changing mask sequence ใน delayed alignment fixture
 - [ ] ตรวจสัญญาณเปลี่ยนตามเวลาและรอยต่อเพลงจริง

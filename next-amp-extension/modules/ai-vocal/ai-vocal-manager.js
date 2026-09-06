@@ -99,6 +99,7 @@ export class AIVocalManager {
           {
             type: "CHUNK_PROCESSED",
             chunkIndex,
+            generation: this.streamGeneration,
             outL: outL,
             outR: outR
           },
@@ -935,6 +936,7 @@ export class AIVocalManager {
         {
           type: "CHUNK_PROCESSED",
           chunkIndex,
+          generation,
           outL: outL,
           outR: outR
         },
@@ -973,7 +975,11 @@ export class AIVocalManager {
   async preloadEngine() {
     if (this.isReady || this.engineLoading) return;
     if (this.workletNode) {
-      this.workletNode.port.postMessage({ type: "SET_MODE", mode: "bypass" });
+      this.workletNode.port.postMessage({
+        type: "SET_MODE",
+        mode: "bypass",
+        generation: this.streamGeneration
+      });
     }
     this.setStatus("ORIGINAL (Loading AI...)");
     await this.loadEngine();
@@ -998,7 +1004,11 @@ export class AIVocalManager {
     this.currentMode = "bypass";
     this.setStatus("ORIGINAL");
     if (this.workletNode) {
-      this.workletNode.port.postMessage({ type: "SET_MODE", mode: "bypass" });
+      this.workletNode.port.postMessage({
+        type: "SET_MODE",
+        mode: "bypass",
+        generation: this.streamGeneration
+      });
     }
     console.log("[NextAmp AI] Model unloaded & GPU memory freed");
   }
@@ -1013,7 +1023,11 @@ export class AIVocalManager {
     this.streamChunkFloor = null;
     console.log("[NextAmp AI] Switched engine to:", this.engineType);
     if (this.workletNode) {
-      this.workletNode.port.postMessage({ type: "SET_ENGINE", engineType: this.engineType });
+      this.workletNode.port.postMessage({
+        type: "SET_ENGINE",
+        engineType: this.engineType,
+        generation: this.streamGeneration
+      });
     }
 
     if (this.engineType === "go_native") {
@@ -1072,7 +1086,12 @@ export class AIVocalManager {
       }
     }
     if (this.workletNode) {
-      this.workletNode.port.postMessage({ type: "SET_MODE", mode, engineType: this.engineType });
+      this.workletNode.port.postMessage({
+        type: "SET_MODE",
+        mode,
+        engineType: this.engineType,
+        generation: this.streamGeneration
+      });
     }
   }
 

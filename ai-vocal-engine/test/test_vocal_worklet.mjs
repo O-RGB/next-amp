@@ -49,11 +49,12 @@ assert.equal(chunks.length, 1);
 assert.equal(chunks[0].rawL.length, 7680, 'browser cadence must be 15 hops');
 assert.equal(chunks[0].rawR.length, 7680);
 
-const processed = (chunkIndex, value) => ({
+const processed = (chunkIndex, value, generation) => ({
   type: 'CHUNK_PROCESSED',
   chunkIndex,
   outL: new Float32Array(7680).fill(value),
-  outR: new Float32Array(7680).fill(value)
+  outR: new Float32Array(7680).fill(value),
+  ...(Number.isInteger(generation) ? { generation } : {})
 });
 processor.port.onmessage({ data: processed(0, 0.05) });
 processBlocks(processor, 60);
@@ -83,9 +84,49 @@ const afterBrowserBoundary = messagesOfType(processor, 'PROCESS_CHUNK');
 assert.equal(afterBrowserBoundary.length, beforeBrowserBoundary + 1);
 assert.equal(afterBrowserBoundary.at(-1).rawL.length, 7680);
 
+// A response from an older stream generation must never enter the new queue,
+// even if its chunk index is numerically valid again after a mode switch.
+const generationProcessor = new Processor();
+generationProcessor.port.onmessage({ data: {
+  type: 'SET_MODE', mode: 'karaoke', engineType: 'webgl', generation: 7
+} });
+generationProcessor.port.onmessage({ data: processed(0, 0.05, 6) });
+assert.equal(generationProcessor.outQueueL.length, 0);
+assert.equal(generationProcessor.diagnostics.staleDrops, 1);
+generationProcessor.port.onmessage({ data: processed(0, 0.05, 7) });
+assert.equal(generationProcessor.outQueueL.length, 1);
+
+// Sustained digital silence marks a stream boundary and invalidates the
+// previous generation before a new song starts.
+const silentProcessor = new Processor();
+silentProcessor.port.onmessage({ data: {
+  type: 'SET_MODE', mode: 'karaoke', engineType: 'webgl', generation: 20
+} });
+processBlocks(silentProcessor, 120, 0);
+const reset = messagesOfType(silentProcessor, 'STREAM_RESET').at(-1);
+assert.ok(reset, 'sustained silence must emit STREAM_RESET');
+assert.equal(reset.generation, 21);
+assert.equal(silentProcessor.streamGeneration, 21);
+assert.equal(silentProcessor.outQueueL.length, 0);
+silentProcessor.port.onmessage({ data: processed(0, 0.05, 20) });
+assert.equal(silentProcessor.outQueueL.length, 0, 'old stream response must stay dropped');
+
+// Missing input buffers (e.g. a paused/tearing-down source) also reset the
+// stream instead of retaining old playback state.
+const missingProcessor = new Processor();
+missingProcessor.port.onmessage({ data: {
+  type: 'SET_MODE', mode: 'karaoke', engineType: 'webgl', generation: 30
+} });
+for (let i = 0; i < 128; i++) missingProcessor.process([[]], [output()]);
+assert.equal(missingProcessor.diagnostics.streamResets, 1);
+assert.ok(messagesOfType(missingProcessor, 'STREAM_RESET').at(-1));
+
 console.log(JSON.stringify({
   browserChunkSamples: chunks[0].rawL.length,
   goChunkSamples: goChunks.at(-1).rawL.length,
-  underrunBlocks: processor.diagnostics.underrunBlocks
+  underrunBlocks: processor.diagnostics.underrunBlocks,
+  generationDrops: generationProcessor.diagnostics.staleDrops,
+  silenceResets: silentProcessor.diagnostics.streamResets,
+  missingInputResets: missingProcessor.diagnostics.streamResets
 }));
-console.log('AudioWorklet cadence and underrun concealment passed.');
+console.log('AudioWorklet cadence, underrun concealment, and stream lifecycle passed.');

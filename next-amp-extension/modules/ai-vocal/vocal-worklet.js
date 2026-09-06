@@ -66,6 +66,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.playbackChunkIndex = null;
     this.playbackSamples = 0;
     this.latestInputChunkIndex = null;
+    this.streamGeneration = 0;
 
     this.chunkSeq = 0;
     this.statusCount = 0;
@@ -84,11 +85,16 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (e) => {
       const data = e.data;
       if (data.type === "SET_MODE") {
+        const modeChanged = this.targetMode !== data.mode;
+        const nextGeneration = Number.isInteger(data.generation)
+          ? data.generation : this.streamGeneration + (modeChanged ? 1 : 0);
+        const generationChanged = nextGeneration !== this.streamGeneration;
+        this.streamGeneration = nextGeneration;
         if (data.engineType === "go_native" || data.engineType === "webgl") {
           this.engineType = data.engineType;
           this.setChunkSizeForEngine(this.engineType);
         }
-        if (this.targetMode !== data.mode) {
+        if (this.targetMode !== data.mode || generationChanged) {
           this.diagnostics.modeTransitions++;
           this.targetMode = data.mode;
           // Purge all audio queues and state on ANY mode transition
@@ -120,6 +126,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         }
       } else if (data.type === "SET_ENGINE") {
         const nextEngine = data.engineType === "go_native" ? "go_native" : "webgl";
+        if (Number.isInteger(data.generation)) this.streamGeneration = data.generation;
         if (this.engineType !== nextEngine) {
           this.engineType = nextEngine;
           this.setChunkSizeForEngine(this.engineType);
@@ -181,6 +188,11 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
   handleProcessedChunk(data) {
     if (this.targetMode === "bypass" || !data || !data.outL || !data.outR) return;
 
+    if (Number.isInteger(data.generation) && data.generation !== this.streamGeneration) {
+      this.diagnostics.staleDrops++;
+      return;
+    }
+
     const chunkIndex = Number.isInteger(data.chunkIndex) ? data.chunkIndex : null;
     // Do not allow a browser result that is already far behind live audio to
     // enter the playback queue. Playing it would create a delayed vocal/music
@@ -233,12 +245,14 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.playbackChunkIndex = null;
     this.playbackSamples = 0;
     this.latestInputChunkIndex = null;
+    this.streamGeneration++;
     // Keep chunkSeq monotonic so late responses from the previous song can
     // be rejected without colliding with the new song's chunk indexes.
         this.port.postMessage({
-          type: "STREAM_RESET",
-          nextChunkIndex,
-          reason: "sustained-silence"
+        type: "STREAM_RESET",
+        nextChunkIndex,
+        generation: this.streamGeneration,
+        reason: "sustained-silence"
         });
         this.diagnostics.streamResets++;
   }
@@ -318,6 +332,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           const processMessage = {
             type: "PROCESS_CHUNK",
             chunkIndex,
+            generation: this.streamGeneration,
             rawL: rawL,
             rawR: rawR,
             mode: this.targetMode
