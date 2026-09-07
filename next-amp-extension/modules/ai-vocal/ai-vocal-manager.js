@@ -18,6 +18,7 @@ const DEFAULT_VOCAL_PROFILE = "balanced";
 // main-branch graph path.
 const EXPERIMENTAL_MODEL_AUDIO_CANDIDATES = false;
 const EXACT_MODEL_GRAPH_OPTIMIZATION = true;
+const EXACT_MODEL_OUTPUT_HEAD = true;
 const VOCAL_PROFILES = Object.freeze({
   // Current production candidate: the cadence that was tested as the
   // smoothest on Apple and Windows GTX 1050 Ti.
@@ -793,7 +794,7 @@ export class AIVocalManager {
         // the first half of this shared 32-frame output window. The second
         // half is the already-computed tail used by overlap consensus. GO
         // keeps its original ONNX path.
-        outputHead: EXPERIMENTAL_MODEL_AUDIO_CANDIDATES ? {
+        outputHead: EXACT_MODEL_OUTPUT_HEAD ? {
           start: 32,
           frames: 32,
           bins: _,

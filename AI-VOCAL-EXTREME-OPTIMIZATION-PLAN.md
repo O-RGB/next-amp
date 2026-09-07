@@ -269,9 +269,9 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 
 - [x] เปิดเฉพาะ Web exact graph folding ที่คง weights/สมการเดิม: พับ 12 atrous branches และ 16 explicit pads; output-head crop และ overlap consensus ยังปิด production
 - [ ] สร้าง Web/ONNX model variant ที่รวม Slice → Transpose/reshape → Sigmoid เป็น output head
-- [ ] Web exact candidate รวม crop → Transpose → Reshape → Sigmoid เป็น output head `[2,32,1024]` สำหรับ Smooth/Detail ร่วมกัน (active + next tail) — ปิด production ชั่วคราวหลังยังไม่มี WebGPU/WebGL listening gate
+- [x] Web exact candidate รวม crop → Transpose → Reshape → Sigmoid เป็น output head `[2,32,1024]` สำหรับ Smooth/Detail ร่วมกัน (active + next tail) — เปิด production พร้อม fallback หลัง CPU equivalence gate; ยังรอ WebGPU/WebGL listening gate
 - [ ] GO output head แบบ runtime rewrite เหลือ `[1,1024,32,2]` (active + next tail) — ปิด production ชั่วคราวหลังยังไม่มี provider/GPU listening gate
-- [ ] Web output head ลดผลลัพธ์จาก 64 เป็น shared 32 frames — ปิด production ชั่วคราวเพื่อคืน full-output quality baseline
+- [x] Web output head ลดผลลัพธ์จาก 64 เป็น shared 32 frames — เปิด production; GO ยังคง full-output quality baseline
 - [x] คง model IO เป็น FP32 ใน exact candidate
 - [x] เทียบ logits ก่อน sigmoid, mask หลัง sigmoid และ PCM ระหว่าง compact output กับ full-output reference ใน native opt-in regression; ยังไม่เพียงพอแทนการฟังบน backend จริง
 
@@ -279,7 +279,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 
 ### 3B. ROI-specialized decoder graph
 
-- [ ] เพิ่ม narrow exact ROI candidate ที่ final 3x3 decoder layer + final 1x1 projection ของ Web/GO: ใช้ halo `[31..63]` แล้วเลือกผล `[32..63]` — ปิด production ชั่วคราวจนผ่าน backend listening gate
+- [x] เพิ่ม narrow exact ROI candidate ที่ final 3x3 decoder layer + final 1x1 projection ของ Web: ใช้ halo `[31..63]` แล้วเลือกผล `[32..63]`; เปิดเฉพาะ Web พร้อม fallback, GO ยังปิดจนผ่าน provider/GPU listening gate
 - [ ] เขียน static shape/dependency analyzer ย้อนจาก target output frames
 - [ ] สำหรับ Conv/Depthwise/Pool/Resize/Concat/Pad คำนวณ input halo ที่จำเป็นแบบ exact
 - [ ] Crop feature maps ใน decoder เฉพาะ ROI + receptive-field halo แทนคำนวณ time dimension เต็ม 64 ทุกชั้น
