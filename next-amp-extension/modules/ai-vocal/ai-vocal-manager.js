@@ -39,6 +39,7 @@ const WEBGPU_BACKEND_ASSET = "assets/libs/js/tf-backend-webgpu.min.js";
 const MAX_BROWSER_PENDING_CHUNKS = 2; // Keep at most ~348ms pending; drop stale work under interruption.
 const DIAGNOSTIC_SAMPLE_LIMIT = 120;
 const GO_STATUS_UPDATE_INTERVAL_MS = 500; // UI/IPC only; audio response cadence stays unchanged.
+const GO_LATENCY_SAMPLE_CAPACITY = 24;
 let webGpuBackendPromise = null;
 
 function pushDiagnosticSample(samples, value) {
@@ -191,7 +192,10 @@ export class AIVocalManager {
     this.isHardwareSlow = false;
     this.modelGraphFoldedBranches = 0;
     this.modelGraphExplicitPads = 0;
-    this.goLatencySamples = [];
+    this.goLatencySamples = new Float64Array(GO_LATENCY_SAMPLE_CAPACITY);
+    this.goLatencySortBuffer = new Float64Array(GO_LATENCY_SAMPLE_CAPACITY);
+    this.goLatencySampleCount = 0;
+    this.goLatencySamplePos = 0;
     this.goBufferTarget = null;
     this.lastGoStatusAt = 0;
     this.diagnostics = {
@@ -257,18 +261,39 @@ export class AIVocalManager {
   }
 
   resetGoBufferTuning() {
-    this.goLatencySamples = [];
+    this.goLatencySampleCount = 0;
+    this.goLatencySamplePos = 0;
     this.goBufferTarget = null;
+  }
+
+  getSortedGoLatencyCount() {
+    const count = this.goLatencySampleCount;
+    for (let i = 0; i < count; i++) {
+      this.goLatencySortBuffer[i] = this.goLatencySamples[i];
+    }
+    // Sort in-place so each processed response does not allocate a spread
+    // array. The window is capped at 24 samples, making insertion sort cheap.
+    for (let i = 1; i < count; i++) {
+      const value = this.goLatencySortBuffer[i];
+      let j = i - 1;
+      while (j >= 0 && this.goLatencySortBuffer[j] > value) {
+        this.goLatencySortBuffer[j + 1] = this.goLatencySortBuffer[j];
+        j--;
+      }
+      this.goLatencySortBuffer[j + 1] = value;
+    }
+    return count;
   }
 
   observeGoLatency(rttMs) {
     if (!Number.isFinite(rttMs) || rttMs <= 0) return;
-    if (this.goLatencySamples.length >= 24) this.goLatencySamples.shift();
-    this.goLatencySamples.push(rttMs);
-    if (this.goLatencySamples.length < 8 || this.engineType !== "go_native" || !this.workletNode) return;
+    this.goLatencySamples[this.goLatencySamplePos] = rttMs;
+    this.goLatencySamplePos = (this.goLatencySamplePos + 1) % GO_LATENCY_SAMPLE_CAPACITY;
+    if (this.goLatencySampleCount < GO_LATENCY_SAMPLE_CAPACITY) this.goLatencySampleCount++;
+    if (this.goLatencySampleCount < 8 || this.engineType !== "go_native" || !this.workletNode) return;
 
-    const sorted = [...this.goLatencySamples].sort((a, b) => a - b);
-    const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)];
+    const sampleCount = this.getSortedGoLatencyCount();
+    const p95 = this.goLatencySortBuffer[Math.min(sampleCount - 1, Math.ceil(sampleCount * 0.95) - 1)];
     const chunkMs = 8192 / (this.audioCtx?.sampleRate || 44100) * 1000;
     // Only lower startup buffering after measured deadline margin exists. On
     // a slower provider, retain a larger ceiling for short OS/GPU spikes while
@@ -1327,13 +1352,13 @@ export class AIVocalManager {
     const chunkSamples = this.engineType === "go_native" ? 8192 : processing.chunkSamples;
     const sampleRate = this.audioCtx?.sampleRate || 44100;
     let goAdaptiveP95Ms = null;
-    if (this.goLatencySamples.length > 0) {
-      const sortedGoLatency = [...this.goLatencySamples].sort((a, b) => a - b);
+    if (this.goLatencySampleCount > 0) {
+      const sampleCount = this.getSortedGoLatencyCount();
       const p95Index = Math.min(
-        sortedGoLatency.length - 1,
-        Math.ceil(sortedGoLatency.length * 0.95) - 1
+        sampleCount - 1,
+        Math.ceil(sampleCount * 0.95) - 1
       );
-      goAdaptiveP95Ms = Number(sortedGoLatency[p95Index].toFixed(1));
+      goAdaptiveP95Ms = Number(this.goLatencySortBuffer[p95Index].toFixed(1));
     }
     return {
       version: 1,
@@ -1364,7 +1389,7 @@ export class AIVocalManager {
         backpressureDrops: this.goClient.backpressureDrops
       },
       goAdaptive: {
-        samples: this.goLatencySamples.length,
+        samples: this.goLatencySampleCount,
         p95Ms: goAdaptiveP95Ms,
         target: this.goBufferTarget
       },

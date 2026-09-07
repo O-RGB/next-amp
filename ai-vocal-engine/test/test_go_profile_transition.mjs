@@ -27,6 +27,7 @@ const context = {
   Array,
   Date,
   Float32Array,
+  Float64Array,
   Int32Array,
   Map,
   Math,
@@ -98,10 +99,23 @@ statusManager.goClient.onChunkProcessed(2, new Float32Array(1), new Float32Array
 assert.notEqual(statusManager.getStatus(), firstStatus,
   'GO status/UI must refresh after the throttle interval');
 
+const latencyManager = new context.AIVocalManager({ sampleRate: 44100 });
+latencyManager.engineType = 'go_native';
+latencyManager.workletNode = { port: { postMessage() {} } };
+for (let i = 0; i < 24; i++) latencyManager.observeGoLatency(20 + i);
+assert.equal(latencyManager.goLatencySampleCount, 24,
+  'GO adaptive latency window must stay fixed at 24 samples');
+latencyManager.observeGoLatency(99);
+assert.equal(latencyManager.goLatencySampleCount, 24,
+  'GO adaptive latency window must not grow after reaching capacity');
+assert.equal(latencyManager.getDiagnostics().goAdaptive.samples, 24,
+  'GO diagnostics must report the fixed latency window count');
+
 console.log(JSON.stringify({
   profileResets: manager.goClient.resetCalls,
   profileMessages: manager.workletNode.port.messages.length,
   finalProfile: manager.vocalProfile,
-  goStatusCadenceMs: 500
+  goStatusCadenceMs: 500,
+  goLatencyWindow: latencyManager.goLatencySampleCount
 }));
 console.log('GO profile transition boundary guard passed.');
