@@ -20,22 +20,30 @@ function makeMask(current, tail) {
 
 test('overlap consensus only moves Karaoke masks toward agreed vocal evidence', () => {
   const mask = makeMask(0.8, 0.4);
-  const previousTail = new Float32Array(2 * ACTIVE_FRAMES * BINS).fill(0.2);
+  const previousTail = new Float32Array(2 * ACTIVE_FRAMES * BINS).fill(0.3);
 
   const changed = applyOverlapConsensusToMask(
     mask, HEAD_FRAMES, 0, ACTIVE_FRAMES, previousTail, true, 1, BINS
   );
 
-  assert.equal(changed, true);
-  assert.ok(Math.abs(mask[0] - 0.59) < 1e-6);
+  assert.equal(changed, false);
+  assert.ok(Math.abs(mask[0] - 0.8) < 1e-6);
   assert.ok(Math.abs(mask[ACTIVE_FRAMES * BINS] - 0.4) < 1e-6);
   assert.ok(Math.abs(previousTail[0] - 0.4) < 1e-6);
+
+  const agreedMask = makeMask(0.4, 0.4);
+  const agreedTail = new Float32Array(2 * ACTIVE_FRAMES * BINS).fill(0.3);
+  assert.equal(
+    applyOverlapConsensusToMask(agreedMask, HEAD_FRAMES, 0, ACTIVE_FRAMES, agreedTail, true, 1, BINS),
+    true
+  );
+  assert.ok(Math.abs(agreedMask[0] - 0.365) < 1e-6);
 });
 
 test('uncertain, acapella, and first-window masks preserve the baseline', () => {
   const mask = makeMask(0.8, 0.4);
   const original = mask.slice();
-  const previousTail = new Float32Array(2 * ACTIVE_FRAMES * BINS).fill(0.2);
+  const previousTail = new Float32Array(2 * ACTIVE_FRAMES * BINS).fill(0.3);
 
   assert.equal(
     applyOverlapConsensusToMask(mask, HEAD_FRAMES, 0, ACTIVE_FRAMES, previousTail, false, 1, BINS),
@@ -43,12 +51,12 @@ test('uncertain, acapella, and first-window masks preserve the baseline', () => 
   );
   assert.deepEqual(mask, original);
 
-  const disagreement = makeMask(0.4, 0.4);
+  const disagreement = makeMask(0.8, 0.4);
   assert.equal(
     applyOverlapConsensusToMask(disagreement, HEAD_FRAMES, 0, ACTIVE_FRAMES, previousTail, true, 1, BINS),
     false
   );
-  assert.ok(Math.abs(disagreement[0] - 0.4) < 1e-6);
+  assert.ok(Math.abs(disagreement[0] - 0.8) < 1e-6);
 
   const acapella = makeMask(0.8, 0.4);
   assert.equal(

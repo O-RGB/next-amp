@@ -4,7 +4,8 @@
 // allowing two independent contexts to agree before suppressing more vocal
 // leakage. The current prediction remains the fallback for every disagreement.
 
-export const OVERLAP_CONSENSUS_DELTA = 0.08;
+export const OVERLAP_CONSENSUS_VOCAL_MAX = 0.45;
+export const OVERLAP_CONSENSUS_AGREEMENT = 0.12;
 export const OVERLAP_CONSENSUS_BLEND = 0.35;
 
 /**
@@ -14,9 +15,10 @@ export const OVERLAP_CONSENSUS_BLEND = 0.35;
  * previousTail layout: [channel][activeFrame][frequencyBin]
  *
  * The network mask is the accompaniment mask. For Karaoke, a lower mask means
- * stronger vocal evidence. We only move the current mask toward that lower
- * value when the previous context agrees by a meaningful margin. Acapella and
- * uncertain/disagreeing bins keep the exact current baseline.
+ * stronger vocal evidence. We only move the current mask slightly toward the
+ * previous value when both contexts are already in the vocal-evidence range
+ * and agree closely. Instrument/high-mask bins and disagreements keep the
+ * exact current baseline.
  */
 export function applyOverlapConsensusToMask(
   maskData,
@@ -57,7 +59,9 @@ export function applyOverlapConsensusToMask(
         if (modeCode === 1 && previousTailValid) {
           const previous = previousTail[previousFrame + bin];
           const delta = current - previous;
-          if (delta > OVERLAP_CONSENSUS_DELTA) {
+          if (current <= OVERLAP_CONSENSUS_VOCAL_MAX &&
+              previous <= OVERLAP_CONSENSUS_VOCAL_MAX &&
+              delta > 0 && delta <= OVERLAP_CONSENSUS_AGREEMENT) {
             maskData[currentFrame + bin] = current - (delta * OVERLAP_CONSENSUS_BLEND);
             changed = true;
           }

@@ -42,7 +42,8 @@ static float g_mask[2][MAX_FRAMES * NUM_BINS];
 static float g_overlap_tail[2][DEFAULT_CHUNK_FRAMES * NUM_BINS];
 static int g_overlap_tail_valid = 0;
 
-#define OVERLAP_CONSENSUS_DELTA 0.08f
+#define OVERLAP_CONSENSUS_VOCAL_MAX 0.45f
+#define OVERLAP_CONSENSUS_AGREEMENT 0.12f
 #define OVERLAP_CONSENSUS_BLEND 0.35f
 
 // Complex Spectrum Storage for current chunk
@@ -544,10 +545,14 @@ void stft_extract_sigmoid_mask_overlap(const float* raw_out, int slice_start, in
             if (mode == 1 && has_tail && g_overlap_tail_valid) {
                 float delta0 = current0 - g_overlap_tail[0][f * NUM_BINS + k];
                 float delta1 = current1 - g_overlap_tail[1][f * NUM_BINS + k];
-                if (delta0 > OVERLAP_CONSENSUS_DELTA) {
+                if (current0 <= OVERLAP_CONSENSUS_VOCAL_MAX &&
+                    g_overlap_tail[0][f * NUM_BINS + k] <= OVERLAP_CONSENSUS_VOCAL_MAX &&
+                    delta0 > 0.0f && delta0 <= OVERLAP_CONSENSUS_AGREEMENT) {
                     current0 -= delta0 * OVERLAP_CONSENSUS_BLEND;
                 }
-                if (delta1 > OVERLAP_CONSENSUS_DELTA) {
+                if (current1 <= OVERLAP_CONSENSUS_VOCAL_MAX &&
+                    g_overlap_tail[1][f * NUM_BINS + k] <= OVERLAP_CONSENSUS_VOCAL_MAX &&
+                    delta1 > 0.0f && delta1 <= OVERLAP_CONSENSUS_AGREEMENT) {
                     current1 -= delta1 * OVERLAP_CONSENSUS_BLEND;
                 }
             }
