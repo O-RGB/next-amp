@@ -27,18 +27,18 @@ test('browser IO loads optimized topology and can reload original after a driver
 test('exact Web output head is exposed and can be disabled with the original graph', async () => {
   const tf = { loadGraphModel: async handler => handler.load() };
   const loader = createVocalModelLoader(tf, source, {
-    outputHead: { start: 32, frames: 17, bins: 1024 }
+    outputHead: { start: 32, frames: 32, bins: 1024 }
   });
   const optimized = await loader.load();
   assert.deepEqual(loader.outputHead, {
     start: 32,
-    frames: 17,
+    frames: 32,
     bins: 1024,
     inputFrames: 64,
     activation: 'sigmoid',
     layout: '[2,frames,bins]'
   });
-  assert.equal(optimized.signature.outputs.output_0.tensorShape.dim[1].size, '17');
+  assert.equal(optimized.signature.outputs.output_0.tensorShape.dim[1].size, '32');
   loader.disableOptimization();
   assert.equal(loader.outputHead, null);
   assert.equal(await loader.load(), artifacts);

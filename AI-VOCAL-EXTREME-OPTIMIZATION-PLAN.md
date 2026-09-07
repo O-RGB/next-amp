@@ -391,21 +391,21 @@ ONNX Runtime ระบุว่า quantization ไม่ lossless และอ�
 - [ ] candidate A: เลือก prediction จากตำแหน่งที่ calibrated ว่าแม่นสุดต่อ absolute frame
 - [ ] candidate B: center/reliability-weighted mean เฉพาะ frame ที่ซ้อนกัน โดยไม่เพิ่ม future lookahead
 - [ ] candidate C: weighted median หรือ trimmed consensus เพื่อไม่ให้ prediction หลุดหนึ่ง window ทำเสียงร้องเด้งกลับ
-- [ ] candidate D: conservative suppression เฉพาะ bin ที่หลาย context เห็นตรงกันว่าเป็น vocal leakage; ถ้าความเห็นขัดกันให้ใช้ mask baseline เพื่อรักษาเครื่องดนตรี
-- [ ] จำกัด cache ด้วย absolute frame และลบทันทีเมื่อ frame ถูก synthesize; ห้ามให้ memory/latency โตตามเวลา
-- [ ] reset cache เมื่อ seek, pause, song/generation เปลี่ยน, backend switch หรือ resync
-- [ ] Web อ่านเพิ่มเฉพาะ frame ที่ candidate ต้องใช้ ไม่ดึง output 64 frames ทั้งก้อนโดยไม่มี benchmark
+- [x] candidate D: conservative suppression เฉพาะ bin ที่หลาย context เห็นตรงกันว่าเป็น vocal leakage; ถ้าความเห็นขัดกันให้ใช้ mask baseline เพื่อรักษาเครื่องดนตรี
+- [x] จำกัด cache เป็น 1 bounded chunk และล้าง/invalid เมื่อไม่มี context ใหม่; ห้ามให้ memory/latency โตตามเวลา
+- [x] reset cache เมื่อ stream/generation เปลี่ยน, silence boundary, backend fallback หรือ resync
+- [x] Web อ่านเพิ่มเฉพาะ frame ที่ candidate ต้องใช้: output head 32 frame (active + next tail) แทน output 64 ทั้งก้อน
 - [ ] วัด extra CPU, readback, memory และ p99; budget ของ enhancement ต้องต่ำกว่า headroom ที่ Batch 1–5 ประหยัดได้
 
 ### 7C. Calibrate mask เพื่อกด residual vocal โดยไม่หั่นดนตรีทั้งย่าน
 
 - [ ] ทดลอง output-logit bias/temperature แบบ offline sweep เป็น baseline การศึกษาเท่านั้น
 - [ ] ทดลอง calibration แยกตาม frequency และ reliability เฉพาะบริเวณที่ tune set ยืนยันว่า model ปล่อย vocal ซ้ำ
-- [ ] ใช้ agreement/confidence gate จาก 7B เปิด suppression เพิ่มเฉพาะจุด; ห้ามลด mask ทั่วทั้งเพลง
+- [x] ใช้ agreement/confidence gate จาก 7B เปิด suppression เพิ่มเฉพาะจุด; ห้ามลด mask ทั่วทั้งเพลง
 - [ ] จำกัด delta ของ mask ต่อ bin และทำ transition ใน logit domain เพื่อกัน zipper/pumping
 - [ ] ห้ามใช้ center-channel cancellation เป็น default เพราะลบ kick, bass, snare และเครื่องดนตรีกลางพร้อมเสียงร้อง
 - [ ] ห้ามใช้ blanket `mask^gamma`, global threshold, min-mask หรือ hard binary mask เป็น production หากไม่มีหลักฐานว่า instrumental ไม่เสีย
-- [ ] เก็บ current mask เป็น fallback ต่อ frame เมื่อ confidence ต่ำหรือข้อมูล context ไม่ครบ
+- [x] เก็บ current mask เป็น fallback ต่อ frame เมื่อ confidence ต่ำหรือข้อมูล context ไม่ครบ
 
 ### 7D. Gate สำหรับคำว่า “ตัดเสียงร้องดีขึ้น”
 

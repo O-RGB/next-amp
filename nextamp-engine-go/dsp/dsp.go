@@ -133,6 +133,9 @@ func (e *Engine) StepBackward(rawOutput []float32, delayChunks int, mode int, st
 // delayed target spectrum is passed through unchanged; it is already below
 // the digital-silence floor, so this preserves the exact stream cadence.
 func (e *Engine) StepBackwardSilence(delayChunks int) ([]float32, []float32) {
+	// A skipped prediction is a hard context boundary for overlap consensus;
+	// never compare the next audible chunk with a mask from before silence.
+	C.stft_invalidate_mask_overlap()
 	return e.stepBackward(nil, delayChunks, 2, 0.0, false)
 }
 
@@ -140,14 +143,6 @@ func (e *Engine) stepBackward(rawOutput []float32, delayChunks int, mode int, st
 	sliceStart := 48 - (16 * delayChunks)
 	if sliceStart < 0 || sliceStart > 48 {
 		sliceStart = 48
-	}
-
-	if extractMask {
-		if len(rawOutput) < NumBins*MaxFrames*2 {
-			return nil, nil
-		}
-		// Fast C SIMD Sigmoid extraction (0.04ms)
-		C.stft_extract_sigmoid_mask((*C.float)(unsafe.Pointer(&rawOutput[0])), C.int(sliceStart))
 	}
 
 	// The model outputs the accompaniment/instrumental mask. Keep this mapping
@@ -159,6 +154,14 @@ func (e *Engine) stepBackward(rawOutput []float32, delayChunks int, mode int, st
 		cMode = 1
 	case 2: // Acapella: keep vocals, remove accompaniment.
 		cMode = 0
+	}
+	if extractMask {
+		if len(rawOutput) < NumBins*MaxFrames*2 {
+			return nil, nil
+		}
+		// Extract the active slice and its next-window tail in one C pass. The
+		// bounded tail is reused by the next chunk without another inference.
+		C.stft_extract_sigmoid_mask_overlap((*C.float)(unsafe.Pointer(&rawOutput[0])), C.int(sliceStart), C.int(cMode))
 	}
 	if !extractMask {
 		cMode = 2

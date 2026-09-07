@@ -16,13 +16,13 @@ const original = {
 const before = JSON.stringify(original.modelTopology);
 const { artifacts: optimized, foldedCount, explicitPadCount } = optimizeVocalModelArtifacts(original);
 const outputHeadResult = optimizeVocalModelArtifacts(original, {
-  outputHead: { start: 32, frames: 17, bins: 1024 }
+  outputHead: { start: 32, frames: 32, bins: 1024 }
 });
 assert.equal(foldedCount, 12);
 assert.equal(explicitPadCount, 16);
 assert.deepEqual(outputHeadResult.outputHead, {
   start: 32,
-  frames: 17,
+  frames: 32,
   bins: 1024,
   inputFrames: 64,
   activation: 'sigmoid',
@@ -88,10 +88,10 @@ try {
   const headData = await headOutput.data();
   let maxHeadError = 0;
   for (let bin = 0; bin < 1024; bin++) {
-    for (let frame = 0; frame < 17; frame++) {
+    for (let frame = 0; frame < 32; frame++) {
       for (let channel = 0; channel < 2; channel++) {
         const fullIndex = ((bin * 64) + frame + 32) * 2 + channel;
-        const headIndex = (channel * 17 + frame) * 1024 + bin;
+        const headIndex = (channel * 32 + frame) * 1024 + bin;
         const expected = 1 / (1 + Math.exp(-fullData[fullIndex]));
         maxHeadError = Math.max(maxHeadError, Math.abs(expected - headData[headIndex]));
       }

@@ -8,7 +8,8 @@ const source = fs.readFileSync(
 )
   .replace('import { GoEngineClient } from "./go-engine-client.js";\n', '')
   .replace('import { createVocalModelLoader } from "./model-optimizer.mjs";\n', '')
-  .replace('export class AIVocalManager', 'class AIVocalManager') +
+  .replace('import { applyOverlapConsensusToMask } from "./overlap-consensus.mjs";\n', '')
+  .replace('export class AIVocalManager', 'const applyOverlapConsensusToMask = () => false;\n\nclass AIVocalManager') +
   '\nthis.AIVocalManager = AIVocalManager;';
 
 class StubGoEngineClient {

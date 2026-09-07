@@ -37,6 +37,14 @@ static float g_magnitudes[2][MAX_FRAMES * NUM_BINS];
 // Mask from Neural Network: [2 channels][MAX_FRAMES][NUM_BINS]
 static float g_mask[2][MAX_FRAMES * NUM_BINS];
 
+// Tail predictions are the next chunk's active window. Keep only one bounded
+// chunk so a long-running stream cannot grow memory or latency.
+static float g_overlap_tail[2][DEFAULT_CHUNK_FRAMES * NUM_BINS];
+static int g_overlap_tail_valid = 0;
+
+#define OVERLAP_CONSENSUS_DELTA 0.08f
+#define OVERLAP_CONSENSUS_BLEND 0.35f
+
 // Complex Spectrum Storage for current chunk
 static float g_spec_real[2][MAX_FRAMES][NUM_BINS];
 static float g_spec_imag[2][MAX_FRAMES][NUM_BINS];
@@ -183,6 +191,7 @@ void stft_reset(void) {
     memset(g_output_pcm, 0, sizeof(g_output_pcm));
     memset(g_magnitudes, 0, sizeof(g_magnitudes));
     memset(g_mask, 0, sizeof(g_mask));
+    memset(g_overlap_tail, 0, sizeof(g_overlap_tail));
     memset(g_spec_real, 0, sizeof(g_spec_real));
     memset(g_spec_imag, 0, sizeof(g_spec_imag));
     memset(g_queue_real, 0, sizeof(g_queue_real));
@@ -192,6 +201,7 @@ void stft_reset(void) {
     memset(g_norm_input, 0, sizeof(g_norm_input));
     g_chunk_peak = 1e-5f;
     g_queue_head = 0;
+    g_overlap_tail_valid = 0;
 }
 
 float* stft_get_input_ptr(int ch) {
@@ -508,4 +518,57 @@ void stft_extract_sigmoid_mask(const float* raw_out, int slice_start) {
             g_mask[1][f * NUM_BINS + k] = 1.0f / (1.0f + expf(-v1));
         }
     }
+}
+
+// Reuse the model's already-computed tail as a second context for the next
+// chunk. The previous tail and current slice refer to the same absolute audio
+// frames when the native engine uses one-chunk lookahead. Only Karaoke (mode 1)
+// gets the conservative extra suppression; every disagreement keeps current.
+void stft_extract_sigmoid_mask_overlap(const float* raw_out, int slice_start, int mode) {
+    if (slice_start < 0 || slice_start > MAX_FRAMES - DEFAULT_CHUNK_FRAMES) {
+        slice_start = MAX_FRAMES - DEFAULT_CHUNK_FRAMES;
+    }
+    const int has_tail = slice_start + DEFAULT_CHUNK_FRAMES * 2 <= MAX_FRAMES;
+
+    for (int k = 0; k < NUM_BINS; k++) {
+        int bin_offset = k * MAX_FRAMES * 2;
+        for (int f = 0; f < DEFAULT_CHUNK_FRAMES; f++) {
+            int current_offset = bin_offset + (slice_start + f) * 2;
+            float v0 = raw_out[current_offset];
+            float v1 = raw_out[current_offset + 1];
+            if (v0 > 15.0f) v0 = 15.0f; else if (v0 < -15.0f) v0 = -15.0f;
+            if (v1 > 15.0f) v1 = 15.0f; else if (v1 < -15.0f) v1 = -15.0f;
+
+            float current0 = 1.0f / (1.0f + expf(-v0));
+            float current1 = 1.0f / (1.0f + expf(-v1));
+            if (mode == 1 && has_tail && g_overlap_tail_valid) {
+                float delta0 = current0 - g_overlap_tail[0][f * NUM_BINS + k];
+                float delta1 = current1 - g_overlap_tail[1][f * NUM_BINS + k];
+                if (delta0 > OVERLAP_CONSENSUS_DELTA) {
+                    current0 -= delta0 * OVERLAP_CONSENSUS_BLEND;
+                }
+                if (delta1 > OVERLAP_CONSENSUS_DELTA) {
+                    current1 -= delta1 * OVERLAP_CONSENSUS_BLEND;
+                }
+            }
+            g_mask[0][f * NUM_BINS + k] = current0;
+            g_mask[1][f * NUM_BINS + k] = current1;
+            if (has_tail) {
+                int tail_offset = bin_offset + (slice_start + DEFAULT_CHUNK_FRAMES + f) * 2;
+                float t0 = raw_out[tail_offset];
+                float t1 = raw_out[tail_offset + 1];
+                if (t0 > 15.0f) t0 = 15.0f; else if (t0 < -15.0f) t0 = -15.0f;
+                if (t1 > 15.0f) t1 = 15.0f; else if (t1 < -15.0f) t1 = -15.0f;
+                // Cache the raw tail prediction, never the calibrated current
+                // mask, so the next merge always has an independent baseline.
+                g_overlap_tail[0][f * NUM_BINS + k] = 1.0f / (1.0f + expf(-t0));
+                g_overlap_tail[1][f * NUM_BINS + k] = 1.0f / (1.0f + expf(-t1));
+            }
+        }
+    }
+    g_overlap_tail_valid = has_tail;
+}
+
+void stft_invalidate_mask_overlap(void) {
+    g_overlap_tail_valid = 0;
 }
