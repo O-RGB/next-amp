@@ -34,6 +34,7 @@ void stft_apply_mask_delayed(int delay_chunks, int num_frames, int mode, float s
 void stft_backward(int num_frames);
 
 void stft_extract_sigmoid_mask(const float* raw_out, int slice_start);
+void stft_extract_sigmoid_mask_layout(const float* raw_out, int slice_start, int input_frames);
 void stft_extract_sigmoid_mask_overlap(const float* raw_out, int slice_start, int mode);
 void stft_extract_sigmoid_mask_overlap_layout(const float* raw_out, int slice_start, int input_frames, int mode);
 void stft_invalidate_mask_overlap(void);

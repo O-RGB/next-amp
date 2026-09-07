@@ -30,9 +30,10 @@ const (
 	Version            = "2.3.0-eco"
 	HeaderBytes        = 8
 	DigitalSilencePeak = 3.25e-5
-	// Keep the native model output on the pre-extreme-optimization quality
-	// path until compact-output audio is validated on every provider/GPU.
-	CompactModelOutputEnabled = false
+	// The compact head is output-only: it keeps the same FP32 model weights and
+	// selected frames while cutting the native output/readback in half. The
+	// overlap-consensus quality candidate remains disabled independently.
+	CompactModelOutputEnabled = true
 )
 
 var upgrader = websocket.Upgrader{

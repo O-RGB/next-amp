@@ -270,7 +270,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [x] เปิดเฉพาะ Web exact graph folding ที่คง weights/สมการเดิม: พับ 12 atrous branches และ 16 explicit pads; output-head crop และ overlap consensus ยังปิด production
 - [ ] สร้าง Web/ONNX model variant ที่รวม Slice → Transpose/reshape → Sigmoid เป็น output head
 - [x] Web exact candidate รวม crop → Transpose → Reshape → Sigmoid เป็น output head `[2,32,1024]` สำหรับ Smooth/Detail ร่วมกัน (active + next tail) — เปิด production พร้อม fallback หลัง CPU equivalence gate; ยังรอ WebGPU/WebGL listening gate
-- [ ] GO output head แบบ runtime rewrite เหลือ `[1,1024,32,2]` (active + next tail) — ปิด production ชั่วคราวหลังยังไม่มี provider/GPU listening gate
+- [x] GO output head แบบ runtime rewrite เหลือ `[1,1024,32,2]` (active + next tail) — เปิด production พร้อม full-output fallback; overlap consensus ยังปิดจนผ่าน provider/GPU listening gate
 - [x] Web output head ลดผลลัพธ์จาก 64 เป็น shared 32 frames — เปิด production; GO ยังคง full-output quality baseline
 - [x] คง model IO เป็น FP32 ใน exact candidate
 - [x] เทียบ logits ก่อน sigmoid, mask หลัง sigmoid และ PCM ระหว่าง compact output กับ full-output reference ใน native opt-in regression; ยังไม่เพียงพอแทนการฟังบน backend จริง

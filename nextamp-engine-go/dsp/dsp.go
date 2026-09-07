@@ -162,12 +162,23 @@ func (e *Engine) stepBackward(rawOutput []float32, delayChunks int, mode int, st
 	}
 	if extractMask {
 		if !OverlapConsensusEnabled {
-			if len(rawOutput) != NumBins*MaxFrames*2 {
+			switch len(rawOutput) {
+			case NumBins * MaxFrames * 2:
+				C.stft_extract_sigmoid_mask(
+					(*C.float)(unsafe.Pointer(&rawOutput[0])), C.int(sliceStart),
+				)
+			case NumBins * CompactFrames * 2:
+				// Compact output is the exact absolute frame window 32..63.
+				// GO's one-chunk lookahead consumes local frames 0..15.
+				if delayChunks != 1 {
+					return nil, nil
+				}
+				C.stft_extract_sigmoid_mask_layout(
+					(*C.float)(unsafe.Pointer(&rawOutput[0])), 0, C.int(CompactFrames),
+				)
+			default:
 				return nil, nil
 			}
-			C.stft_extract_sigmoid_mask(
-				(*C.float)(unsafe.Pointer(&rawOutput[0])), C.int(sliceStart),
-			)
 		} else {
 			inputFrames := MaxFrames
 			rawSliceStart := sliceStart

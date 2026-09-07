@@ -503,12 +503,15 @@ float stft_get_vocal_energy(int num_frames) {
 }
 
 // Ultra-fast Hardware Vectorized Sigmoid Mask Extractor (0.04ms)
-void stft_extract_sigmoid_mask(const float* raw_out, int slice_start) {
-    if (slice_start < 0 || slice_start > MAX_FRAMES - DEFAULT_CHUNK_FRAMES) {
-        slice_start = 48; // fallback 0-delay
+void stft_extract_sigmoid_mask_layout(const float* raw_out, int slice_start, int input_frames) {
+    if (input_frames != MAX_FRAMES && input_frames != DEFAULT_CHUNK_FRAMES * 2) {
+        input_frames = MAX_FRAMES;
+    }
+    if (slice_start < 0 || slice_start > input_frames - DEFAULT_CHUNK_FRAMES) {
+        slice_start = input_frames - DEFAULT_CHUNK_FRAMES;
     }
     for (int k = 0; k < NUM_BINS; k++) {
-        int bin_offset = k * MAX_FRAMES * 2;
+        int bin_offset = k * input_frames * 2;
         for (int f = 0; f < DEFAULT_CHUNK_FRAMES; f++) {
             int frame_offset = bin_offset + (slice_start + f) * 2;
             float v0 = raw_out[frame_offset];
@@ -519,6 +522,10 @@ void stft_extract_sigmoid_mask(const float* raw_out, int slice_start) {
             g_mask[1][f * NUM_BINS + k] = 1.0f / (1.0f + expf(-v1));
         }
     }
+}
+
+void stft_extract_sigmoid_mask(const float* raw_out, int slice_start) {
+    stft_extract_sigmoid_mask_layout(raw_out, slice_start, MAX_FRAMES);
 }
 
 // Reuse the model's already-computed tail as a second context for the next
