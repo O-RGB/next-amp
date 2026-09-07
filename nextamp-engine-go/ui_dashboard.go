@@ -44,6 +44,8 @@ type Dashboard struct {
 	startTime  time.Time
 	metrics    AudioMetrics
 	metricsMu  sync.RWMutex
+	memStats   runtime.MemStats
+	memStatsAt time.Time
 	stopChan   chan struct{}
 	running    atomic.Bool
 }
@@ -243,8 +245,13 @@ func (d *Dashboard) renderLogLine() {
 }
 
 func (d *Dashboard) renderFrame() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
+	// ReadMemStats can briefly stop the world. The dashboard is informational,
+	// so refresh it at 1 Hz instead of doing that work on every 5 FPS frame.
+	if d.memStatsAt.IsZero() || time.Since(d.memStatsAt) >= time.Second {
+		runtime.ReadMemStats(&d.memStats)
+		d.memStatsAt = time.Now()
+	}
+	m := d.memStats
 
 	allocMB := float64(m.Alloc) / 1024 / 1024
 	sysMB := float64(m.Sys) / 1024 / 1024

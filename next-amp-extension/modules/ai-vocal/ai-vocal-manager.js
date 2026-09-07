@@ -114,6 +114,10 @@ export class AIVocalManager {
       if (this.streamChunkFloor !== null && chunkIndex < this.streamChunkFloor) {
         return;
       }
+      // Only tune from results that belong to the current stream. A late
+      // response from the previous song must not make the next song choose a
+      // wrong queue target.
+      this.observeGoLatency(rttMs);
       if (this.workletNode) {
         this.workletNode.port.postMessage(
           {
@@ -175,6 +179,8 @@ export class AIVocalManager {
     this.isHardwareSlow = false;
     this.modelGraphFoldedBranches = 0;
     this.modelGraphExplicitPads = 0;
+    this.goLatencySamples = [];
+    this.goBufferTarget = null;
     this.diagnostics = {
       startedAt: Date.now(),
       enabled: false,
@@ -235,6 +241,37 @@ export class AIVocalManager {
 
   getProcessingConfig() {
     return VOCAL_PROFILES[this.vocalProfile] || VOCAL_PROFILES[DEFAULT_VOCAL_PROFILE];
+  }
+
+  resetGoBufferTuning() {
+    this.goLatencySamples = [];
+    this.goBufferTarget = null;
+  }
+
+  observeGoLatency(rttMs) {
+    if (!Number.isFinite(rttMs) || rttMs <= 0) return;
+    if (this.goLatencySamples.length >= 24) this.goLatencySamples.shift();
+    this.goLatencySamples.push(rttMs);
+    if (this.goLatencySamples.length < 8 || this.engineType !== "go_native" || !this.workletNode) return;
+
+    const sorted = [...this.goLatencySamples].sort((a, b) => a - b);
+    const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)];
+    const chunkMs = 8192 / (this.audioCtx?.sampleRate || 44100) * 1000;
+    // Only lower startup buffering after measured deadline margin exists. On
+    // a slower provider, retain a larger ceiling for short OS/GPU spikes while
+    // the in-flight cap still prevents latency from growing without bound.
+    const readyThreshold = p95 <= chunkMs * 0.70 ? 2 : (p95 <= chunkMs ? 3 : 4);
+    const maxQueueThreshold = Math.max(readyThreshold + 1, 4);
+    const target = `${readyThreshold}/${maxQueueThreshold}`;
+    if (this.goBufferTarget === target) return;
+    this.goBufferTarget = target;
+    this.workletNode.port.postMessage({
+      type: "SET_QUEUE_TARGET",
+      engineType: "go_native",
+      readyThreshold,
+      maxQueueThreshold,
+      p95Ms: Math.round(p95 * 10) / 10
+    });
   }
 
   setVocalProfile(profile) {
@@ -1105,6 +1142,7 @@ export class AIVocalManager {
       this.resetState();
     }
     this.engineType = valid;
+    this.resetGoBufferTuning();
     this.streamChunkFloor = null;
     console.log("[NextAmp AI] Switched engine to:", this.engineType);
     if (this.workletNode) {
@@ -1139,9 +1177,15 @@ export class AIVocalManager {
   setMode(mode) {
     this.streamGeneration++;
     this.currentMode = mode;
+    this.resetGoBufferTuning();
     this.streamChunkFloor = null;
     this.chunkQueue = [];
     this.resetState();
+    // Start native DSP and the Worklet on the same stream boundary. This is
+    // important for the first bypass -> Karaoke click and for mode changes.
+    if (this.engineType === "go_native") {
+      this.goClient.resetStream();
+    }
     if (mode !== "bypass") {
       if (this.engineType === "go_native") {
         this.goClient.enable();
@@ -1208,6 +1252,15 @@ export class AIVocalManager {
     const processing = this.getProcessingConfig();
     const chunkSamples = this.engineType === "go_native" ? 8192 : processing.chunkSamples;
     const sampleRate = this.audioCtx?.sampleRate || 44100;
+    let goAdaptiveP95Ms = null;
+    if (this.goLatencySamples.length > 0) {
+      const sortedGoLatency = [...this.goLatencySamples].sort((a, b) => a - b);
+      const p95Index = Math.min(
+        sortedGoLatency.length - 1,
+        Math.ceil(sortedGoLatency.length * 0.95) - 1
+      );
+      goAdaptiveP95Ms = Number(sortedGoLatency[p95Index].toFixed(1));
+    }
     return {
       version: 1,
       enabled: this.diagnostics.enabled,
@@ -1235,6 +1288,11 @@ export class AIVocalManager {
         pending: this.goClient.pendingChunks.size,
         maxInFlight: this.goClient.maxInFlightChunks,
         backpressureDrops: this.goClient.backpressureDrops
+      },
+      goAdaptive: {
+        samples: this.goLatencySamples.length,
+        p95Ms: goAdaptiveP95Ms,
+        target: this.goBufferTarget
       },
       stream: {
         generation: this.streamGeneration,

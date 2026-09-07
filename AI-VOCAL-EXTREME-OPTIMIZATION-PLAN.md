@@ -4,7 +4,7 @@
 
 ขอบเขต: AI vocal ฝั่ง app/browser และ `nextamp-engine-go`
 
-ฐานอ้างอิงชั่วคราว: `b58ea39` + งานที่ยังไม่ commit ใน working tree ณ วันที่เขียนแผน
+ฐานอ้างอิงรอบนี้: `c2ef7ca` (`perf(ai-vocal): stabilize CoreML and realtime GO pipeline`) + adaptive queue/DSP/dashboard batch ที่กำลังทำ
 
 > กฎสูงสุด: **คุณภาพเสียงต้องไม่ต่ำกว่าเวอร์ชันปัจจุบัน**
 >
@@ -94,9 +94,9 @@
 - [x] Silence threshold GO (`0.0003`) กว้างกว่า digital-silence floor ของ Web (`~3.25e-5`) จึงมีความเสี่ยงข้าม model ในเสียงเบาที่ยังได้ยิน
 - [x] `ReadMessage()` สร้าง payload ใหม่ทุก WebSocket message; input ประมาณ 65,544 bytes ต่อ chunk
 - [x] เดิมไม่มี application-level flow control; เพิ่ม client in-flight cap 2 chunks และ latest-wins resync แล้ว แต่ยังต้องวัดจริงว่าค่า cap เหมาะกับอุปกรณ์ทุกเครื่องหรือไม่
-- [x] Initial audit พบว่า client เก็บ `pendingChunks` แต่ยังไม่จำกัด in-flight และ GO result ไม่มี generation/deadline ใน binary protocol; เพิ่ม in-flight cap + generation/chunk-floor resync แล้ว แต่ยังไม่ได้เพิ่ม metadata ลง binary header
-- [x] Initial baseline ให้ GO worklet รอ 5 output chunks; ลดเป็น 3 chunks และ ceiling 4 chunks แล้วใน Batch 1 เพื่อลด startup/queue latency โดยยังคง conceal เป็น silence เมื่อไม่ทัน
-- [x] Dashboard render เดิมสูงสุด 15 FPS และอ่าน Go memory stats ทุก frame; ลด interactive render เหลือ 5 FPS แล้ว แต่ full 1 Hz memstats cache ยังเป็นงานถัดไป
+- [x] Initial audit พบว่า client เก็บ `pendingChunks` แต่ยังไม่จำกัด in-flight และ GO result ไม่มี generation/deadline ใน binary protocol; เพิ่ม in-flight cap + generation/chunk-floor resync และ 16-bit stream token ใน reserved header bytes แล้ว แต่ full protocol metadata ยังรอ Batch 1C
+- [x] Initial baseline ให้ GO worklet รอ 5 output chunks; ลดเป็น 3 chunks และ ceiling 4 chunks แล้วใน Batch 1 เพื่อลด startup/queue latency โดยยังคง conceal เป็น silence เมื่อไม่ทัน; เพิ่ม adaptive target จาก measured p95 ใน batch ปัจจุบัน
+- [x] Dashboard render เดิมสูงสุด 15 FPS และอ่าน Go memory stats ทุก frame; ลด interactive render เหลือ 5 FPS และ cache memstats ที่ 1 Hz แล้ว
 - [x] Native FFT butterfly ยังเป็น scalar; SIMD ใช้หลัก ๆ ที่ window/OLA
 - [x] Decrypted ONNX model ประมาณ 30 MiB ถูกเก็บใน RAM ตลอดเพื่อรองรับ CPU recovery
 - [x] มี `model_int8.onnx` ประมาณ 7.8 MiB ใน workspace แต่ยังไม่มี provenance, calibration report, quality report หรือ runtime benchmark จึงยังห้ามใช้เป็น production
@@ -177,11 +177,11 @@
 ### 1D. Adaptive jitter buffer
 
 - [ ] ไม่นับ warmup/delay packet ที่เป็นศูนย์เป็น ready audio
-- [x] ลด GO safety baseline จากคงที่ 5 chunks เป็นเริ่ม 3 chunks และ ceiling 4 chunks; ค่า adaptive จาก p99 ยังไม่เสร็จ
-- [ ] เริ่มจาก buffer ต่ำสุดที่ p99 รองรับจริงต่อ device แทนค่าคงที่
+- [x] ลด GO safety baseline จากคงที่ 5 chunks เป็นเริ่ม 3 chunks และ ceiling 4 chunks; เพิ่ม adaptive target จาก measured p95 โดยคง safety ceiling ตาม provider speed
+- [x] เริ่มจาก buffer ต่ำสุดที่ measured p95 รองรับจริงต่อ GO session แทนค่าคงที่: เร็วมากเริ่ม 2 chunks, ใกล้ deadline เริ่ม 3, ช้ากว่า deadline คง 4
 - [ ] เพิ่ม buffer ทีละ chunk เมื่อเกิด underrun; ลดช้า ๆ หลังนิ่งหลายสิบวินาทีเพื่อไม่ให้ flapping
 - [ ] คำนวณ target จาก inference p99 + queue jitter + AudioContext base/output latency
-- [ ] แยกค่าของ Web และ GO รวมถึงแต่ละ backend/device
+- [x] แยกค่าของ Web และ GO: adaptive tuning เปิดเฉพาะ `go_native`; Web cadence/queue เดิมไม่ถูกเปลี่ยน
 - [ ] คง one-chunk model lookahead; ลดเฉพาะ safety queue
 - [ ] ใส่ latency ceiling และ resync แทนการปล่อย queue โต
 
@@ -199,6 +199,10 @@
 - [x] CoreML provider benchmark บน Apple Silicon ผ่าน: NeuralNetwork + ALL/ANE ราว 46 ms ต่อ chunk; MLProgram ถูก reject เพราะโมเดล compile ไม่ผ่านที่ AvgPool
 - [x] CoreML output เทียบ CPU reference ใน benchmark แล้ว และยังคงใช้ FP32 accumulation (`AllowLowPrecisionAccumulationOnGPU=0`); final blind quality gate ยังรอเพลงจริง
 - [x] GO receive path เปลี่ยนเป็น preallocated `NextReader` buffer และ Worklet steady-state playback ใช้ exact bulk copy
+- [x] GO adaptive jitter target: เก็บ RTT ล่าสุด 24 ตัวอย่าง, รอ warmup 8 ผล, เลือก ready queue 2/3/4 ตาม measured p95 และส่ง target ไป Worklet เฉพาะ native path; stale result ไม่ถูกนำมาปรับค่า
+- [x] GO mode/song boundary ใช้ native stream token ผ่าน reserved header bytes และ reset DSP ก่อนเริ่มโหมดใหม่ จึงไม่ให้ response เก่าที่ chunk index ชนกันหลุดเข้าเพลงใหม่
+- [x] GO DSP เปิด platform SIMD ให้ inverse-FFT scaling และ 131,072-float normalization บน ARM NEON/x86 SSE แทน scalar loop โดยคงลำดับคำนวณเดิม; WASM branch เดิมยังคงอยู่ใน source ชุด DSP
+- [x] Native build packer ตรวจ mtime ก่อนเข้ารหัสใหม่ จึงไม่สุ่มเขียน `model.enc/key_gen.go` ซ้ำทุก build เมื่อ source asset ไม่ได้เปลี่ยน
 - [x] native build สร้าง macOS arm64 และ Windows x64 `.exe` จาก source ชุดเดียวกันสำเร็จ
 - [x] macOS native smoke test ผ่าน: `/health` รายงาน `ai_enabled=true`, `version=2.3.0-eco` และ CoreML device โดยไม่ fallback
 - [ ] build และรันจริงบน Windows + GTX 1050 Ti
@@ -211,9 +215,9 @@
 - [ ] ทำ ping-pong/transferable buffer pool สำหรับ input L/R; manager คืน buffer หลัง copy เข้า WASM หรือ WebSocket
 - [ ] ทำ output buffer pool โดย worklet คืนก้อนที่เล่นจบแล้ว
 - [ ] เปลี่ยน array queue + `shift()/includes()` เป็น fixed-capacity ring พร้อม index lookup ขนาดเล็ก
-- [ ] เพิ่ม stable-AI bulk copy fast path เมื่อ `liveGain=0`, `aiGain=1`, `concealGain=1` แทน per-sample multiply loop
-- [ ] คง per-sample path เฉพาะ fade/conceal/mode transition
-- [ ] ลด WORKLET_STATUS เป็น 2–4 Hz ตอนนิ่ง, เร็วขึ้นเฉพาะ buffering/error และ 10 Hz เฉพาะ diagnostics
+- [x] เพิ่ม stable-AI bulk copy fast path เมื่อ `liveGain=0`, `aiGain=1`, `concealGain=1` แทน per-sample multiply loop
+- [x] คง per-sample path เฉพาะ fade/conceal/mode transition
+- [x] ลด WORKLET_STATUS เป็นประมาณ 2.7 Hz ตอนนิ่งและประมาณ 10.7 Hz ตอน buffering/recovering
 - [ ] ไม่ spread/copy diagnostics object ใน audio thread ถ้า diagnostics ปิด
 - [ ] ตรวจว่า process callback ไม่มี allocation ใน steady state หลัง warmup
 
@@ -229,7 +233,7 @@
 
 - [x] เปลี่ยน `ReadMessage()` เป็น `NextReader` + preallocated exact-size packet buffer พร้อม validation
 - [ ] reuse silence/output/error buffers; ไม่มี `make()` ใน steady-state audio path
-- [x] ลด dashboard เหลือ 5 FPS เพื่อไม่แย่ง audio deadline; cache `runtime.ReadMemStats` ยังเป็นงานถัดไป
+- [x] ลด dashboard เหลือ 5 FPS เพื่อไม่แย่ง audio deadline และ cache `runtime.ReadMemStats` ที่ 1 Hz
 - [ ] subsample meter/sparkline หรือคำนวณจาก peak ที่ DSP มีอยู่แล้ว
 - [x] มี `--headless` สำหรับไม่ render dashboard ที่ไม่เห็น
 - [ ] ปล่อย decrypted model bytes หลัง session stable; ถ้าต้อง recovery ให้ decrypt embedded model ใหม่เฉพาะตอนเกิด error

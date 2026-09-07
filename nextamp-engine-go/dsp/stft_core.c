@@ -110,7 +110,23 @@ static void fft_radix2(float* real, float* imag, int n, int inverse) {
 
     if (inverse) {
         float inv_n = 1.0f / (float)n;
-#if USE_SIMD
+#if defined(USE_ARM_NEON)
+        float32x4_t vinv = vdupq_n_f32(inv_n);
+        for (int i = 0; i < n; i += 4) {
+            float32x4_t r = vld1q_f32(&real[i]);
+            float32x4_t im = vld1q_f32(&imag[i]);
+            vst1q_f32(&real[i], vmulq_f32(r, vinv));
+            vst1q_f32(&imag[i], vmulq_f32(im, vinv));
+        }
+#elif defined(USE_X86_SSE)
+        __m128 vinv = _mm_set1_ps(inv_n);
+        for (int i = 0; i < n; i += 4) {
+            __m128 r = _mm_loadu_ps(&real[i]);
+            __m128 im = _mm_loadu_ps(&imag[i]);
+            _mm_storeu_ps(&real[i], _mm_mul_ps(r, vinv));
+            _mm_storeu_ps(&imag[i], _mm_mul_ps(im, vinv));
+        }
+#elif defined(USE_WASM_SIMD)
         v128_t vinv = wasm_f32x4_splat(inv_n);
         for (int i = 0; i < n; i += 4) {
             v128_t r = wasm_v128_load(&real[i]);
@@ -304,7 +320,19 @@ void stft_prepare_norm_input(float inv_max) {
     int total_floats = NUM_BINS * MAX_FRAMES * 2; // 131,072 floats
     float* src = (float*)g_rolling_mags;
     float* dst = (float*)g_norm_input;
-#if USE_SIMD
+#if defined(USE_ARM_NEON)
+    float32x4_t vinv = vdupq_n_f32(inv_max);
+    for (int i = 0; i < total_floats; i += 4) {
+        float32x4_t v = vld1q_f32(&src[i]);
+        vst1q_f32(&dst[i], vmulq_f32(v, vinv));
+    }
+#elif defined(USE_X86_SSE)
+    __m128 vinv = _mm_set1_ps(inv_max);
+    for (int i = 0; i < total_floats; i += 4) {
+        __m128 v = _mm_loadu_ps(&src[i]);
+        _mm_storeu_ps(&dst[i], _mm_mul_ps(v, vinv));
+    }
+#elif defined(USE_WASM_SIMD)
     v128_t vinv = wasm_f32x4_splat(inv_max);
     for (int i = 0; i < total_floats; i += 4) {
         v128_t v = wasm_v128_load(&src[i]);

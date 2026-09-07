@@ -200,7 +200,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         }
         this.diagnostics.resyncs++;
         this.isAiReady = false;
-        this.readyThreshold = 1;
+        // Preserve the configured/adaptive cushion across a resync. Dropping
+        // to one chunk here makes a brief interruption recover too eagerly,
+        // then immediately underrun again when the OS/GPU is still busy.
         this.outQueueL = [];
         this.outQueueR = [];
         this.outQueueIndex = [];
@@ -215,6 +217,19 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         this.chunkPeak = 0.0;
         this.silentChunks = 0;
         this.inSilenceBoundary = false;
+      } else if (data.type === "SET_QUEUE_TARGET") {
+        if (data.engineType !== "go_native" || this.engineType !== "go_native") return;
+        const ready = Number(data.readyThreshold);
+        const max = Number(data.maxQueueThreshold);
+        if (!Number.isFinite(ready) || !Number.isFinite(max)) return;
+        this.readyThreshold = Math.max(
+          1,
+          Math.min(GO_MAX_QUEUE_THRESHOLD, Math.floor(ready))
+        );
+        this.maxQueueThreshold = Math.max(
+          this.readyThreshold + 1,
+          Math.min(GO_MAX_QUEUE_THRESHOLD + 1, Math.floor(max))
+        );
       } else if (data.type === "CHUNK_PROCESSED") {
         this.handleProcessedChunk(data);
       }
@@ -518,9 +533,10 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
             this.currChunkL = null;
             this.currChunkR = null;
             this.currChunkIndex = null;
-            // Recover as soon as the next processed chunk arrives. During an
-            // underrun conceal with silence; raw input contains vocals.
-            this.readyThreshold = 1;
+            // Recover as soon as the next processed chunk arrives. Keep the
+            // configured/adaptive startup threshold intact so one transient
+            // underrun cannot permanently force the stream into a one-chunk
+            // jitter buffer and make the next CPU/GPU spike flap again.
           }
         }
 

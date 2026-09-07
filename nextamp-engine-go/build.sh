@@ -8,8 +8,24 @@ echo "=================================================="
 echo "    NEXT-AMP ENGINE STANDALONE SINGLE-BINARY BUILDER"
 echo "=================================================="
 
-# 1. Pack & Encrypt model + libraries
-if [[ -f model.onnx && -f libonnxruntime.dylib && -f onnxruntime.dll ]]; then
+# 1. Pack & Encrypt model + libraries only when a source asset is newer.
+# The packer intentionally uses a fresh AES key/nonce, so repacking on every
+# build creates meaningless tracked diffs and needlessly rewrites the model.
+needs_pack=0
+if [[ ! -f assets/model.enc || ! -f assets/libonnxruntime.dylib.gz || ! -f assets/onnxruntime.dll.gz || ! -f key_gen.go ]]; then
+  needs_pack=1
+fi
+if [[ -f model.onnx && -f assets/model.enc && model.onnx -nt assets/model.enc ]]; then
+  needs_pack=1
+fi
+if [[ -f libonnxruntime.dylib && -f assets/libonnxruntime.dylib.gz && libonnxruntime.dylib -nt assets/libonnxruntime.dylib.gz ]]; then
+  needs_pack=1
+fi
+if [[ -f onnxruntime.dll && -f assets/onnxruntime.dll.gz && onnxruntime.dll -nt assets/onnxruntime.dll.gz ]]; then
+  needs_pack=1
+fi
+
+if [[ "$needs_pack" -eq 1 && -f model.onnx && -f libonnxruntime.dylib && -f onnxruntime.dll ]]; then
   echo "[*] Step 1: Compressing and encrypting AI assets..."
   go run packer/pack.go
 else

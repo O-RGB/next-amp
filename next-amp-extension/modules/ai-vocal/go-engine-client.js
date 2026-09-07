@@ -14,6 +14,10 @@ export class GoEngineClient {
     this.enabled = false;
     this.lastRtt = 0;
     this.deviceInfo = "Go Native Core";
+    // The worklet restarts chunk indexes at every mode/song boundary. Echo a
+    // short stream token in the reserved packet bytes so an old response can
+    // never collide with the new stream's chunk #0.
+    this.streamToken = 0;
 
     this.pendingChunks = new Map();
     // The native server processes one audio packet at a time. Do not let the
@@ -50,6 +54,7 @@ export class GoEngineClient {
 
   disable() {
     this.enabled = false;
+    this.advanceStreamToken();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -103,6 +108,7 @@ export class GoEngineClient {
         const wasConnected = this.isConnected;
         this.isConnected = false;
         this.isConnecting = false;
+        this.advanceStreamToken();
         this.pendingChunks.clear();
 
         if (this.enabled) {
@@ -177,12 +183,15 @@ export class GoEngineClient {
 
     const view = new DataView(buf);
     const chunkIndex = view.getUint32(0, true);
+    const streamToken = view.getUint16(6, true);
+    if (streamToken !== this.streamToken) return;
 
     const sendTime = this.pendingChunks.get(chunkIndex);
-    if (sendTime) {
-      this.lastRtt = Math.round((performance.now() - sendTime) * 10) / 10;
-      this.pendingChunks.delete(chunkIndex);
-    }
+    // A response without a matching current request is stale/out-of-band
+    // (for example, it arrived after RESET_STREAM). Never enqueue it.
+    if (!sendTime) return;
+    this.lastRtt = Math.round((performance.now() - sendTime) * 10) / 10;
+    this.pendingChunks.delete(chunkIndex);
 
     // Zero-Copy sub-array views (no buf.slice, no duplicate ArrayBuffer allocation)
     const numSamples = payloadBytes / 8;
@@ -197,6 +206,7 @@ export class GoEngineClient {
   }
 
   resetStream() {
+    this.advanceStreamToken();
     this.pendingChunks.clear();
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     try {
@@ -204,6 +214,11 @@ export class GoEngineClient {
       // completed by GO before it resets its STFT/overlap state.
       this.ws.send(JSON.stringify({ type: "RESET_STREAM" }));
     } catch (_) {}
+  }
+
+  advanceStreamToken() {
+    this.streamToken = (this.streamToken + 1) & 0xffff;
+    if (this.streamToken === 0) this.streamToken = 1;
   }
 
   canSendChunk() {
@@ -228,7 +243,7 @@ export class GoEngineClient {
       this.sendView.setUint32(0, chunkIndex, true);
       this.sendView.setUint8(4, modeCode);
       this.sendView.setUint8(5, delayChunks);
-      this.sendView.setUint8(6, 0);
+      this.sendView.setUint16(6, this.streamToken, true);
       this.sendFloatL.set(rawL);
       this.sendFloatR.set(rawR);
       bufferToSend = this.sendBuffer;
@@ -240,7 +255,7 @@ export class GoEngineClient {
       view.setUint32(0, chunkIndex, true);
       view.setUint8(4, modeCode);
       view.setUint8(5, delayChunks);
-      view.setUint8(6, 0);
+      view.setUint16(6, this.streamToken, true);
       const rawLBytes = new Uint8Array(rawL.buffer, rawL.byteOffset, rawL.byteLength);
       const rawRBytes = new Uint8Array(rawR.buffer, rawR.byteOffset, rawR.byteLength);
       packet.set(rawLBytes, 8);

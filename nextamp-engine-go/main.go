@@ -403,7 +403,7 @@ func parseChannelSamples(payload []byte) ([]float32, []float32) {
 }
 
 // Zero-Copy Sample Packing
-func packChannelSamples(chunkIndex uint32, mode uint8, left, right []float32, buf []byte) []byte {
+func packChannelSamples(chunkIndex uint32, mode uint8, streamToken uint16, left, right []float32, buf []byte) []byte {
 	numSamples := len(left)
 	totalBytes := HeaderBytes + (numSamples * 8)
 	if len(buf) < totalBytes {
@@ -415,8 +415,7 @@ func packChannelSamples(chunkIndex uint32, mode uint8, left, right []float32, bu
 	binary.LittleEndian.PutUint32(buf[0:4], chunkIndex)
 	buf[4] = mode
 	buf[5] = 0
-	buf[6] = 0
-	buf[7] = 0
+	binary.LittleEndian.PutUint16(buf[6:8], streamToken)
 
 	lByteSlice := unsafe.Slice((*byte)(unsafe.Pointer(&left[0])), numSamples*4)
 	rByteSlice := unsafe.Slice((*byte)(unsafe.Pointer(&right[0])), numSamples*4)
@@ -430,7 +429,7 @@ func packChannelSamples(chunkIndex uint32, mode uint8, left, right []float32, bu
 // packSilentSamples is the safe failure output for an AI packet. Returning
 // the input here would leak the original vocal whenever ONNX Runtime has a
 // transient provider/scheduling error.
-func packSilentSamples(chunkIndex uint32, mode uint8, numSamples int, buf []byte) []byte {
+func packSilentSamples(chunkIndex uint32, mode uint8, streamToken uint16, numSamples int, buf []byte) []byte {
 	totalBytes := HeaderBytes + (numSamples * 8)
 	if len(buf) < totalBytes {
 		buf = make([]byte, totalBytes)
@@ -441,8 +440,7 @@ func packSilentSamples(chunkIndex uint32, mode uint8, numSamples int, buf []byte
 	binary.LittleEndian.PutUint32(buf[0:4], chunkIndex)
 	buf[4] = mode
 	buf[5] = 0
-	buf[6] = 0
-	buf[7] = 0
+	binary.LittleEndian.PutUint16(buf[6:8], streamToken)
 	for i := HeaderBytes; i < totalBytes; i++ {
 		buf[i] = 0
 	}
@@ -568,6 +566,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 			chunkIndex := binary.LittleEndian.Uint32(payload[0:4])
 			mode := payload[4]
+			streamToken := binary.LittleEndian.Uint16(payload[6:8])
 
 			totalChunksReceived.Add(1)
 			totalBytesReceived.Add(uint64(chunkLen))
@@ -600,7 +599,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 					tDSP2 := time.Now()
 					outL, outR = globalAI.dspEngine.StepBackwardSilence(delayChunks)
 					dspMs += float64(time.Since(tDSP2).Microseconds()) / 1000.0
-					respPayload = packChannelSamples(chunkIndex, mode, outL, outR, outBuf)
+					respPayload = packChannelSamples(chunkIndex, mode, streamToken, outL, outR, outBuf)
 				} else {
 					// 2. Load into ONNX Tensor buffer
 					tensorBuf := globalAI.inputTensor.GetData()
@@ -634,14 +633,14 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 					if runErr != nil {
 						outL = make([]float32, len(leftSamples))
 						outR = make([]float32, len(rightSamples))
-						respPayload = packSilentSamples(chunkIndex, mode, len(leftSamples), outBuf)
+						respPayload = packSilentSamples(chunkIndex, mode, streamToken, len(leftSamples), outBuf)
 					} else {
 						// 4. Inverse STFT + Fast C SIMD Sigmoid + Overlap-Add (~0.06ms via SIMD)
 						tDSP2 := time.Now()
 						rawOut := globalAI.outputTensor.GetData()
 						outL, outR = globalAI.dspEngine.StepBackward(rawOut, delayChunks, int(mode), 1.0)
 						dspMs += float64(time.Since(tDSP2).Microseconds()) / 1000.0
-						respPayload = packChannelSamples(chunkIndex, mode, outL, outR, outBuf)
+						respPayload = packChannelSamples(chunkIndex, mode, streamToken, outL, outR, outBuf)
 					}
 				}
 				globalAI.mu.Unlock()
@@ -651,7 +650,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 					// native session is unavailable. Silence is the safe output.
 					outL = make([]float32, len(leftSamples))
 					outR = make([]float32, len(rightSamples))
-					respPayload = packSilentSamples(chunkIndex, mode, len(leftSamples), outBuf)
+					respPayload = packSilentSamples(chunkIndex, mode, streamToken, len(leftSamples), outBuf)
 				} else {
 					// Bypass Mode (raw zero-latency loopback)
 					outL, outR = leftSamples, rightSamples

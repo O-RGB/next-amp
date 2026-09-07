@@ -88,13 +88,28 @@ processBlocks(processor, 120);
 
 // Once the two processed chunks are consumed, the next block must conceal
 // the missing result instead of copying the vocal-bearing raw input.
+const readyThresholdBeforeUnderrun = processor.readyThreshold;
 const underrunOutputs = processBlocks(processor, 8, 0.9);
 const underrunPeak = Math.max(...underrunOutputs.flatMap(ch => Array.from(ch[0])));
 assert.ok(underrunPeak < 1e-4, `underrun leaked raw audio: peak ${underrunPeak}`);
 assert.ok(processor.diagnostics.underrunBlocks > 0);
+assert.equal(processor.readyThreshold, readyThresholdBeforeUnderrun,
+  'a transient underrun must not permanently lower the adaptive queue target');
 
 // Switching to GO changes only the wire cadence and clears a partial browser packet.
 processor.port.onmessage({ data: { type: 'SET_ENGINE', engineType: 'go_native' } });
+processor.port.onmessage({ data: {
+  type: 'SET_QUEUE_TARGET', engineType: 'go_native', readyThreshold: 2, maxQueueThreshold: 4
+} });
+assert.equal(processor.readyThreshold, 2, 'GO adaptive target must lower the ready cushion');
+assert.equal(processor.maxQueueThreshold, 4, 'GO adaptive target must keep the safety ceiling');
+processor.port.onmessage({ data: {
+  type: 'SET_QUEUE_TARGET', engineType: 'go_native', readyThreshold: 4, maxQueueThreshold: 9
+} });
+assert.equal(processor.readyThreshold, 4, 'GO adaptive target must retain a larger cushion on slow providers');
+assert.equal(processor.maxQueueThreshold, 5, 'GO adaptive target must clamp the latency ceiling');
+processor.port.onmessage({ data: { type: 'RESYNC', nextChunkIndex: 0 } });
+assert.equal(processor.readyThreshold, 4, 'GO resync must preserve the adaptive cushion');
 processBlocks(processor, 64);
 const goChunks = messagesOfType(processor, 'PROCESS_CHUNK');
 assert.equal(goChunks.at(-1).rawL.length, 8192, 'GO cadence must remain 16 hops');
