@@ -18,7 +18,10 @@ const DEFAULT_VOCAL_PROFILE = "balanced";
 // main-branch graph path.
 const EXPERIMENTAL_MODEL_AUDIO_CANDIDATES = false;
 const EXACT_MODEL_GRAPH_OPTIMIZATION = true;
-const EXACT_MODEL_OUTPUT_HEAD = true;
+// Keep the output-head/ROI candidate available for isolated provider tests,
+// but leave it off in production until CoreML and DirectML audio listening
+// gates confirm that backend-specific slicing does not add vocal artifacts.
+const EXACT_MODEL_OUTPUT_HEAD = false;
 const VOCAL_PROFILES = Object.freeze({
   // Current production candidate: the cadence that was tested as the
   // smoothest on Apple and Windows GTX 1050 Ti.

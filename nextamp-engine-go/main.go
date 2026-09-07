@@ -33,7 +33,9 @@ const (
 	// The compact head is output-only: it keeps the same FP32 model weights and
 	// selected frames while cutting the native output/readback in half. The
 	// overlap-consensus quality candidate remains disabled independently.
-	CompactModelOutputEnabled = true
+	// Keep the candidate available for opt-in runtime tests. Full output remains
+	// the production quality path until CoreML/DirectML listening gates pass.
+	CompactModelOutputEnabled = false
 )
 
 var upgrader = websocket.Upgrader{
