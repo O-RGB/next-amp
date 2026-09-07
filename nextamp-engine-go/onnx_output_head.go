@@ -1,0 +1,383 @@
+package main
+
+import "fmt"
+
+// The native model normally returns [1,1024,64,2], while the production GO
+// timeline consumes only frames 32..63 for its one-chunk lookahead. This small
+// protobuf-level rewrite adds an ONNX Slice output head without touching any
+// learned weights or decoder nodes. It deliberately preserves unknown fields
+// so an unsupported graph can fall back to the original model bytes.
+
+const (
+	compactOutputStart  = 32
+	compactOutputFrames = 32
+	compactOutputName   = "NextAmp/compact_output"
+	compactOutputPrefix = "NextAmp/compact_output_head/"
+)
+
+type onnxWireField struct {
+	number int
+	wire   int
+	value  []byte
+	raw    []byte
+}
+
+func readONNXUvarint(data []byte, pos *int) (uint64, error) {
+	var value uint64
+	for shift := uint(0); shift < 64; shift += 7 {
+		if *pos >= len(data) {
+			return 0, fmt.Errorf("truncated protobuf varint")
+		}
+		b := data[*pos]
+		*pos++
+		value |= uint64(b&0x7f) << shift
+		if b&0x80 == 0 {
+			return value, nil
+		}
+	}
+	return 0, fmt.Errorf("protobuf varint overflow")
+}
+
+func appendONNXUvarint(dst []byte, value uint64) []byte {
+	for value >= 0x80 {
+		dst = append(dst, byte(value)|0x80)
+		value >>= 7
+	}
+	return append(dst, byte(value))
+}
+
+func parseONNXFields(data []byte) ([]onnxWireField, error) {
+	fields := make([]onnxWireField, 0, 16)
+	for pos := 0; pos < len(data); {
+		start := pos
+		key, err := readONNXUvarint(data, &pos)
+		if err != nil {
+			return nil, err
+		}
+		number := int(key >> 3)
+		wire := int(key & 7)
+		if number <= 0 {
+			return nil, fmt.Errorf("invalid protobuf field number %d", number)
+		}
+
+		var value []byte
+		switch wire {
+		case 0:
+			if _, err := readONNXUvarint(data, &pos); err != nil {
+				return nil, err
+			}
+		case 1:
+			if len(data)-pos < 8 {
+				return nil, fmt.Errorf("truncated fixed64 field %d", number)
+			}
+			pos += 8
+		case 2:
+			length, err := readONNXUvarint(data, &pos)
+			if err != nil || length > uint64(len(data)-pos) {
+				return nil, fmt.Errorf("invalid length-delimited field %d", number)
+			}
+			value = data[pos : pos+int(length)]
+			pos += int(length)
+		case 5:
+			if len(data)-pos < 4 {
+				return nil, fmt.Errorf("truncated fixed32 field %d", number)
+			}
+			pos += 4
+		default:
+			return nil, fmt.Errorf("unsupported protobuf wire type %d", wire)
+		}
+		fields = append(fields, onnxWireField{
+			number: number,
+			wire:   wire,
+			value:  value,
+			raw:    data[start:pos],
+		})
+	}
+	return fields, nil
+}
+
+func marshalONNXField(number, wire int, value []byte) []byte {
+	result := make([]byte, 0, len(value)+12)
+	result = appendONNXUvarint(result, uint64(number<<3|wire))
+	if wire == 2 {
+		result = appendONNXUvarint(result, uint64(len(value)))
+	}
+	return append(result, value...)
+}
+
+func marshalONNXVarintField(number int, value uint64) []byte {
+	result := make([]byte, 0, 12)
+	result = appendONNXUvarint(result, uint64(number<<3))
+	return appendONNXUvarint(result, value)
+}
+
+func marshalONNXStringField(number int, value string) []byte {
+	return marshalONNXField(number, 2, []byte(value))
+}
+
+func marshalONNXPackedInt64Field(number int, values []int64) []byte {
+	packed := make([]byte, 0, len(values)*2)
+	for _, value := range values {
+		packed = appendONNXUvarint(packed, uint64(value))
+	}
+	return marshalONNXField(number, 2, packed)
+}
+
+func marshalONNXMessage(fields []onnxWireField, appended ...[]byte) []byte {
+	result := make([]byte, 0)
+	for _, field := range fields {
+		result = append(result, field.raw...)
+	}
+	for _, field := range appended {
+		result = append(result, field...)
+	}
+	return result
+}
+
+func firstONNXBytes(fields []onnxWireField, number int) []byte {
+	for _, field := range fields {
+		if field.number == number && field.wire == 2 {
+			return field.value
+		}
+	}
+	return nil
+}
+
+func allONNXBytes(fields []onnxWireField, number int) [][]byte {
+	values := make([][]byte, 0, 1)
+	for _, field := range fields {
+		if field.number == number && field.wire == 2 {
+			values = append(values, field.value)
+		}
+	}
+	return values
+}
+
+func rewriteONNXDimension(data []byte, dimensionIndex int) ([]byte, bool, error) {
+	fields, err := parseONNXFields(data)
+	if err != nil {
+		return nil, false, err
+	}
+	if dimensionIndex != 2 {
+		return data, false, nil
+	}
+	result := make([]byte, 0, len(data))
+	replaced := false
+	for _, field := range fields {
+		if field.number == 1 && field.wire == 0 {
+			result = append(result, marshalONNXVarintField(1, compactOutputFrames)...)
+			replaced = true
+		} else {
+			result = append(result, field.raw...)
+		}
+	}
+	return result, replaced, nil
+}
+
+func rewriteONNXShape(data []byte) ([]byte, bool, error) {
+	fields, err := parseONNXFields(data)
+	if err != nil {
+		return nil, false, err
+	}
+	result := make([]byte, 0, len(data))
+	dimensionIndex := 0
+	replaced := false
+	for _, field := range fields {
+		if field.number == 1 && field.wire == 2 {
+			dimension, changed, err := rewriteONNXDimension(field.value, dimensionIndex)
+			if err != nil {
+				return nil, false, err
+			}
+			result = append(result, marshalONNXField(1, 2, dimension)...)
+			replaced = replaced || changed
+			dimensionIndex++
+		} else {
+			result = append(result, field.raw...)
+		}
+	}
+	return result, replaced, nil
+}
+
+func rewriteONNXTensorType(data []byte) ([]byte, bool, error) {
+	fields, err := parseONNXFields(data)
+	if err != nil {
+		return nil, false, err
+	}
+	result := make([]byte, 0, len(data))
+	replaced := false
+	for _, field := range fields {
+		if field.number == 2 && field.wire == 2 {
+			shape, changed, err := rewriteONNXShape(field.value)
+			if err != nil {
+				return nil, false, err
+			}
+			result = append(result, marshalONNXField(2, 2, shape)...)
+			replaced = replaced || changed
+		} else {
+			result = append(result, field.raw...)
+		}
+	}
+	return result, replaced, nil
+}
+
+func rewriteONNXType(data []byte) ([]byte, bool, error) {
+	fields, err := parseONNXFields(data)
+	if err != nil {
+		return nil, false, err
+	}
+	result := make([]byte, 0, len(data))
+	replaced := false
+	for _, field := range fields {
+		if field.number == 1 && field.wire == 2 {
+			tensorType, changed, err := rewriteONNXTensorType(field.value)
+			if err != nil {
+				return nil, false, err
+			}
+			result = append(result, marshalONNXField(1, 2, tensorType)...)
+			replaced = replaced || changed
+		} else {
+			result = append(result, field.raw...)
+		}
+	}
+	return result, replaced, nil
+}
+
+func rewriteONNXValueInfo(data []byte, oldName, newName string) ([]byte, bool, error) {
+	fields, err := parseONNXFields(data)
+	if err != nil {
+		return nil, false, err
+	}
+	if string(firstONNXBytes(fields, 1)) != oldName {
+		return data, false, nil
+	}
+	result := make([]byte, 0, len(data))
+	replaced := false
+	for _, field := range fields {
+		switch {
+		case field.number == 1 && field.wire == 2:
+			result = append(result, marshalONNXStringField(1, newName)...)
+			replaced = true
+		case field.number == 2 && field.wire == 2:
+			typeInfo, changed, err := rewriteONNXType(field.value)
+			if err != nil {
+				return nil, false, err
+			}
+			result = append(result, marshalONNXField(2, 2, typeInfo)...)
+			replaced = replaced || changed
+		default:
+			result = append(result, field.raw...)
+		}
+	}
+	return result, replaced, nil
+}
+
+func makeONNXInitializer(name string, values []int64) []byte {
+	result := make([]byte, 0, len(values)*3+len(name)+16)
+	result = append(result, marshalONNXPackedInt64Field(1, []int64{int64(len(values))})...)
+	result = append(result, marshalONNXVarintField(2, 7)...)
+	result = append(result, marshalONNXPackedInt64Field(7, values)...)
+	result = append(result, marshalONNXStringField(8, name)...)
+	return marshalONNXField(5, 2, result)
+}
+
+func makeONNXOutputSliceNode(inputName string) []byte {
+	result := make([]byte, 0, 180)
+	for _, input := range []string{
+		inputName,
+		compactOutputPrefix + "starts",
+		compactOutputPrefix + "ends",
+		compactOutputPrefix + "axes",
+		compactOutputPrefix + "steps",
+	} {
+		result = append(result, marshalONNXStringField(1, input)...)
+	}
+	result = append(result, marshalONNXStringField(2, compactOutputName)...)
+	result = append(result, marshalONNXStringField(3, compactOutputPrefix+"slice")...)
+	result = append(result, marshalONNXStringField(4, "Slice")...)
+	return marshalONNXField(1, 2, result)
+}
+
+func rewriteONNXGraphOutput(data []byte) ([]byte, bool, error) {
+	fields, err := parseONNXFields(data)
+	if err != nil {
+		return nil, false, err
+	}
+
+	identityOutput := ""
+	for _, field := range fields {
+		if field.number != 1 || field.wire != 2 {
+			continue
+		}
+		nodeFields, err := parseONNXFields(field.value)
+		if err != nil {
+			return nil, false, err
+		}
+		opType := string(firstONNXBytes(nodeFields, 4))
+		if opType != "Transpose" {
+			continue
+		}
+		for _, output := range allONNXBytes(nodeFields, 2) {
+			if string(output) == "Identity" {
+				identityOutput = "Identity"
+				break
+			}
+		}
+	}
+	if identityOutput == "" {
+		return data, false, nil
+	}
+
+	result := make([]byte, 0, len(data)+700)
+	outputChanged := false
+	for _, field := range fields {
+		if field.number == 12 && field.wire == 2 {
+			outputInfo, changed, err := rewriteONNXValueInfo(field.value, identityOutput, compactOutputName)
+			if err != nil {
+				return nil, false, err
+			}
+			if changed {
+				result = append(result, marshalONNXField(12, 2, outputInfo)...)
+				outputChanged = true
+				continue
+			}
+		}
+		result = append(result, field.raw...)
+	}
+	if !outputChanged {
+		return data, false, nil
+	}
+
+	result = append(result, makeONNXOutputSliceNode(identityOutput)...)
+	result = append(result, makeONNXInitializer(compactOutputPrefix+"starts", []int64{0, 0, compactOutputStart, 0})...)
+	result = append(result, makeONNXInitializer(compactOutputPrefix+"ends", []int64{1, 1024, 64, 2})...)
+	result = append(result, makeONNXInitializer(compactOutputPrefix+"axes", []int64{0, 1, 2, 3})...)
+	result = append(result, makeONNXInitializer(compactOutputPrefix+"steps", []int64{1, 1, 1, 1})...)
+	return result, true, nil
+}
+
+func rewriteONNXOutputWindow(modelData []byte) ([]byte, bool, error) {
+	fields, err := parseONNXFields(modelData)
+	if err != nil {
+		return nil, false, err
+	}
+	result := make([]byte, 0, len(modelData)+700)
+	applied := false
+	for _, field := range fields {
+		if field.number == 7 && field.wire == 2 {
+			graph, changed, err := rewriteONNXGraphOutput(field.value)
+			if err != nil {
+				return nil, false, err
+			}
+			if changed {
+				result = append(result, marshalONNXField(7, 2, graph)...)
+				applied = true
+				continue
+			}
+		}
+		result = append(result, field.raw...)
+	}
+	if !applied {
+		return modelData, false, nil
+	}
+	return result, true, nil
+}

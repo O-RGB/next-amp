@@ -269,12 +269,12 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 
 - [ ] สร้าง Web/ONNX model variant ที่รวม Slice → Transpose/reshape → Sigmoid เป็น output head
 - [x] Web exact candidate รวม crop → Transpose → Reshape → Sigmoid เป็น output head `[2,32,1024]` สำหรับ Smooth/Detail ร่วมกัน (active + next tail) พร้อม original-graph fallback; ไม่เปลี่ยน weights หรือ GO output graph
-- [ ] GO output เหลือ `[2, 16, 1024]` หรือ layout ที่ C ใช้ตรง ๆ แทน `[1,1024,64,2]`
+- [x] GO output head แบบ runtime rewrite เหลือ `[1,1024,32,2]` (active + next tail) แทน `[1,1024,64,2]`; C รองรับทั้ง compact และ full fallback
 - [x] Web output head ลดผลลัพธ์จาก 64 เป็น shared 32 frames และตัด JS transpose/reshape/sigmoid เหลือ profile slice เดียว
-- [ ] คง model IO เป็น FP32 ใน exact candidate
-- [ ] เทียบ logits ก่อน sigmoid, mask หลัง sigmoid และ PCM
+- [x] คง model IO เป็น FP32 ใน exact candidate
+- [x] เทียบ logits ก่อน sigmoid, mask หลัง sigmoid และ PCM ระหว่าง compact output กับ full-output reference ใน native opt-in regression
 
-ประโยชน์ที่คาด: ลด GO device→CPU output จาก 512 KiB เหลือ 128 KiB ต่อ chunk และตัด CPU sigmoid/reshape; Web ลด post-op launches/readback synchronization บางส่วน
+ประโยชน์ที่คาด: ลด GO device→CPU output จาก 512 KiB เหลือ 256 KiB ต่อ chunk และตัดการส่ง frame ที่ DSP ไม่ใช้; Web ลด post-op launches/readback synchronization บางส่วน
 
 ### 3B. ROI-specialized decoder graph
 

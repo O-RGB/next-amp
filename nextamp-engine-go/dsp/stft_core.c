@@ -525,14 +525,17 @@ void stft_extract_sigmoid_mask(const float* raw_out, int slice_start) {
 // chunk. The previous tail and current slice refer to the same absolute audio
 // frames when the native engine uses one-chunk lookahead. Only Karaoke (mode 1)
 // gets the conservative extra suppression; every disagreement keeps current.
-void stft_extract_sigmoid_mask_overlap(const float* raw_out, int slice_start, int mode) {
-    if (slice_start < 0 || slice_start > MAX_FRAMES - DEFAULT_CHUNK_FRAMES) {
-        slice_start = MAX_FRAMES - DEFAULT_CHUNK_FRAMES;
+void stft_extract_sigmoid_mask_overlap_layout(const float* raw_out, int slice_start, int input_frames, int mode) {
+    if (input_frames != MAX_FRAMES && input_frames != DEFAULT_CHUNK_FRAMES * 2) {
+        input_frames = MAX_FRAMES;
     }
-    const int has_tail = slice_start + DEFAULT_CHUNK_FRAMES * 2 <= MAX_FRAMES;
+    if (slice_start < 0 || slice_start > input_frames - DEFAULT_CHUNK_FRAMES) {
+        slice_start = input_frames - DEFAULT_CHUNK_FRAMES;
+    }
+    const int has_tail = slice_start + DEFAULT_CHUNK_FRAMES * 2 <= input_frames;
 
     for (int k = 0; k < NUM_BINS; k++) {
-        int bin_offset = k * MAX_FRAMES * 2;
+        int bin_offset = k * input_frames * 2;
         for (int f = 0; f < DEFAULT_CHUNK_FRAMES; f++) {
             int current_offset = bin_offset + (slice_start + f) * 2;
             float v0 = raw_out[current_offset];
@@ -572,6 +575,10 @@ void stft_extract_sigmoid_mask_overlap(const float* raw_out, int slice_start, in
         }
     }
     g_overlap_tail_valid = has_tail;
+}
+
+void stft_extract_sigmoid_mask_overlap(const float* raw_out, int slice_start, int mode) {
+    stft_extract_sigmoid_mask_overlap_layout(raw_out, slice_start, MAX_FRAMES, mode);
 }
 
 void stft_invalidate_mask_overlap(void) {

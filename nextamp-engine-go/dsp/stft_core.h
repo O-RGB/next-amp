@@ -35,6 +35,7 @@ void stft_backward(int num_frames);
 
 void stft_extract_sigmoid_mask(const float* raw_out, int slice_start);
 void stft_extract_sigmoid_mask_overlap(const float* raw_out, int slice_start, int mode);
+void stft_extract_sigmoid_mask_overlap_layout(const float* raw_out, int slice_start, int input_frames, int mode);
 void stft_invalidate_mask_overlap(void);
 
 // Smart Energy Gating / Vocal Activity Detection (VAD)

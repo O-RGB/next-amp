@@ -179,6 +179,38 @@ func createSessionOptionsForCoreML(dev AccelerationOption, computeUnits string, 
 }
 
 func createORTSession(modelData []byte, dev AccelerationOption) (*ort.AdvancedSession, *ort.Tensor[float32], *ort.Tensor[float32], string, error) {
+	modelForSession, compact, rewriteErr := rewriteONNXOutputWindow(modelData)
+	if rewriteErr != nil {
+		// Keep the full model as a safe fallback if an unknown ONNX export is
+		// encountered. The rewrite is an optimization, never a load prerequisite.
+		modelForSession = modelData
+		compact = false
+	}
+	outputFrames := dsp.MaxFrames
+	if compact {
+		outputFrames = compactOutputFrames
+	}
+	session, inputTensor, outputTensor, deviceLabel, err := createORTSessionWithOutputFrames(
+		modelForSession, dev, outputFrames, compactOutputNameIf(compact),
+	)
+	if err == nil || !compact {
+		return session, inputTensor, outputTensor, deviceLabel, err
+	}
+
+	// A provider may accept the original graph but reject a newly-added output
+	// Slice. Retry the untouched graph before the normal CPU/provider recovery
+	// logic gets involved.
+	return createORTSessionWithOutputFrames(modelData, dev, dsp.MaxFrames, "Identity")
+}
+
+func compactOutputNameIf(compact bool) string {
+	if compact {
+		return compactOutputName
+	}
+	return "Identity"
+}
+
+func createORTSessionWithOutputFrames(modelData []byte, dev AccelerationOption, outputFrames int, outputName string) (*ort.AdvancedSession, *ort.Tensor[float32], *ort.Tensor[float32], string, error) {
 	opts, deviceLabel, err := createSessionOptions(dev)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -192,7 +224,7 @@ func createORTSession(modelData []byte, dev AccelerationOption) (*ort.AdvancedSe
 		return nil, nil, nil, "", fmt.Errorf("failed to create input tensor: %w", err)
 	}
 
-	outputShape := ort.NewShape(1, 1024, 64, 2)
+	outputShape := ort.NewShape(1, 1024, int64(outputFrames), 2)
 	outputTensor, err := ort.NewEmptyTensor[float32](outputShape)
 	if err != nil {
 		inputTensor.Destroy()
@@ -203,7 +235,7 @@ func createORTSession(modelData []byte, dev AccelerationOption) (*ort.AdvancedSe
 	session, err := ort.NewAdvancedSessionWithONNXData(
 		modelData,
 		[]string{"input"},
-		[]string{"Identity"},
+		[]string{outputName},
 		[]ort.Value{inputTensor},
 		[]ort.Value{outputTensor},
 		opts,

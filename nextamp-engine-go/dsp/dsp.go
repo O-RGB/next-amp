@@ -11,15 +11,17 @@ import (
 )
 
 const (
-	FFTSize      = 2048
-	HopSize      = 512
-	NumBins      = 1024
-	ChunkFrames  = 16
-	ChunkSamples = ChunkFrames * HopSize      // 8192
-	TailSamples  = 1536                       // 3 * 512
-	TotalInput   = ChunkSamples + TailSamples // 9728
-	TotalOutput  = ChunkSamples + TailSamples // 9728
-	MaxFrames    = 64
+	FFTSize       = 2048
+	HopSize       = 512
+	NumBins       = 1024
+	ChunkFrames   = 16
+	ChunkSamples  = ChunkFrames * HopSize      // 8192
+	TailSamples   = 1536                       // 3 * 512
+	TotalInput    = ChunkSamples + TailSamples // 9728
+	TotalOutput   = ChunkSamples + TailSamples // 9728
+	MaxFrames     = 64
+	CompactFrames = 32
+	CompactStart  = 32
 )
 
 type Engine struct {
@@ -156,12 +158,29 @@ func (e *Engine) stepBackward(rawOutput []float32, delayChunks int, mode int, st
 		cMode = 0
 	}
 	if extractMask {
-		if len(rawOutput) < NumBins*MaxFrames*2 {
+		inputFrames := MaxFrames
+		rawSliceStart := sliceStart
+		switch len(rawOutput) {
+		case NumBins * CompactFrames * 2:
+			// The compact ONNX output is the static [1,1024,32,2] window
+			// covering absolute frames 32..63. GO production uses one-chunk
+			// lookahead, so its active slice is local frame 0..15.
+			if delayChunks != 1 {
+				return nil, nil
+			}
+			inputFrames = CompactFrames
+			rawSliceStart -= CompactStart
+		case NumBins * MaxFrames * 2:
+			// Full-output fallback and compatibility path.
+		default:
 			return nil, nil
 		}
 		// Extract the active slice and its next-window tail in one C pass. The
 		// bounded tail is reused by the next chunk without another inference.
-		C.stft_extract_sigmoid_mask_overlap((*C.float)(unsafe.Pointer(&rawOutput[0])), C.int(sliceStart), C.int(cMode))
+		C.stft_extract_sigmoid_mask_overlap_layout(
+			(*C.float)(unsafe.Pointer(&rawOutput[0])),
+			C.int(rawSliceStart), C.int(inputFrames), C.int(cMode),
+		)
 	}
 	if !extractMask {
 		cMode = 2
