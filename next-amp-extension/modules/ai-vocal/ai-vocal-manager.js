@@ -11,10 +11,13 @@ const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
 const MAX_BROWSER_FRAMES = 16;
 const DEFAULT_VOCAL_PROFILE = "balanced";
-// Keep model/DSP output on the pre-extreme-optimization quality path until
-// each numerical candidate has passed a real WebGPU/WebGL listening gate.
-// Scheduling, queue and allocation optimizations remain enabled separately.
+// Keep numerical model/audio candidates on the quality baseline until each
+// one has passed a real WebGPU/WebGL listening gate. Exact graph folding is
+// enabled independently: it preserves weights and model equations while
+// removing export-only data-reordering/padding nodes, matching the proven
+// main-branch graph path.
 const EXPERIMENTAL_MODEL_AUDIO_CANDIDATES = false;
+const EXACT_MODEL_GRAPH_OPTIMIZATION = true;
 const VOCAL_PROFILES = Object.freeze({
   // Current production candidate: the cadence that was tested as the
   // smoothest on Apple and Windows GTX 1050 Ti.
@@ -785,7 +788,7 @@ export class AIVocalManager {
         ? tf.io.browserHTTPRequest(modelUrl)
         : modelUrl;
       const modelLoader = createVocalModelLoader(tf, ioHandler, {
-        optimizeGraph: EXPERIMENTAL_MODEL_AUDIO_CANDIDATES,
+        optimizeGraph: EXACT_MODEL_GRAPH_OPTIMIZATION,
         // Smooth (15 frames, start 34) and Detail (16 frames, start 32) use
         // the first half of this shared 32-frame output window. The second
         // half is the already-computed tail used by overlap consensus. GO

@@ -267,6 +267,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 
 ### 3A. Fused output head
 
+- [x] เปิดเฉพาะ Web exact graph folding ที่คง weights/สมการเดิม: พับ 12 atrous branches และ 16 explicit pads; output-head crop และ overlap consensus ยังปิด production
 - [ ] สร้าง Web/ONNX model variant ที่รวม Slice → Transpose/reshape → Sigmoid เป็น output head
 - [ ] Web exact candidate รวม crop → Transpose → Reshape → Sigmoid เป็น output head `[2,32,1024]` สำหรับ Smooth/Detail ร่วมกัน (active + next tail) — ปิด production ชั่วคราวหลังยังไม่มี WebGPU/WebGL listening gate
 - [ ] GO output head แบบ runtime rewrite เหลือ `[1,1024,32,2]` (active + next tail) — ปิด production ชั่วคราวหลังยังไม่มี provider/GPU listening gate

@@ -36,7 +36,9 @@ test('exact Web output head is exposed and can be disabled with the original gra
     bins: 1024,
     inputFrames: 64,
     activation: 'sigmoid',
-    layout: '[2,frames,bins]'
+    layout: '[2,frames,bins]',
+    decoderRoi: null,
+    decoderLayerRoi: null
   });
   assert.equal(optimized.signature.outputs.output_0.tensorShape.dim[1].size, '32');
   loader.disableOptimization();
