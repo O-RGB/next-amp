@@ -7,10 +7,30 @@
 import { GoEngineClient } from "./go-engine-client.js";
 import { createVocalModelLoader } from "./model-optimizer.mjs";
 
-const A = 15;       // ai remove cadence: 15 magnitude frames per chunk
 const _ = 1024;     // 1024 frequency bins
-const F = 7680;     // 7,680 samples per browser chunk (15 hops of 512)
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
+const MAX_BROWSER_FRAMES = 16;
+const DEFAULT_VOCAL_PROFILE = "balanced";
+const VOCAL_PROFILES = Object.freeze({
+  // Current production candidate: the cadence that was tested as the
+  // smoothest on Apple and Windows GTX 1050 Ti.
+  balanced: Object.freeze({
+    frames: 15,
+    chunkSamples: 7680,
+    sliceStart: 34,
+    delayChunks: 1
+  }),
+  // Closest safe full-processing profile available in this app. It restores
+  // the original 16-hop app cadence and alignment while keeping the proven
+  // optimized graph. The external AI Remove bundle uses a different WASM
+  // timeline and cannot be reproduced exactly without its source artifacts.
+  ai_remove: Object.freeze({
+    frames: 16,
+    chunkSamples: 8192,
+    sliceStart: 32,
+    delayChunks: 1
+  })
+});
 // stft_core adds 1e-9 before sqrt() when calculating magnitudes, so a truly
 // empty chunk is approximately 3.16e-5. Only bypass inference at that floor;
 // quiet but audible material still follows the original model path.
@@ -76,8 +96,8 @@ export class AIVocalManager {
     this.onStatusChange = null;
     this.lastError = null;
 
-    // Separation Settings (1=Soft/Fast, 2=Standard/Optimal, 3=Deep, 4=Ultra)
-    this.diffLevel = 2;
+    // Former DIFF=2 behavior is now fixed: one chunk of lookahead.
+    this.vocalProfile = DEFAULT_VOCAL_PROFILE;
     this.strength = 1.0;
 
     // Engine Selection: "webgl" (Browser in-app) or "go_native" (Desktop engine)
@@ -136,7 +156,7 @@ export class AIVocalManager {
     this.outTailR = new Float32Array(TAIL);
 
     // High-efficiency pre-allocated buffer for zero-overhead typed array ingestion
-    this.interleavedMags = new Float32Array(_ * A * 2);
+    this.interleavedMags = new Float32Array(_ * MAX_BROWSER_FRAMES * 2);
 
     // Concurrency Lock & Latency Ceiling: Prevents GPU backlog and WASM memory collision
     this.isBusy = false;
@@ -213,6 +233,32 @@ export class AIVocalManager {
     return this.currentStatus;
   }
 
+  getProcessingConfig() {
+    return VOCAL_PROFILES[this.vocalProfile] || VOCAL_PROFILES[DEFAULT_VOCAL_PROFILE];
+  }
+
+  setVocalProfile(profile) {
+    const nextProfile = profile === "ai_remove" ? "ai_remove" : DEFAULT_VOCAL_PROFILE;
+    if (nextProfile === this.vocalProfile) return;
+
+    this.vocalProfile = nextProfile;
+    // A profile changes the browser packet cadence. Invalidate work already
+    // in flight so an old 15-hop result can never enter the new 16-hop stream.
+    this.streamGeneration++;
+    this.streamChunkFloor = null;
+    this.resetState();
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({
+        type: "SET_PROFILE",
+        profile: this.vocalProfile,
+        browserChunkSize: this.getProcessingConfig().chunkSamples,
+        engineType: this.engineType,
+        generation: this.streamGeneration
+      });
+    }
+    if (this.currentMode !== "bypass") this.setStatus("Buffering...");
+  }
+
   resetState() {
     if (this.rollingMags) {
       try { this.rollingMags.dispose(); } catch (_) {}
@@ -262,9 +308,9 @@ export class AIVocalManager {
 
           if (this.engineType === "go_native") {
             this.diagnostics.goChunks++;
-            const depth = Math.max(1, Math.min(4, Number(this.diffLevel) || 2));
-            const delayChunks = depth - 1;
-            this.goClient.sendChunk(data.chunkIndex, data.rawL, data.rawR, data.mode, delayChunks);
+            // DIFF is fixed at its proven former level 2: one chunk of
+            // lookahead. Profile selection only changes the browser path.
+            this.goClient.sendChunk(data.chunkIndex, data.rawL, data.rawR, data.mode, 1);
             // Never feed raw audio back into the GO path when the bridge is
             // unavailable. The worklet's GO concealment path will mute the
             // brief underrun instead of leaking the original vocal signal.
@@ -557,14 +603,16 @@ export class AIVocalManager {
       const modelLoader = createVocalModelLoader(tf, ioHandler);
 
       const runWarmup = async () => {
+        const processing = this.getProcessingConfig();
+        const frames = processing.frames;
         const dummyInput = tf.zeros([1, _, 64, 2]);
         let outTensor = null;
         let maskTensor = null;
         try {
           outTensor = this.model.execute(dummyInput);
           maskTensor = tf.tidy(() => {
-            const sliced = outTensor.slice([0, 0, 34, 0], [1, _, A, 2]);
-            return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
+            const sliced = outTensor.slice([0, 0, processing.sliceStart, 0], [1, _, frames, 2]);
+            return sliced.transpose([0, 3, 2, 1]).reshape([2, frames, _]).sigmoid();
           });
           // Flush the accelerator pipeline and compile the readback path too.
           await maskTensor.data();
@@ -651,12 +699,14 @@ export class AIVocalManager {
       let benchmarkMs = 0;
       try {
         const tBench0 = performance.now();
+        const processing = this.getProcessingConfig();
+        const frames = processing.frames;
         const benchIn = tf.zeros([1, _, 64, 2]);
         const benchOut = this.model.execute(benchIn);
         benchIn.dispose();
         const benchMask = tf.tidy(() => {
-          const sliced = benchOut.slice([0, 0, 34, 0], [1, _, A, 2]);
-          return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
+          const sliced = benchOut.slice([0, 0, processing.sliceStart, 0], [1, _, frames, 2]);
+          return sliced.transpose([0, 3, 2, 1]).reshape([2, frames, _]).sigmoid();
         });
         benchOut.dispose();
         await benchMask.data();
@@ -727,7 +777,7 @@ export class AIVocalManager {
     const backend = this.backendName || "GPU";
     const msStr = this.lastInferMs ? ` (${backend} ${this.lastInferMs}ms)` : ` [${backend}]`;
     if (!data.isAiReady) {
-      const targetSec = ((data.readyThreshold || 5) * (data.chunkSize || F) / 44100).toFixed(1);
+      const targetSec = ((data.readyThreshold || 5) * (data.chunkSize || this.getProcessingConfig().chunkSamples) / 44100).toFixed(1);
       if (parseFloat(data.bufferedSec) === 0 && this.lastInferMs === 0) {
         const modeLabel = data.mode === "karaoke" ? "KARAOKE" : "ACAPELLA";
         this.setStatus(`${modeLabel} (Ready - Play audio) [${backend}]`);
@@ -747,6 +797,9 @@ export class AIVocalManager {
     }
 
     const tStart = performance.now();
+    const processing = this.getProcessingConfig();
+    const frames = processing.frames;
+    const chunkSamples = processing.chunkSamples;
     const diagnosticsEnabled = this.diagnostics.enabled;
     let stftForwardMs = 0;
     let normalizationMs = 0;
@@ -760,27 +813,25 @@ export class AIVocalManager {
         this.mem = new Float32Array(this.exp.memory.buffer);
       }
 
-      // 1. Zero-Copy Input Sliding: 1,536 history + 7,680 current = 9,216 samples
+      // 1. Zero-Copy Input Sliding: history + profile-sized current chunk.
       this.mem.subarray(this.inPtr0, this.inPtr0 + TAIL).set(this.inHistoryL);
-      this.mem.subarray(this.inPtr0 + TAIL, this.inPtr0 + TAIL + F).set(rawL);
-      this.inHistoryL.set(rawL.subarray(F - TAIL, F));
+      this.mem.subarray(this.inPtr0 + TAIL, this.inPtr0 + TAIL + chunkSamples).set(rawL);
+      this.inHistoryL.set(rawL.subarray(chunkSamples - TAIL, chunkSamples));
 
       this.mem.subarray(this.inPtr1, this.inPtr1 + TAIL).set(this.inHistoryR);
-      this.mem.subarray(this.inPtr1 + TAIL, this.inPtr1 + TAIL + F).set(rawR);
-      this.inHistoryR.set(rawR.subarray(F - TAIL, F));
+      this.mem.subarray(this.inPtr1 + TAIL, this.inPtr1 + TAIL + chunkSamples).set(rawR);
+      this.inHistoryR.set(rawR.subarray(chunkSamples - TAIL, chunkSamples));
 
-      // 2. SIMD128 Forward STFT: computes 15 frames & stores to C circular ring buffer
+      // 2. SIMD128 Forward STFT: profile-sized frame batch.
       const stftStart = diagnosticsEnabled ? performance.now() : 0;
-      this.exp.stft_forward(A);
+      this.exp.stft_forward(frames);
       if (diagnosticsEnabled) stftForwardMs = performance.now() - stftStart;
 
       const modeCode = mode === "karaoke" ? 1 : mode === "acapella" ? 0 : 2;
 
-      // Lookahead Depth & Exact Time Alignment
-      // diffLevel: 1=Soft (0 delay, real-time), 2=Standard (1 chunk delay), 3=Deep (2 chunks), 4=Ultra (3 chunks)
-      const depth = Math.max(1, Math.min(4, Number(this.diffLevel) || 2));
-      const delayChunks = depth - 1;
-      const sliceStart = 49 - 15 * delayChunks; // 15-hop timeline; Level 2 (Standard) = Frame 34
+      // Former DIFF=2 behavior is fixed: one chunk of lookahead.
+      const delayChunks = processing.delayChunks;
+      const sliceStart = processing.sliceStart;
 
       // 3. Peak Tracking and Global Normalization Factor
       let chunkPeak = 1e-5;
@@ -808,7 +859,7 @@ export class AIVocalManager {
         : this.chunkPeakHistory.get(targetChunkIndex);
       const targetIsDigitalSilence = targetPeak !== undefined && targetPeak <= DIGITAL_SILENCE_PEAK;
       if (targetIsDigitalSilence) {
-        this.exp.stft_apply_mask_delayed(delayChunks, A, 2, 0.0);
+        this.exp.stft_apply_mask_delayed(delayChunks, frames, 2, 0.0);
       } else {
         // 4. Zero-GPU-Overhead Rolling Window & Ingestion
         const normalizationStart = diagnosticsEnabled ? performance.now() : 0;
@@ -822,20 +873,23 @@ export class AIVocalManager {
             [1, _, 64, 2]
           );
         } else {
-          const mags0 = this.mem.subarray(this.magPtr0, this.magPtr0 + A * _);
-          const mags1 = this.mem.subarray(this.magPtr1, this.magPtr1 + A * _);
+          const mags0 = this.mem.subarray(this.magPtr0, this.magPtr0 + frames * _);
+          const mags1 = this.mem.subarray(this.magPtr1, this.magPtr1 + frames * _);
           let p = 0;
           for (let k = 0; k < _; k++) {
-            for (let f = 0; f < A; f++) {
+            for (let f = 0; f < frames; f++) {
               this.interleavedMags[p++] = mags0[f * _ + k];
               this.interleavedMags[p++] = mags1[f * _ + k];
             }
           }
           if (!this.rollingMags) this.rollingMags = tf.zeros([1, _, 64, 2]);
           const [newRolling, nIn] = tf.tidy(() => {
-            const newMags = tf.tensor4d(this.interleavedMags, [1, _, A, 2]);
+            const newMags = tf.tensor4d(
+              this.interleavedMags.subarray(0, _ * frames * 2),
+              [1, _, frames, 2]
+            );
             const rolled = this.rollingMags
-              .slice([0, 0, A, 0], [1, _, 64 - A, 2])
+              .slice([0, 0, frames, 0], [1, _, 64 - frames, 2])
               .concat(newMags, 2);
             return [rolled, rolled.mul(invMax)];
           });
@@ -853,9 +907,9 @@ export class AIVocalManager {
 
         // 6. Slice time-aligned window & compute sigmoid mask in tidy
         const maskTensor = tf.tidy(() => {
-          const sliced = outTensor.slice([0, 0, sliceStart, 0], [1, _, A, 2]);
+          const sliced = outTensor.slice([0, 0, sliceStart, 0], [1, _, frames, 2]);
           outTensor.dispose(); // Free large 64-frame output tensor from GPU immediately!
-          return sliced.transpose([0, 3, 2, 1]).reshape([2, A, _]).sigmoid();
+          return sliced.transpose([0, 3, 2, 1]).reshape([2, frames, _]).sigmoid();
         });
 
         const readbackStart = diagnosticsEnabled ? performance.now() : 0;
@@ -874,20 +928,20 @@ export class AIVocalManager {
         }
 
         // 7. Write pure neural network mask directly into WASM mask buffer
-        this.mem.subarray(this.maskPtr0, this.maskPtr0 + A * _).set(maskData.subarray(0, A * _));
-        this.mem.subarray(this.maskPtr1, this.maskPtr1 + A * _).set(maskData.subarray(A * _, 2 * A * _));
+        this.mem.subarray(this.maskPtr0, this.maskPtr0 + frames * _).set(maskData.subarray(0, frames * _));
+        this.mem.subarray(this.maskPtr1, this.maskPtr1 + frames * _).set(maskData.subarray(frames * _, 2 * frames * _));
 
         // 8. Pure Mask Application via C/WASM
-        this.exp.stft_apply_mask_delayed(delayChunks, A, modeCode, this.strength);
+        this.exp.stft_apply_mask_delayed(delayChunks, frames, modeCode, this.strength);
       }
 
       // 9. Inverse STFT with SIMD128
       synthesisStart = diagnosticsEnabled ? performance.now() : 0;
-      this.exp.stft_backward(A);
+      this.exp.stft_backward(frames);
 
       // 10. Overlap-Add synthesis: add previous tail to first 1,536 samples
-      const synthL = this.mem.subarray(this.outPtr0, this.outPtr0 + F + TAIL);
-      const synthR = this.mem.subarray(this.outPtr1, this.outPtr1 + F + TAIL);
+      const synthL = this.mem.subarray(this.outPtr0, this.outPtr0 + chunkSamples + TAIL);
+      const synthR = this.mem.subarray(this.outPtr1, this.outPtr1 + chunkSamples + TAIL);
 
       for (let i = 0; i < TAIL; i++) {
         synthL[i] += this.outTailL[i];
@@ -895,23 +949,24 @@ export class AIVocalManager {
       }
 
       // Extract exactly one browser cadence: 7,680 continuous samples
-      const outL = new Float32Array(synthL.subarray(0, F));
-      const outR = new Float32Array(synthR.subarray(0, F));
+      const outL = new Float32Array(synthL.subarray(0, chunkSamples));
+      const outR = new Float32Array(synthR.subarray(0, chunkSamples));
 
       // Save overlap tail for next chunk
-      this.outTailL.set(synthL.subarray(F, F + TAIL));
-      this.outTailR.set(synthR.subarray(F, F + TAIL));
+      this.outTailL.set(synthL.subarray(chunkSamples, chunkSamples + TAIL));
+      this.outTailR.set(synthR.subarray(chunkSamples, chunkSamples + TAIL));
 
       this.diagnostics.processedChunks++;
       if (diagnosticsEnabled) {
         this.diagnostics.lastProcessed = {
           inputChunkIndex: chunkIndex,
           generation,
-          inputFrame: chunkIndex * A,
+          profile: this.vocalProfile,
+          inputFrame: chunkIndex * frames,
           targetChunkIndex,
-          targetFrame: targetChunkIndex * A,
-          depth,
-          chunkSamples: F,
+          targetFrame: targetChunkIndex * frames,
+          depth: delayChunks + 1,
+          chunkSamples,
           digitalSilenceBypass: targetIsDigitalSilence
         };
         pushDiagnosticSample(this.diagnostics.timings.stftForward, stftForwardMs);
@@ -955,8 +1010,9 @@ export class AIVocalManager {
     }
   }
 
-  setDiffLevel(level) {
-    this.diffLevel = Math.max(1, Math.min(4, Number(level) || 2));
+  setDiffLevel() {
+    // Backward-compatible API for old remote clients. DIFF is intentionally
+    // fixed at the former level 2 (one chunk of lookahead).
     this.strength = 1.0;
   }
 
@@ -983,6 +1039,9 @@ export class AIVocalManager {
       this.workletNode.port.postMessage({
         type: "SET_MODE",
         mode: "bypass",
+        profile: this.vocalProfile,
+        browserChunkSize: this.getProcessingConfig().chunkSamples,
+        engineType: this.engineType,
         generation: this.streamGeneration
       });
     }
@@ -1012,6 +1071,9 @@ export class AIVocalManager {
       this.workletNode.port.postMessage({
         type: "SET_MODE",
         mode: "bypass",
+        profile: this.vocalProfile,
+        browserChunkSize: this.getProcessingConfig().chunkSamples,
+        engineType: this.engineType,
         generation: this.streamGeneration
       });
     }
@@ -1031,6 +1093,7 @@ export class AIVocalManager {
       this.workletNode.port.postMessage({
         type: "SET_ENGINE",
         engineType: this.engineType,
+        browserChunkSize: this.getProcessingConfig().chunkSamples,
         generation: this.streamGeneration
       });
     }
@@ -1095,6 +1158,8 @@ export class AIVocalManager {
         type: "SET_MODE",
         mode,
         engineType: this.engineType,
+        profile: this.vocalProfile,
+        browserChunkSize: this.getProcessingConfig().chunkSamples,
         generation: this.streamGeneration
       });
     }
@@ -1122,7 +1187,8 @@ export class AIVocalManager {
         ? { forceF16: !!tf.env().get("WEBGL_FORCE_F16_TEXTURES") }
         : null;
     } catch (_) {}
-    const chunkSamples = this.engineType === "go_native" ? 8192 : F;
+    const processing = this.getProcessingConfig();
+    const chunkSamples = this.engineType === "go_native" ? 8192 : processing.chunkSamples;
     const sampleRate = this.audioCtx?.sampleRate || 44100;
     return {
       version: 1,
@@ -1132,11 +1198,12 @@ export class AIVocalManager {
       backend: this.backendName,
       sampleRate,
       texturePrecision,
+      profile: this.vocalProfile,
       modelGraphFoldedBranches: this.modelGraphFoldedBranches,
       modelGraphExplicitPads: this.modelGraphExplicitPads,
       cadence: {
         chunkSamples,
-        frames: this.engineType === "go_native" ? 16 : A,
+        frames: this.engineType === "go_native" ? 16 : processing.frames,
         hopSamples: 512,
         chunkMs: Number((chunkSamples / sampleRate * 1000).toFixed(2))
       },

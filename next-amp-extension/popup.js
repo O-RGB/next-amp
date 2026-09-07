@@ -33,6 +33,7 @@ let isEqOn = true;
 let isVocalOn = false;
 let currentVocalMode = "bypass";
 let aiEngineType = "webgl"; // "webgl" or "go_native"
+let currentVocalProfile = "balanced";
 
 let isNormalizeOn = false;
 let currentEqValues = [...PRESETS.flat];
@@ -240,6 +241,7 @@ async function finalizeInitialization() {
     "isEqOn",
     "isVocalOn",
     "aiEngineType",
+    "vocalProfile",
   ]);
   if (savedToggles.isAudioMasterOn !== undefined)
     isAudioMasterOn = savedToggles.isAudioMasterOn;
@@ -248,6 +250,8 @@ async function finalizeInitialization() {
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
   if (savedToggles.isVocalOn !== undefined) isVocalOn = savedToggles.isVocalOn;
   if (savedToggles.aiEngineType !== undefined) aiEngineType = savedToggles.aiEngineType;
+  if (savedToggles.vocalProfile !== undefined) currentVocalProfile = savedToggles.vocalProfile === "ai_remove" ? "ai_remove" : "balanced";
+  updateVocalProfileUI(currentVocalProfile);
   updateAiEngineUI();
   checkGoEngineHealth();
 
@@ -271,6 +275,7 @@ async function finalizeInitialization() {
       "reverbDecay",
       "dynBoost",
       "dynLimit",
+      "vocalProfile",
     ]);
 
     if (Object.keys(sharedParams).length > 0) {
@@ -322,6 +327,7 @@ async function finalizeInitialization() {
       } else {
         updateVocalMasterUI();
       }
+      if (sharedParams.vocalProfile) updateVocalProfileUI(sharedParams.vocalProfile);
 
       if (sharedParams.reverbTime)
         $("#adv-rev-time").value = sharedParams.reverbTime;
@@ -648,6 +654,7 @@ async function initCapture(mode) {
           sendParam("isVideoMasterOn", isVideoMasterOn);
           sendParam("isVocalOn", isVocalOn);
           sendParam("vocalMode", currentVocalMode);
+          sendParam("vocalProfile", currentVocalProfile);
           sendParam("aiEngineType", aiEngineType);
         })
         .catch((e) => console.warn(e));
@@ -770,10 +777,11 @@ function updateVocalMasterUI() {
   }
 }
 
-function updateDiffUI(level) {
-  const lvl = Number(level) || 2;
-  $$(".btn-diff").forEach((btn) => {
-    if (Number(btn.dataset.level) === lvl) {
+function updateVocalProfileUI(profile) {
+  const selected = profile === "ai_remove" ? "ai_remove" : "balanced";
+  currentVocalProfile = selected;
+  $$(".btn-vocal-profile").forEach((btn) => {
+    if (btn.dataset.profile === selected) {
       btn.classList.add("pressed");
     } else {
       btn.classList.remove("pressed");
@@ -845,8 +853,8 @@ function updateUIFromExternal(key, value, index) {
     updateVocalMasterUI();
   } else if (key === "vocalMode") {
     updateVocalUI(value);
-  } else if (key === "vocalDiff") {
-    updateDiffUI(value);
+  } else if (key === "vocalProfile") {
+    updateVocalProfileUI(value);
   } else if (key === "aiEngineType") {
     aiEngineType = value;
     updateAiEngineUI();
@@ -1113,11 +1121,13 @@ function setupListeners() {
     sendParam("vocalMode", "acapella");
     updateVocalUI("acapella");
   });
-  $$(".btn-diff").forEach((btn) => {
+  $$(".btn-vocal-profile").forEach((btn) => {
     btn.addEventListener("click", (e) => {
-      const lvl = Number(e.currentTarget.dataset.level) || 2;
-      sendParam("vocalDiff", lvl);
-      updateDiffUI(lvl);
+      const profile = e.currentTarget.dataset.profile === "ai_remove" ? "ai_remove" : "balanced";
+      currentVocalProfile = profile;
+      sessionManager.setSetting({ vocalProfile: profile });
+      sendParam("vocalProfile", profile);
+      updateVocalProfileUI(profile);
     });
   });
 
@@ -1644,9 +1654,7 @@ function loadAudioState(state) {
   } else {
     updateVocalMasterUI();
   }
-  if (state.vocalDiff !== undefined) {
-    updateDiffUI(state.vocalDiff);
-  }
+  updateVocalProfileUI(state.vocalProfile || currentVocalProfile);
   if (state.vocalStatus) {
     const txtStatus = $("#txt-vocal-status");
     if (txtStatus) {

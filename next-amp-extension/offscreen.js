@@ -128,7 +128,7 @@ const createDefaultParams = () => ({
   dynLimit: 60,
   isVocalOn: false,
   vocalMode: "bypass", // "bypass", "karaoke", "acapella"
-  vocalDiff: 2,        // 1, 2, 3, 4
+  vocalProfile: "balanced", // "balanced" or "ai_remove" (higher-detail app profile)
   aiEngineType: "webgl", // "webgl" or "go_native"
 });
 
@@ -569,11 +569,16 @@ function applyParamToSession(session, key, value, index, source) {
         }
       }
       break;
-    case "vocalDiff":
-      params.vocalDiff = value;
+    case "vocalProfile":
+      params.vocalProfile = value === "ai_remove" ? "ai_remove" : "balanced";
       if (session.aiVocal) {
-        session.aiVocal.setDiffLevel(value);
+        session.aiVocal.setVocalProfile(params.vocalProfile);
       }
+      break;
+    case "vocalDiff":
+      // Deprecated compatibility path for older remote/popup builds.
+      // DIFF is fixed at the former level 2.
+      if (session.aiVocal) session.aiVocal.setDiffLevel(2);
       break;
     case "aiEngineType":
       params.aiEngineType = value;
@@ -777,7 +782,7 @@ function applyAllParams(session) {
   // Apply AI Vocal parameters
   if (session.aiVocal) {
     if (params.aiEngineType) session.aiVocal.setEngineType(params.aiEngineType);
-    if (params.vocalDiff) session.aiVocal.setDiffLevel(params.vocalDiff);
+    if (params.vocalProfile) session.aiVocal.setVocalProfile(params.vocalProfile);
     if (!params.isVocalOn) {
       session.aiVocal.unloadEngine();
     } else {

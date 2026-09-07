@@ -56,6 +56,29 @@ const processed = (chunkIndex, value, generation) => ({
   outR: new Float32Array(7680).fill(value),
   ...(Number.isInteger(generation) ? { generation } : {})
 });
+
+const profileProcessor = new Processor();
+profileProcessor.port.onmessage({ data: {
+  type: 'SET_MODE', mode: 'karaoke', engineType: 'webgl', generation: 40
+} });
+processBlocks(profileProcessor, 60);
+assert.equal(messagesOfType(profileProcessor, 'PROCESS_CHUNK').at(-1).rawL.length, 7680);
+profileProcessor.port.onmessage({ data: {
+  type: 'SET_PROFILE', profile: 'ai_remove', browserChunkSize: 8192, generation: 41
+} });
+assert.equal(profileProcessor.vocalProfile, 'ai_remove');
+processBlocks(profileProcessor, 64);
+assert.equal(messagesOfType(profileProcessor, 'PROCESS_CHUNK').at(-1).rawL.length, 8192,
+  'high-detail profile must use the 16-hop app cadence');
+assert.equal(profileProcessor.isAiReady, false, 'profile switch must flush readiness');
+profileProcessor.port.onmessage({ data: {
+  type: 'SET_PROFILE', profile: 'balanced', browserChunkSize: 7680, generation: 42
+} });
+assert.equal(profileProcessor.vocalProfile, 'balanced');
+processBlocks(profileProcessor, 60);
+assert.equal(messagesOfType(profileProcessor, 'PROCESS_CHUNK').at(-1).rawL.length, 7680,
+  'switching back must restore the low-power cadence');
+
 processor.port.onmessage({ data: processed(0, 0.05) });
 processBlocks(processor, 60);
 chunks = messagesOfType(processor, 'PROCESS_CHUNK');

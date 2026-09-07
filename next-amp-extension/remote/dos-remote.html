@@ -77,18 +77,14 @@ button:active,button.active{background:#00ff00;color:#000}
     <span id="t-vocal">ORIGINAL</span>
   </div>
   <div class="btn-grid-3">
-    <button id="btn-vocal-orig" class="active" onclick="setVocal('bypass')">ORIG</button>
-    <button id="btn-vocal-karaoke" onclick="setVocal('karaoke')">KARAOKE</button>
-    <button id="btn-vocal-acapella" onclick="setVocal('acapella')">ACAPELLA</button>
+    <button id="btn-vocal-orig" class="active" onclick="setVocal('bypass')">🔊 ORIG</button>
+    <button id="btn-vocal-karaoke" onclick="setVocal('karaoke')">🎤 KARA</button>
+    <button id="btn-vocal-acapella" onclick="setVocal('acapella')">🎵 SOLO</button>
   </div>
   <div class="row" style="margin-top:6px">
-    <span class="label">DIFF:</span>
-    <select id="sel-diff" onchange="snd('vocalDiff', +this.value)" style="flex:1">
-      <option value="1">1: SOFT (0.8x)</option>
-      <option value="2" selected>2: STANDARD (1.0x)</option>
-      <option value="3">3: DEEP (1.3x)</option>
-      <option value="4">4: ULTRA (1.6x)</option>
-    </select>
+    <span class="label">MODEL:</span>
+    <button id="btn-vocal-balanced" class="active" onclick="setVocalProfile('balanced')" style="flex:1">〰 SMOOTH</button>
+    <button id="btn-vocal-detail" onclick="setVocalProfile('ai_remove')" style="flex:1">✦ DETAIL</button>
   </div>
 </div>
 
@@ -262,6 +258,10 @@ function setVocal(m) {
   snd("vocalMode", m);
 }
 
+function setVocalProfile(profile) {
+  snd("vocalProfile", profile === "ai_remove" ? "ai_remove" : "balanced");
+}
+
 function applyFullState(s) {
   isProgrammatic = true;
   for (let k in s) syncKey(k, s[k]);
@@ -296,8 +296,10 @@ function syncKey(k, v) {
     G("btn-vocal-acapella")?.classList.toggle("active", m === "acapella");
     const t = G("t-vocal");
     if (t) t.textContent = m === "karaoke" ? "KARAOKE" : m === "acapella" ? "ACAPELLA" : "ORIGINAL";
-  } else if (k === "vocalDiff") {
-    if (G("sel-diff")) G("sel-diff").value = v;
+  } else if (k === "vocalProfile") {
+    const profile = v === "ai_remove" ? "ai_remove" : "balanced";
+    G("btn-vocal-balanced")?.classList.toggle("active", profile === "balanced");
+    G("btn-vocal-detail")?.classList.toggle("active", profile === "ai_remove");
   } else if (k === "isAudioMasterOn") {
     G("btn-mute").className = v ? "" : "active";
     G("btn-mute").textContent = v ? "MUTE" : "MUTED";

@@ -181,7 +181,7 @@ app เลือก 44.1 kHz เป็นค่าเริ่มต้น แ�
 - [ ] วัดการใช้พลังงานจริงเทียบกับ baseline app
 - [x] ไม่ถือ `ai remove` เป็นตัวแทนของ app ที่เพิ่ม cadence เพราะ weights ของ reference ยังไม่ทราบ
 
-- [ ] ตัดสินใจจากผลวัดว่าจะคง cadence เดิมหรือเพิ่ม cadence
+- [x] ยังไม่บังคับเพิ่ม cadence เป็นค่าเริ่มต้น; เปิด cadence ที่สูงขึ้นเป็น profile `HIGH DETAIL` ให้ผู้ใช้เลือกและเก็บ `SMOOTH` เป็น default
 
 ## วิธีวัดและเกณฑ์ตัดสิน
 
@@ -213,6 +213,21 @@ app เลือก 44.1 kHz เป็นค่าเริ่มต้น แ�
 
 - [ ] วัด joules/ระยะเวลาที่เล่น พร้อม CPU/GPU workload และความคลาดเคลื่อนของเครื่องมือ
 - [ ] รายงานข้อจำกัดหากวัดกำลังไฟ GPU รุ่นเก่าโดยตรงไม่ได้
+
+## F — Model detail profiles ใน app
+
+เป้าหมายของส่วนนี้ไม่ใช่การยก pipeline ของ `ai remove` มาใช้ทั้งหมด แต่เป็นการคง graph/normalization/queue ที่ optimize แล้ว และเปิดให้เลือก cadence ของ app สองระดับ
+
+- [x] เอาปุ่ม DIFF 1–4 ออกจาก main popup และตรึงพฤติกรรมเดิมไว้ที่ former DIFF=2 (one-chunk lookahead)
+- [x] ตั้งค่าเริ่มต้นเป็น `SMOOTH`: browser 7,680 samples / 15-hop ใช้พลังงานต่ำกว่าและเป็นค่าที่ผ่านการทดสอบบน Apple กับ GTX 1050 Ti
+- [x] เพิ่ม `HIGH DETAIL`: browser 8,192 samples / 16-hop ใช้ weights และ optimized model graph เดิม เพิ่มเฉพาะ cadence/detail ที่ปลอดภัยใน app
+- [x] ส่ง profile ผ่าน manager/offscreen/worklet พร้อม generation reset เพื่อไม่ให้ผล 15-hop เดิมปนกับ stream 16-hop
+- [x] คง GO ไว้ที่ 8,192 samples / 16-hop; profile นี้ไม่ได้เปลี่ยน pipeline ของ GO
+- [x] ไม่เปิด `WEBGL_FORCE_F16`, smoothing หรือ post-process เพิ่มเพียงเพราะเลือก HIGH DETAIL
+- [ ] ฟัง A/B เพลงจริงและยืนยันว่า HIGH DETAIL ตัดเสียงร้องชัดขึ้นโดยไม่ทำให้ดนตรีวูบวาบ
+- [ ] วัด CPU/GPU/พลังงานและ latency จริงของทั้งสอง profile บน Apple และ Windows GTX 1050 Ti
+
+หมายเหตุ: `HIGH DETAIL` เป็นชื่อโปรไฟล์ของ app ที่เพิ่ม cadence อย่างจำกัด ไม่ใช่การ clone AI Remove แบบ byte-for-byte เพราะ reference ใช้ timeline/WASM และการอ่าน mask คนละชุด
 
 TF.js มีต้นทุน upload/readback, shader compilation และการจัดการ tensor; ใช้ warmup และ async readback ที่ app มีอยู่แล้ว ไม่เสนอซ้ำว่าเป็น optimization ใหม่ ดู [Platform and environment](https://www.tensorflow.org/js/guide/platform_environment) ทั้งนี้เอกสารมีเนื้อหาเก่าเกี่ยวกับการจัดอันดับ backend จึงใช้เฉพาะหลักการ ไม่สรุปว่า WebGL/WebGPU ใดเร็วที่สุดจากเอกสาร
 

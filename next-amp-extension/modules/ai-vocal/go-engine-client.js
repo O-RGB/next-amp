@@ -18,6 +18,11 @@ export class GoEngineClient {
     this.pendingChunks = new Map();
     this.reconnectTimer = null;
 
+    // Some Chromium/Windows runtimes can still surface a binary WebSocket
+    // message as a Blob. Keep Blob conversion serialized so audio packets
+    // cannot be delivered to the worklet out of order.
+    this.binaryReadChain = Promise.resolve();
+
     this.onStatusChange = null;
     this.onChunkProcessed = null;
 
@@ -141,28 +146,48 @@ export class GoEngineClient {
     }
 
     if (e.data instanceof ArrayBuffer) {
-      const buf = e.data;
-      if (buf.byteLength < 8) return;
+      this.handleBinaryBuffer(e.data);
+      return;
+    }
 
-      const view = new DataView(buf);
-      const chunkIndex = view.getUint32(0, true);
+    // `binaryType = "arraybuffer"` is the requested mode, but a few Windows
+    // browser/runtime combinations have been observed to deliver Blob here.
+    // Ignoring that Blob leaves input meters working while the output queue
+    // stays empty, which sounds exactly like a silent GO engine.
+    if (typeof Blob !== "undefined" && e.data instanceof Blob) {
+      this.binaryReadChain = this.binaryReadChain
+        .then(() => e.data.arrayBuffer())
+        .then((buf) => this.handleBinaryBuffer(buf))
+        .catch(() => {});
+    }
+  }
 
-      const sendTime = this.pendingChunks.get(chunkIndex);
-      if (sendTime) {
-        this.lastRtt = Math.round((performance.now() - sendTime) * 10) / 10;
-        this.pendingChunks.delete(chunkIndex);
-      }
+  handleBinaryBuffer(buf) {
+    if (!(buf instanceof ArrayBuffer) || buf.byteLength < 8) return;
 
-      // Zero-Copy sub-array views (no buf.slice, no duplicate ArrayBuffer allocation)
-      const numSamples = (buf.byteLength - 8) / 8;
-      const byteLen = numSamples * 4;
+    const payloadBytes = buf.byteLength - 8;
+    // A valid GO packet is [8-byte header][float32 L][float32 R].
+    // Reject malformed packets before constructing typed-array views.
+    if (payloadBytes === 0 || payloadBytes % 8 !== 0) return;
 
-      const outL = new Float32Array(buf, 8, numSamples);
-      const outR = new Float32Array(buf, 8 + byteLen, numSamples);
+    const view = new DataView(buf);
+    const chunkIndex = view.getUint32(0, true);
 
-      if (this.onChunkProcessed) {
-        this.onChunkProcessed(chunkIndex, outL, outR, this.lastRtt, buf);
-      }
+    const sendTime = this.pendingChunks.get(chunkIndex);
+    if (sendTime) {
+      this.lastRtt = Math.round((performance.now() - sendTime) * 10) / 10;
+      this.pendingChunks.delete(chunkIndex);
+    }
+
+    // Zero-Copy sub-array views (no buf.slice, no duplicate ArrayBuffer allocation)
+    const numSamples = payloadBytes / 8;
+    const byteLen = numSamples * 4;
+
+    const outL = new Float32Array(buf, 8, numSamples);
+    const outR = new Float32Array(buf, 8 + byteLen, numSamples);
+
+    if (this.onChunkProcessed) {
+      this.onChunkProcessed(chunkIndex, outL, outR, this.lastRtt, buf);
     }
   }
 

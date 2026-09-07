@@ -10,7 +10,7 @@
  */
 
 const GO_CHUNK_SIZE = 8192; // 16 frames * 512 hop (GO wire protocol)
-const BROWSER_CHUNK_SIZE = 7680; // 15 hops * 512 (~174.1ms), ai remove cadence
+const BROWSER_CHUNK_SIZE = 7680; // 15 hops * 512 (~174.1ms), smooth profile
 const MAX_CHUNK_SIZE = GO_CHUNK_SIZE;
 const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
 const FADE_IN_SPEED = 1.0 / 1024;  // ~23ms smooth fade-in
@@ -33,6 +33,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.mode = "bypass"; // "bypass", "karaoke", "acapella"
     this.targetMode = "bypass";
     this.engineType = "webgl";
+    this.vocalProfile = "balanced";
     this.chunkSize = BROWSER_CHUNK_SIZE;
     this.readyThreshold = READY_QUEUE_THRESHOLD;
     this.maxQueueThreshold = MAX_QUEUE_THRESHOLD;
@@ -92,7 +93,10 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         this.streamGeneration = nextGeneration;
         if (data.engineType === "go_native" || data.engineType === "webgl") {
           this.engineType = data.engineType;
-          this.setChunkSizeForEngine(this.engineType);
+          this.setChunkSizeForEngine(this.engineType, data.browserChunkSize);
+        }
+        if (data.profile === "balanced" || data.profile === "ai_remove") {
+          this.vocalProfile = data.profile;
         }
         if (this.targetMode !== data.mode || generationChanged) {
           this.diagnostics.modeTransitions++;
@@ -129,7 +133,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         if (Number.isInteger(data.generation)) this.streamGeneration = data.generation;
         if (this.engineType !== nextEngine) {
           this.engineType = nextEngine;
-          this.setChunkSizeForEngine(this.engineType);
+          this.setChunkSizeForEngine(this.engineType, data.browserChunkSize);
           this.isAiReady = false;
           this.outQueueL = [];
           this.outQueueR = [];
@@ -150,6 +154,41 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
         this.maxQueueThreshold = this.engineType === "go_native"
           ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
+      } else if (data.type === "SET_PROFILE") {
+        const nextProfile = data.profile === "ai_remove" ? "ai_remove" : "balanced";
+        const nextGeneration = Number.isInteger(data.generation)
+          ? data.generation : this.streamGeneration + 1;
+        const generationChanged = nextGeneration !== this.streamGeneration;
+        const profileChanged = nextProfile !== this.vocalProfile;
+        this.streamGeneration = nextGeneration;
+        this.vocalProfile = nextProfile;
+        this.setChunkSizeForEngine(this.engineType, data.browserChunkSize);
+
+        if (profileChanged || generationChanged) {
+          this.isAiReady = false;
+          this.readyThreshold = this.engineType === "go_native"
+            ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
+          this.maxQueueThreshold = this.engineType === "go_native"
+            ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
+          this.outQueueL = [];
+          this.outQueueR = [];
+          this.outQueueIndex = [];
+          this.currChunkL = null;
+          this.currChunkR = null;
+          this.currChunkIndex = null;
+          this.currChunkPos = 0;
+          this.concealGain = 1.0;
+          this.playbackChunkIndex = null;
+          this.playbackSamples = 0;
+          this.latestInputChunkIndex = null;
+          this.chunkPeak = 0.0;
+          this.silentChunks = 0;
+          this.inSilenceBoundary = false;
+          this.missingInputBlocks = 0;
+          this.inAccumPos = 0;
+          this.chunkSeq = 0;
+          if (this.targetMode !== "bypass") this.aiGain = 0.0;
+        }
       } else if (data.type === "RESYNC") {
         // The browser-side inference queue dropped old work. Flush every
         // processed buffer so the next result starts at the newest live chunk
@@ -175,8 +214,10 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     };
   }
 
-  setChunkSizeForEngine(engineType) {
-    const nextSize = engineType === "go_native" ? GO_CHUNK_SIZE : BROWSER_CHUNK_SIZE;
+  setChunkSizeForEngine(engineType, browserChunkSize = BROWSER_CHUNK_SIZE) {
+    const requestedSize = Number(browserChunkSize);
+    const browserSize = requestedSize === GO_CHUNK_SIZE ? GO_CHUNK_SIZE : BROWSER_CHUNK_SIZE;
+    const nextSize = engineType === "go_native" ? GO_CHUNK_SIZE : browserSize;
     if (this.chunkSize === nextSize) return;
     this.chunkSize = nextSize;
     // A partial packet belongs to the previous cadence. Drop it so a mode
