@@ -533,6 +533,11 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// WebSocket message.
 	packetBuf := make([]byte, HeaderBytes+(dsp.ChunkSamples*8))
 	outBuf := make([]byte, HeaderBytes+(dsp.ChunkSamples*8))
+	// Keep the safe failure output allocation outside the audio loop. These
+	// buffers are only exposed to the dashboard on an inference/provider error;
+	// the WebSocket response itself is still zeroed by packSilentSamples.
+	silenceL := make([]float32, dsp.ChunkSamples)
+	silenceR := make([]float32, dsp.ChunkSamples)
 	conn.SetReadLimit(int64(len(packetBuf)))
 
 	for {
@@ -631,8 +636,8 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 					}
 
 					if runErr != nil {
-						outL = make([]float32, len(leftSamples))
-						outR = make([]float32, len(rightSamples))
+						outL = silenceL[:len(leftSamples)]
+						outR = silenceR[:len(rightSamples)]
 						respPayload = packSilentSamples(chunkIndex, mode, streamToken, len(leftSamples), outBuf)
 					} else {
 						// 4. Inverse STFT + Fast C SIMD Sigmoid + Overlap-Add (~0.06ms via SIMD)
@@ -648,8 +653,8 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				if mode == 1 || mode == 2 {
 					// Never expose raw audio when an AI mode is requested but the
 					// native session is unavailable. Silence is the safe output.
-					outL = make([]float32, len(leftSamples))
-					outR = make([]float32, len(rightSamples))
+					outL = silenceL[:len(leftSamples)]
+					outR = silenceR[:len(rightSamples)]
 					respPayload = packSilentSamples(chunkIndex, mode, streamToken, len(leftSamples), outBuf)
 				} else {
 					// Bypass Mode (raw zero-latency loopback)

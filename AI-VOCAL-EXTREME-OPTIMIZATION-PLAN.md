@@ -4,11 +4,24 @@
 
 ขอบเขต: AI vocal ฝั่ง app/browser และ `nextamp-engine-go`
 
-ฐานอ้างอิงรอบนี้: `c2ef7ca` (`perf(ai-vocal): stabilize CoreML and realtime GO pipeline`) + adaptive queue/DSP/dashboard batch ที่กำลังทำ
+ฐานอ้างอิงรอบนี้: `0d5ddd9` (`fix(ai-vocal): harden GO stream transitions`) ซึ่งรวม adaptive queue/DSP/dashboard batch แล้ว
 
 > กฎสูงสุด: **คุณภาพเสียงต้องไม่ต่ำกว่าเวอร์ชันปัจจุบัน**
 >
 > ความเร็วหรือการประหยัดไฟไม่มีสิทธิ์ผ่าน หากทำให้เสียงร้องหลงเพิ่ม เครื่องดนตรีวูบวาบขึ้น stereo image แคบลง transient เสีย เสียงแตกเพิ่ม หรือเกิด raw-vocal leak ระหว่างระบบสะดุด
+
+### GO-first safety gate
+
+GO รุ่นที่ผู้ใช้ยืนยันว่าใช้งานได้ปกติคือ production baseline ของรอบนี้ การปรับ Web และ GO ต้องรักษา baseline นี้ก่อนเสมอ:
+
+- [x] Freeze baseline ที่ `0d5ddd9` หลัง GO กลับมาทำงานปกติ และ commit source ที่เกี่ยวข้องแล้ว
+- [x] มี guard สำหรับ mode/song boundary: stream token, pending-request cleanup, stale-response drop และ native DSP reset
+- [ ] Candidate ใดทำให้ GO มีอาการเสียงดับ, ไม่ส่ง output, buffer ค้าง, เสียงกระตุก/ขาด, raw vocal leak, เสียงเก่า หรือ latency สะสม ให้ reject/rollback ทั้ง candidate แม้ benchmark จะเร็วขึ้น
+- [ ] งานที่ทดลองเฉพาะ Web ต้องอยู่หลัง feature boundary ของ Web และต้องไม่เปลี่ยน GO path โดยอัตโนมัติ
+- [ ] ก่อนให้ผู้ใช้ทดสอบแต่ละ batch ต้องผ่าน automated regression + native smoke + pairing ของ extension/GO binary จาก source revision เดียวกัน
+- [ ] ห้ามทำ precision/model graph/queue change ที่เสี่ยงกับ GO จนกว่าจะมี Windows + GTX 1050 Ti stability gate; ถ้าไม่มี headroom ให้ใช้ Web/GO fallback ที่ stable แทน
+
+เกณฑ์ “ผ่าน” ของ GO คือเล่นต่อเนื่องได้จริงโดยไม่มี output หายหรือเสียงหลุดเมื่อ hide popup, เปลี่ยน tab, เปลี่ยนเพลง และมี CPU/GPU load ภายนอก ไม่ใช่ดูแค่ค่า inference latency เฉลี่ย
 
 ไฟล์นี้เป็นแผนรอบใหม่และไม่แทนที่ `AI-VOCAL-OPTIMIZATION-PLAN.md` ซึ่งบันทึกงานรอบก่อนหน้าไว้แล้ว
 
@@ -119,7 +132,7 @@
 
 เป้าหมาย: รู้ว่าเวลาหายที่ไหนและมี baseline เสียงที่ย้อนกลับได้ ก่อนแก้หลายจุดพร้อมกัน
 
-- [ ] Commit/freeze baseline หลังผู้ใช้ยืนยันว่าเสียงรุ่นปัจจุบันดี
+- [x] Commit/freeze baseline หลังผู้ใช้ยืนยันว่าเสียงรุ่นปัจจุบันดี (`0d5ddd9`)
 - [ ] บันทึก source hash, model hash, browser/driver/OS, sample rate, backend และ profile ในทุก benchmark
 - [ ] สร้าง golden model input, logits, masks และ streaming PCM จาก Web FP32 ปัจจุบัน
 - [ ] สร้าง input ชุดเดียวกันให้ Web และ GO ใช้ เพื่อแยกความต่างของ model ออกจาก DSP/timeline
@@ -232,7 +245,7 @@
 ### 2C. GO server/UI
 
 - [x] เปลี่ยน `ReadMessage()` เป็น `NextReader` + preallocated exact-size packet buffer พร้อม validation
-- [ ] reuse silence/output/error buffers; ไม่มี `make()` ใน steady-state audio path
+- [x] reuse silence output buffer ใน error/AI-unavailable path; ตัด `make([]float32, ...)` ออกจาก audio loop โดยไม่เปลี่ยน PCM ของ healthy path
 - [x] ลด dashboard เหลือ 5 FPS เพื่อไม่แย่ง audio deadline และ cache `runtime.ReadMemStats` ที่ 1 Hz
 - [ ] subsample meter/sparkline หรือคำนวณจาก peak ที่ DSP มีอยู่แล้ว
 - [x] มี `--headless` สำหรับไม่ render dashboard ที่ไม่เห็น
@@ -503,6 +516,7 @@ ONNX Runtime ระบุว่า quantization ไม่ lossless และอ�
 - [ ] ผู้ใช้ฟังจริง Apple + Windows หลังจบทั้ง batch
 - [ ] ทำ `[x]` เฉพาะงานที่ implement และตรวจแล้วจริง
 - [ ] ถ้า batch ไม่ผ่าน quality gate ให้ rollback candidate ทั้งกลุ่มหรือปิดด้วย feature flag
+- [ ] GO safety gate ต้องผ่านก่อน quality/latency improvement ใด ๆ จะถูกนำไปใช้จริง
 
 ## 8. ลำดับแนะนำจริง
 
