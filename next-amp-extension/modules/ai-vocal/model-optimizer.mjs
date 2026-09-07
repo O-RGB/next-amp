@@ -3,7 +3,146 @@
  * Weights, precision, receptive field and output names are preserved.
  * Unrecognized graphs are returned unchanged; never guess padding/cropping.
  */
-export function optimizeVocalModelArtifacts(artifacts) {
+function appendInt32Weights(artifacts, extraSpecs, values) {
+  const sourceData = artifacts.weightData;
+  const sourceBuffer = sourceData instanceof ArrayBuffer ? sourceData : sourceData?.[0];
+  if (!(sourceBuffer instanceof ArrayBuffer)) return null;
+
+  const sourceBytes = new Uint8Array(sourceBuffer);
+  const extraValueCount = values.reduce((total, valueSet) => total + valueSet.length, 0);
+  const extraBytes = extraValueCount * Int32Array.BYTES_PER_ELEMENT;
+  const combinedBuffer = new ArrayBuffer(sourceBytes.byteLength + extraBytes);
+  const combinedBytes = new Uint8Array(combinedBuffer);
+  combinedBytes.set(sourceBytes);
+  const view = new DataView(combinedBuffer);
+  let offset = sourceBytes.byteLength;
+  for (const valueSet of values) {
+    for (const value of valueSet) {
+      view.setInt32(offset, value, true);
+      offset += Int32Array.BYTES_PER_ELEMENT;
+    }
+  }
+
+  return {
+    weightSpecs: [...(artifacts.weightSpecs || []), ...extraSpecs],
+    weightData: Array.isArray(sourceData) ? [combinedBuffer] : combinedBuffer
+  };
+}
+
+function makeInt32ConstNode(name, values) {
+  return {
+    name,
+    op: "Const",
+    attr: {
+      value: {
+        tensor: {
+          dtype: "DT_INT32",
+          tensorShape: { dim: [{ size: String(values.length) }] }
+        }
+      },
+      dtype: { type: "DT_INT32" }
+    }
+  };
+}
+
+function appendExactOutputHead(artifacts, nodes, options) {
+  const start = Number(options?.start);
+  const frames = Number(options?.frames);
+  const bins = Number(options?.bins || 1024);
+  const inputFrames = Number(options?.inputFrames || 64);
+  if (!Number.isInteger(start) || !Number.isInteger(frames) ||
+      !Number.isInteger(bins) || !Number.isInteger(inputFrames) ||
+      start < 0 || frames <= 0 || bins <= 0 || inputFrames <= 0 ||
+      start + frames > inputFrames) return null;
+
+  const outputNode = nodes.find(node => node.name === "Identity" && node.op === "Identity");
+  if (!outputNode || outputNode.input?.length !== 1) return null;
+
+  const prefix = "NextAmp/optimized_output_head";
+  const constants = [
+    { suffix: "begin", values: [0, 0, start, 0] },
+    { suffix: "end", values: [1, bins, start + frames, 2] },
+    { suffix: "strides", values: [1, 1, 1, 1] },
+    { suffix: "transpose_perm", values: [0, 3, 2, 1] },
+    { suffix: "reshape_shape", values: [2, frames, bins] }
+  ];
+  const extraSpecs = constants.map(({ suffix, values }) => ({
+    name: `${prefix}/${suffix}`,
+    shape: [values.length],
+    dtype: "int32"
+  }));
+  const appended = appendInt32Weights(artifacts, extraSpecs, constants.map(item => item.values));
+  if (!appended) return null;
+
+  const [begin, end, strides, transposePerm, reshape] = extraSpecs.map(spec => spec.name);
+  const cropName = `${prefix}/crop`;
+  const transposeName = `${prefix}/transpose`;
+  const reshapeName = `${prefix}/reshape`;
+  const sigmoidName = `${prefix}/sigmoid`;
+  const headNodes = [
+    ...constants.map(({ suffix, values }) => makeInt32ConstNode(`${prefix}/${suffix}`, values)),
+    {
+      name: cropName,
+      op: "StridedSlice",
+      input: [outputNode.input[0], begin, end, strides],
+      attr: {
+        shrink_axis_mask: { i: "0" },
+        new_axis_mask: { i: "0" },
+        Index: { type: "DT_INT32" },
+        begin_mask: { i: "0" },
+        end_mask: { i: "0" },
+        T: { type: "DT_FLOAT" },
+        ellipsis_mask: { i: "0" }
+      }
+    },
+    {
+      name: transposeName,
+      op: "Transpose",
+      input: [cropName, transposePerm],
+      attr: { T: { type: "DT_FLOAT" }, Tperm: { type: "DT_INT32" } }
+    },
+    {
+      name: reshapeName,
+      op: "Reshape",
+      input: [transposeName, reshape],
+      attr: { T: { type: "DT_FLOAT" }, Tshape: { type: "DT_INT32" } }
+    },
+    {
+      name: sigmoidName,
+      op: "Sigmoid",
+      input: [reshapeName],
+      attr: { T: { type: "DT_FLOAT" } }
+    },
+    { ...outputNode, input: [sigmoidName] }
+  ];
+  const outputNodes = nodes.flatMap(node => node.name === outputNode.name ? headNodes : [node]);
+  const signature = artifacts.signature;
+  const outputSignature = signature?.outputs?.output_0;
+  if (!outputSignature) return null;
+
+  return {
+    artifacts: {
+      ...artifacts,
+      ...appended,
+      modelTopology: { ...artifacts.modelTopology, node: outputNodes },
+      signature: {
+        ...signature,
+        outputs: {
+          ...signature.outputs,
+          output_0: {
+            ...outputSignature,
+            tensorShape: {
+              dim: [2, frames, bins].map(size => ({ size: String(size) }))
+            }
+          }
+        }
+      }
+    },
+    metadata: { start, frames, bins, inputFrames, activation: "sigmoid", layout: "[2,frames,bins]" }
+  };
+}
+
+export function optimizeVocalModelArtifacts(artifacts, options = {}) {
   const nodes = artifacts.modelTopology?.node;
   const specs = artifacts.weightSpecs;
   const weightData = Array.isArray(artifacts.weightData) && artifacts.weightData.length === 1
@@ -123,40 +262,62 @@ export function optimizeVocalModelArtifacts(artifacts) {
     explicitPadCount++;
   }
 
-  if (!replacements.size) return { artifacts, foldedCount: 0, explicitPadCount: 0 };
-  return {
-    artifacts: {
-      ...artifacts,
-      modelTopology: {
-        ...artifacts.modelTopology,
-        node: nodes.filter(node => !removed.has(node.name)).map(node => replacements.get(node.name) || node)
-      }
-    },
-    foldedCount: [...replacements.keys()].filter(name => {
+  const foldedCount = [...replacements.keys()].filter(name => {
       const node = byName.get(name);
       return node?.op === "BatchToSpaceND";
-    }).length,
-    explicitPadCount
+    }).length;
+  let optimizedArtifacts = artifacts;
+  let optimizedNodes = nodes;
+  if (replacements.size) {
+    optimizedNodes = nodes
+      .filter(node => !removed.has(node.name))
+      .map(node => replacements.get(node.name) || node);
+    optimizedArtifacts = {
+      ...artifacts,
+      modelTopology: { ...artifacts.modelTopology, node: optimizedNodes }
+    };
+  }
+
+  const outputHeadResult = options.outputHead
+    ? appendExactOutputHead(optimizedArtifacts, optimizedNodes, options.outputHead)
+    : null;
+  if (outputHeadResult) optimizedArtifacts = outputHeadResult.artifacts;
+  if (!replacements.size && !outputHeadResult) {
+    return { artifacts, foldedCount: 0, explicitPadCount: 0 };
+  }
+  return {
+    artifacts: optimizedArtifacts,
+    foldedCount,
+    explicitPadCount,
+    outputHead: outputHeadResult?.metadata || null
   };
 }
 
 /** Keep the original IO source available for drivers without native dilation. */
-export function createVocalModelLoader(tf, source) {
+export function createVocalModelLoader(tf, source, options = {}) {
   let enabled = typeof source?.load === "function";
   let foldedCount = 0;
   let explicitPadCount = 0;
+  let outputHead = null;
   return {
     get foldedCount() { return foldedCount; },
     get explicitPadCount() { return explicitPadCount; },
-    disableOptimization() { enabled = false; foldedCount = 0; explicitPadCount = 0; },
+    get outputHead() { return outputHead; },
+    disableOptimization() {
+      enabled = false;
+      foldedCount = 0;
+      explicitPadCount = 0;
+      outputHead = null;
+    },
     async load() {
       if (!enabled) return tf.loadGraphModel(source);
       try {
         return await tf.loadGraphModel({
-          load: async () => {
-            const result = optimizeVocalModelArtifacts(await source.load());
+        load: async () => {
+            const result = optimizeVocalModelArtifacts(await source.load(), options);
             foldedCount = result.foldedCount;
             explicitPadCount = result.explicitPadCount || 0;
+            outputHead = result.outputHead || null;
             return result.artifacts;
           }
         });
@@ -164,6 +325,7 @@ export function createVocalModelLoader(tf, source) {
         enabled = false;
         foldedCount = 0;
         explicitPadCount = 0;
+        outputHead = null;
         console.warn("[NextAmp AI] Optimized model load failed; loading original graph", error);
         return tf.loadGraphModel(source);
       }

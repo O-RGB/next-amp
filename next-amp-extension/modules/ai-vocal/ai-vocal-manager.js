@@ -148,6 +148,7 @@ export class AIVocalManager {
     this.exp = null;
     this.mem = null;
     this.model = null;
+    this.modelOutputHead = null;
     this.rollingMags = null;
 
     this.inPtr0 = 0;
@@ -258,6 +259,25 @@ export class AIVocalManager {
 
   getProcessingConfig() {
     return VOCAL_PROFILES[this.vocalProfile] || VOCAL_PROFILES[DEFAULT_VOCAL_PROFILE];
+  }
+
+  extractModelMask(outTensor, processing) {
+    const frames = processing.frames;
+    return tf.tidy(() => {
+      if (this.modelOutputHead) {
+        const localStart = processing.sliceStart - this.modelOutputHead.start;
+        if (localStart < 0 || localStart + frames > this.modelOutputHead.frames) {
+          throw new Error("Optimized model output head does not cover the active profile");
+        }
+        // The exact output head already crops, transposes, reshapes and applies
+        // sigmoid. Only select the active profile's sub-range from its shared
+        // 17-frame window.
+        return outTensor.slice([0, localStart, 0], [2, frames, _]);
+      }
+
+      const sliced = outTensor.slice([0, 0, processing.sliceStart, 0], [1, _, frames, 2]);
+      return sliced.transpose([0, 3, 2, 1]).reshape([2, frames, _]).sigmoid();
+    });
   }
 
   resetGoBufferTuning() {
@@ -748,7 +768,11 @@ export class AIVocalManager {
       const ioHandler = (tf.io && tf.io.browserHTTPRequest)
         ? tf.io.browserHTTPRequest(modelUrl)
         : modelUrl;
-      const modelLoader = createVocalModelLoader(tf, ioHandler);
+      const modelLoader = createVocalModelLoader(tf, ioHandler, {
+        // Smooth (15 frames, start 34) and Detail (16 frames, start 32) share
+        // this exact 17-frame output window. GO keeps its original ONNX path.
+        outputHead: { start: 32, frames: 17, bins: _ }
+      });
 
       const runWarmup = async () => {
         const processing = this.getProcessingConfig();
@@ -758,10 +782,7 @@ export class AIVocalManager {
         let maskTensor = null;
         try {
           outTensor = this.model.execute(dummyInput);
-          maskTensor = tf.tidy(() => {
-            const sliced = outTensor.slice([0, 0, processing.sliceStart, 0], [1, _, frames, 2]);
-            return sliced.transpose([0, 3, 2, 1]).reshape([2, frames, _]).sigmoid();
-          });
+          maskTensor = this.extractModelMask(outTensor, processing);
           // Flush the accelerator pipeline and compile the readback path too.
           await maskTensor.data();
         } finally {
@@ -783,6 +804,7 @@ export class AIVocalManager {
           this.model = await modelLoader.load();
           this.modelGraphFoldedBranches = modelLoader.foldedCount;
           this.modelGraphExplicitPads = modelLoader.explicitPadCount;
+          this.modelOutputHead = modelLoader.outputHead;
           await runWarmup();
         }
       };
@@ -805,6 +827,7 @@ export class AIVocalManager {
         this.model = await modelLoader.load();
         this.modelGraphFoldedBranches = modelLoader.foldedCount;
         this.modelGraphExplicitPads = modelLoader.explicitPadCount;
+        this.modelOutputHead = modelLoader.outputHead;
         this.resetState();
         this.setStatus("Warming up GPU...");
         await warmupWithOriginalFallback();
@@ -814,6 +837,7 @@ export class AIVocalManager {
       this.model = await modelLoader.load();
       this.modelGraphFoldedBranches = modelLoader.foldedCount;
       this.modelGraphExplicitPads = modelLoader.explicitPadCount;
+      this.modelOutputHead = modelLoader.outputHead;
       if (modelLoader.foldedCount || modelLoader.explicitPadCount) {
         console.log(`[NextAmp AI] Optimized model graph: removed ${modelLoader.foldedCount * 2} data-reordering nodes and ${modelLoader.explicitPadCount} standalone padding nodes (unchanged weights)`);
       }
@@ -848,14 +872,10 @@ export class AIVocalManager {
       try {
         const tBench0 = performance.now();
         const processing = this.getProcessingConfig();
-        const frames = processing.frames;
         const benchIn = tf.zeros([1, _, 64, 2]);
         const benchOut = this.model.execute(benchIn);
         benchIn.dispose();
-        const benchMask = tf.tidy(() => {
-          const sliced = benchOut.slice([0, 0, processing.sliceStart, 0], [1, _, frames, 2]);
-          return sliced.transpose([0, 3, 2, 1]).reshape([2, frames, _]).sigmoid();
-        });
+        const benchMask = this.extractModelMask(benchOut, processing);
         benchOut.dispose();
         await benchMask.data();
         benchMask.dispose();
@@ -979,7 +999,6 @@ export class AIVocalManager {
 
       // Former DIFF=2 behavior is fixed: one chunk of lookahead.
       const delayChunks = processing.delayChunks;
-      const sliceStart = processing.sliceStart;
 
       // 3. Peak Tracking and Global Normalization Factor
       let chunkPeak = 1e-5;
@@ -1053,12 +1072,11 @@ export class AIVocalManager {
         if (diagnosticsEnabled) modelLaunchMs = performance.now() - modelStart;
         normInput.dispose(); // Free normalized input immediately
 
-        // 6. Slice time-aligned window & compute sigmoid mask in tidy
-        const maskTensor = tf.tidy(() => {
-          const sliced = outTensor.slice([0, 0, sliceStart, 0], [1, _, frames, 2]);
-          outTensor.dispose(); // Free large 64-frame output tensor from GPU immediately!
-          return sliced.transpose([0, 3, 2, 1]).reshape([2, frames, _]).sigmoid();
-        });
+        // 6. Read the exact profile window. Optimized Web graphs already do
+        // crop/transpose/reshape/sigmoid in the output head; the original
+        // graph remains the automatic fallback for incompatible drivers.
+        const maskTensor = this.extractModelMask(outTensor, processing);
+        outTensor.dispose();
 
         const readbackStart = diagnosticsEnabled ? performance.now() : 0;
         const maskData = await maskTensor.data();
@@ -1207,6 +1225,7 @@ export class AIVocalManager {
       } catch (_) {}
       this.model = null;
     }
+    this.modelOutputHead = null;
     if (typeof tf !== "undefined") {
       try {
         tf.disposeVariables();
