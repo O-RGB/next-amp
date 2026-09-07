@@ -241,7 +241,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [ ] ใช้ preallocated output pool แทน `new Float32Array` ทุก chunk
 - [x] เปลี่ยน Web pending chunk queue จาก `push()/shift()` เป็น fixed-capacity queue ขนาด 2 พร้อม latest-wins/resync semantics เดิม
 - [x] ลด Map/key cleanup ที่วนทุก chunkเป็น fixed peak ring ขนาด 8 ตาม lookahead/resync window
-- [ ] หลีกเลี่ยง status string/Chrome storage work ใน hot path
+- [x] throttle GO status/UI callback เหลือประมาณ 2 Hz โดยไม่เปลี่ยน audio response และ latency telemetry
 - [ ] ย้าย detailed telemetry aggregation ออกจาก realtime cadence
 
 ### 2C. GO server/UI

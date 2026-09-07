@@ -22,6 +22,7 @@ class StubGoEngineClient {
   }
 }
 
+let now = 1000;
 const context = {
   Array,
   Date,
@@ -31,6 +32,7 @@ const context = {
   Math,
   Number,
   Object,
+  performance: { now: () => now },
   console,
   GoEngineClient: StubGoEngineClient
 };
@@ -80,9 +82,26 @@ assert.ok(Math.abs(webQueueManager.getChunkPeak(8) - 0.8) < 1e-6,
 assert.equal(webQueueManager.getChunkPeak(0), undefined,
   'fixed peak history must evict entries outside the lookahead window');
 
+const statusManager = new context.AIVocalManager({ sampleRate: 44100 });
+statusManager.engineType = 'go_native';
+statusManager.currentMode = 'karaoke';
+statusManager.goClient.onChunkProcessed(0, new Float32Array(1), new Float32Array(1), 10, new ArrayBuffer(8));
+const firstStatus = statusManager.getStatus();
+now = 1200;
+statusManager.goClient.onChunkProcessed(1, new Float32Array(1), new Float32Array(1), 20, new ArrayBuffer(8));
+assert.equal(statusManager.getStatus(), firstStatus,
+  'GO status/UI updates must be throttled between cadence windows');
+assert.equal(statusManager.lastInferMs, 20,
+  'GO latency telemetry must still update on every processed response');
+now = 1600;
+statusManager.goClient.onChunkProcessed(2, new Float32Array(1), new Float32Array(1), 30, new ArrayBuffer(8));
+assert.notEqual(statusManager.getStatus(), firstStatus,
+  'GO status/UI must refresh after the throttle interval');
+
 console.log(JSON.stringify({
   profileResets: manager.goClient.resetCalls,
   profileMessages: manager.workletNode.port.messages.length,
-  finalProfile: manager.vocalProfile
+  finalProfile: manager.vocalProfile,
+  goStatusCadenceMs: 500
 }));
 console.log('GO profile transition boundary guard passed.');

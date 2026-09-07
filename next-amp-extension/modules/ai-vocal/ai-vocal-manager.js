@@ -38,6 +38,7 @@ const DIGITAL_SILENCE_PEAK = 3.25e-5;
 const WEBGPU_BACKEND_ASSET = "assets/libs/js/tf-backend-webgpu.min.js";
 const MAX_BROWSER_PENDING_CHUNKS = 2; // Keep at most ~348ms pending; drop stale work under interruption.
 const DIAGNOSTIC_SAMPLE_LIMIT = 120;
+const GO_STATUS_UPDATE_INTERVAL_MS = 500; // UI/IPC only; audio response cadence stays unchanged.
 let webGpuBackendPromise = null;
 
 function pushDiagnosticSample(samples, value) {
@@ -132,8 +133,12 @@ export class AIVocalManager {
       }
       this.lastInferMs = rttMs;
       if (this.currentMode !== "bypass") {
-        const modeLabel = this.currentMode === "karaoke" ? "KARAOKE (GO)" : "ACAPELLA (GO)";
-        this.setStatus(`${modeLabel} [${rttMs}ms]`);
+        const now = performance.now();
+        if (this.lastGoStatusAt === 0 || now - this.lastGoStatusAt >= GO_STATUS_UPDATE_INTERVAL_MS) {
+          const modeLabel = this.currentMode === "karaoke" ? "KARAOKE (GO)" : "ACAPELLA (GO)";
+          this.setStatus(`${modeLabel} [${rttMs}ms]`);
+          this.lastGoStatusAt = now;
+        }
       }
     };
 
@@ -188,6 +193,7 @@ export class AIVocalManager {
     this.modelGraphExplicitPads = 0;
     this.goLatencySamples = [];
     this.goBufferTarget = null;
+    this.lastGoStatusAt = 0;
     this.diagnostics = {
       startedAt: Date.now(),
       enabled: false,
@@ -286,6 +292,7 @@ export class AIVocalManager {
     if (nextProfile === this.vocalProfile) return;
 
     this.vocalProfile = nextProfile;
+    this.lastGoStatusAt = 0;
     // A profile changes the browser packet cadence. Invalidate work already
     // in flight so an old 15-hop result can never enter the new 16-hop stream.
     this.streamGeneration++;
@@ -1237,6 +1244,7 @@ export class AIVocalManager {
   setMode(mode) {
     this.streamGeneration++;
     this.currentMode = mode;
+    this.lastGoStatusAt = 0;
     this.resetGoBufferTuning();
     this.streamChunkFloor = null;
     this.clearChunkQueue();
