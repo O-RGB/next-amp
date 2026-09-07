@@ -232,7 +232,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [x] เพิ่ม stable-AI bulk copy fast path เมื่อ `liveGain=0`, `aiGain=1`, `concealGain=1` แทน per-sample multiply loop
 - [x] คง per-sample path เฉพาะ fade/conceal/mode transition
 - [x] ลด WORKLET_STATUS เป็นประมาณ 2.7 Hz ตอนนิ่งและประมาณ 10.7 Hz ตอน buffering/recovering
-- [ ] ไม่ spread/copy diagnostics object ใน audio thread ถ้า diagnostics ปิด
+- [x] ไม่ spread/copy diagnostics object ใน audio thread ถ้า diagnostics ปิด; เปิด clone เฉพาะเมื่อ debug diagnostics ถูกเรียก
 - [ ] ตรวจว่า process callback ไม่มี allocation ใน steady state หลัง warmup
 
 ### 2B. Web manager

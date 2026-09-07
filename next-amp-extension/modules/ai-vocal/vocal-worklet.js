@@ -71,6 +71,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
     this.chunkSeq = 0;
     this.statusCount = 0;
+    this.diagnosticsEnabled = false;
     this.diagnostics = {
       chunksSent: 0,
       staleDrops: 0,
@@ -230,6 +231,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.readyThreshold + 1,
           Math.min(GO_MAX_QUEUE_THRESHOLD + 1, Math.floor(max))
         );
+      } else if (data.type === "SET_DIAGNOSTICS") {
+        this.diagnosticsEnabled = data.enabled === true;
       } else if (data.type === "CHUNK_PROCESSED") {
         this.handleProcessedChunk(data);
       }
@@ -439,7 +442,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
       this.statusCount = 0;
       const totalBuffered = this.outQueueL.length * this.chunkSize + (this.currChunkL ? this.currChunkL.length - this.currChunkPos : 0);
       const bufferedSec = (totalBuffered / WORKLET_SAMPLE_RATE).toFixed(1);
-      this.port.postMessage({
+      const status = {
         type: "WORKLET_STATUS",
         mode: this.targetMode,
         generation: this.streamGeneration,
@@ -453,9 +456,15 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         inputFrame: this.latestInputChunkIndex === null
           ? null : this.latestInputChunkIndex * (this.chunkSize / 512),
         playbackFrame: this.playbackChunkIndex === null
-          ? null : this.playbackChunkIndex * (this.chunkSize / 512),
-        diagnostics: { ...this.diagnostics }
-      });
+          ? null : this.playbackChunkIndex * (this.chunkSize / 512)
+      };
+      // Diagnostics are debug-only. Avoid cloning the full counters object on
+      // every status message during normal playback; enabling the diagnostics
+      // panel opts back into the detailed payload explicitly.
+      if (this.diagnosticsEnabled) {
+        status.diagnostics = { ...this.diagnostics };
+      }
+      this.port.postMessage(status);
     }
 
     // Stable processed playback is an exact copy operation. Avoid the

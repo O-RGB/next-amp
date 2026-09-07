@@ -79,6 +79,21 @@ processBlocks(profileProcessor, 60);
 assert.equal(messagesOfType(profileProcessor, 'PROCESS_CHUNK').at(-1).rawL.length, 7680,
   'switching back must restore the low-power cadence');
 
+// Detailed Worklet counters are debug-only. Normal status messages should
+// avoid cloning the diagnostics object; the debug switch must opt back in.
+const diagnosticProcessor = new Processor();
+diagnosticProcessor.port.onmessage({ data: {
+  type: 'SET_MODE', mode: 'karaoke', engineType: 'webgl'
+} });
+processBlocks(diagnosticProcessor, 32);
+const normalStatus = messagesOfType(diagnosticProcessor, 'WORKLET_STATUS').at(-1);
+assert.equal(normalStatus.diagnostics, undefined,
+  'normal Worklet status must omit detailed diagnostics');
+diagnosticProcessor.port.onmessage({ data: { type: 'SET_DIAGNOSTICS', enabled: true } });
+processBlocks(diagnosticProcessor, 32);
+const debugStatus = messagesOfType(diagnosticProcessor, 'WORKLET_STATUS').at(-1);
+assert.ok(debugStatus.diagnostics, 'debug Worklet status must include diagnostics');
+
 processor.port.onmessage({ data: processed(0, 0.05) });
 processBlocks(processor, 60);
 chunks = messagesOfType(processor, 'PROCESS_CHUNK');

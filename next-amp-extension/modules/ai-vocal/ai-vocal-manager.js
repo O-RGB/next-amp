@@ -1240,6 +1240,12 @@ export class AIVocalManager {
 
   enableDiagnostics() {
     this.diagnostics.enabled = true;
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({
+        type: "SET_DIAGNOSTICS",
+        enabled: true
+      });
+    }
     return this.getDiagnostics();
   }
 
