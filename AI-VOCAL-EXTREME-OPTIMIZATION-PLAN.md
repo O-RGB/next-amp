@@ -239,6 +239,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 
 - [ ] คืน transferred input buffers ทันทีหลัง ingest
 - [ ] ใช้ preallocated output pool แทน `new Float32Array` ทุก chunk
+- [x] เปลี่ยน Web pending chunk queue จาก `push()/shift()` เป็น fixed-capacity queue ขนาด 2 พร้อม latest-wins/resync semantics เดิม
 - [x] ลด Map/key cleanup ที่วนทุก chunkเป็น fixed peak ring ขนาด 8 ตาม lookahead/resync window
 - [ ] หลีกเลี่ยง status string/Chrome storage work ใน hot path
 - [ ] ย้าย detailed telemetry aggregation ออกจาก realtime cadence

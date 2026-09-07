@@ -164,7 +164,8 @@ export class AIVocalManager {
 
     // Concurrency Lock & Latency Ceiling: Prevents GPU backlog and WASM memory collision
     this.isBusy = false;
-    this.chunkQueue = [];
+    this.chunkQueue = new Array(MAX_BROWSER_PENDING_CHUNKS).fill(null);
+    this.chunkQueueSize = 0;
     this.queueNeedsResync = false;
     this.resyncChunkIndex = null;
     this.streamGeneration = 0;
@@ -321,7 +322,7 @@ export class AIVocalManager {
     this.inHistoryR.fill(0);
     this.outTailL.fill(0);
     this.outTailR.fill(0);
-    this.chunkQueue = [];
+    this.clearChunkQueue();
     this.queueNeedsResync = false;
     this.resyncChunkIndex = null;
     this.chunkPeakHistoryIndex.fill(-1);
@@ -348,6 +349,35 @@ export class AIVocalManager {
       }
     }
     return undefined;
+  }
+
+  clearChunkQueue() {
+    for (let i = 0; i < MAX_BROWSER_PENDING_CHUNKS; i++) {
+      this.chunkQueue[i] = null;
+    }
+    this.chunkQueueSize = 0;
+  }
+
+  replaceChunkQueue(chunk) {
+    this.clearChunkQueue();
+    this.chunkQueue[0] = chunk;
+    this.chunkQueueSize = 1;
+  }
+
+  enqueueChunk(chunk) {
+    if (this.chunkQueueSize >= MAX_BROWSER_PENDING_CHUNKS) return false;
+    this.chunkQueue[this.chunkQueueSize++] = chunk;
+    return true;
+  }
+
+  dequeueChunk() {
+    if (this.chunkQueueSize <= 0) return null;
+    const chunk = this.chunkQueue[0];
+    for (let i = 1; i < this.chunkQueueSize; i++) {
+      this.chunkQueue[i - 1] = this.chunkQueue[i];
+    }
+    this.chunkQueue[--this.chunkQueueSize] = null;
+    return chunk;
   }
 
   /**
@@ -408,22 +438,21 @@ export class AIVocalManager {
               // processing every old chunk only creates growing latency. Keep
               // the newest chunk and restart DSP state at that point.
               if (this.queueNeedsResync) {
-                this.diagnostics.staleWorkDrops += this.chunkQueue.length;
-                this.chunkQueue = [data];
+                this.diagnostics.staleWorkDrops += this.chunkQueueSize;
+                this.replaceChunkQueue(data);
+                this.resyncChunkIndex = data.chunkIndex;
+              } else if (this.chunkQueueSize >= MAX_BROWSER_PENDING_CHUNKS) {
+                this.diagnostics.staleWorkDrops += this.chunkQueueSize;
+                this.replaceChunkQueue(data);
+                this.queueNeedsResync = true;
                 this.resyncChunkIndex = data.chunkIndex;
               } else {
-                this.chunkQueue.push(data);
+                this.enqueueChunk(data);
               }
               this.diagnostics.queuedChunks++;
               this.diagnostics.maxPendingQueue = Math.max(
-                this.diagnostics.maxPendingQueue, this.chunkQueue.length
+                this.diagnostics.maxPendingQueue, this.chunkQueueSize
               );
-              if (this.chunkQueue.length > MAX_BROWSER_PENDING_CHUNKS) {
-                this.diagnostics.staleWorkDrops += this.chunkQueue.length - 1;
-                this.chunkQueue = [data];
-                this.queueNeedsResync = true;
-                this.resyncChunkIndex = data.chunkIndex;
-              }
               if (!this.isBusy) {
                 this.runChunkQueue();
               }
@@ -451,7 +480,7 @@ export class AIVocalManager {
           this.streamChunkFloor = Number.isInteger(data.nextChunkIndex)
             ? data.nextChunkIndex
             : null;
-          this.chunkQueue = [];
+          this.clearChunkQueue();
           this.queueNeedsResync = false;
           this.resyncChunkIndex = null;
           if (this.engineType === "go_native") {
@@ -484,8 +513,8 @@ export class AIVocalManager {
     if (this.isBusy || this.currentMode === "bypass" || !this.isReady) return;
     this.isBusy = true;
     try {
-      while (this.chunkQueue.length > 0 && this.currentMode !== "bypass") {
-        const chunk = this.chunkQueue.shift();
+      while (this.chunkQueueSize > 0 && this.currentMode !== "bypass") {
+        const chunk = this.dequeueChunk();
         if (this.queueNeedsResync) {
           const nextChunkIndex = Number.isInteger(this.resyncChunkIndex)
             ? this.resyncChunkIndex : chunk.chunkIndex;
@@ -510,7 +539,7 @@ export class AIVocalManager {
           generation
         );
         // Yield momentarily to event loop without Windows timer quantization penalty
-        if (this.chunkQueue.length > 0) {
+        if (this.chunkQueueSize > 0) {
           await new Promise((resolve) => queueMicrotask(resolve));
         }
       }
@@ -1139,7 +1168,6 @@ export class AIVocalManager {
   unloadEngine() {
     this.isReady = false;
     this.engineLoading = false;
-    this.chunkQueue = [];
     this.resetState();
     if (this.model) {
       try {
@@ -1211,7 +1239,7 @@ export class AIVocalManager {
     this.currentMode = mode;
     this.resetGoBufferTuning();
     this.streamChunkFloor = null;
-    this.chunkQueue = [];
+    this.clearChunkQueue();
     this.resetState();
     // Start native DSP and the Worklet on the same stream boundary. This is
     // important for the first bypass -> Karaoke click and for mode changes.
@@ -1317,7 +1345,7 @@ export class AIVocalManager {
         chunkMs: Number((chunkSamples / sampleRate * 1000).toFixed(2))
       },
       queue: {
-        pending: this.chunkQueue.length,
+        pending: this.chunkQueueSize,
         maxPending: this.diagnostics.maxPendingQueue,
         staleWorkDrops: this.diagnostics.staleWorkDrops,
         resyncs: this.diagnostics.resyncs

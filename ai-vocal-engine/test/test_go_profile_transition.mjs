@@ -63,6 +63,23 @@ manager.setVocalProfile('balanced');
 assert.equal(manager.goClient.resetCalls, 2,
   'reselecting the active profile must not reset an active stream');
 
+const webQueueManager = new context.AIVocalManager({ sampleRate: 44100 });
+webQueueManager.enqueueChunk({ chunkIndex: 10 });
+webQueueManager.enqueueChunk({ chunkIndex: 11 });
+assert.equal(webQueueManager.chunkQueueSize, 2);
+assert.equal(webQueueManager.enqueueChunk({ chunkIndex: 12 }), false,
+  'Web queue must refuse growth past its bounded capacity');
+webQueueManager.replaceChunkQueue({ chunkIndex: 12 });
+assert.equal(webQueueManager.chunkQueueSize, 1);
+assert.equal(webQueueManager.dequeueChunk().chunkIndex, 12,
+  'latest-wins replacement must keep only the newest Web chunk');
+
+for (let i = 0; i < 9; i++) webQueueManager.recordChunkPeak(i, i / 10);
+assert.ok(Math.abs(webQueueManager.getChunkPeak(8) - 0.8) < 1e-6,
+  'fixed peak history must preserve Float32 values');
+assert.equal(webQueueManager.getChunkPeak(0), undefined,
+  'fixed peak history must evict entries outside the lookahead window');
+
 console.log(JSON.stringify({
   profileResets: manager.goClient.resetCalls,
   profileMessages: manager.workletNode.port.messages.length,
