@@ -13,6 +13,7 @@ const (
 	compactOutputFrames = 32
 	compactOutputName   = "NextAmp/compact_output"
 	compactOutputPrefix = "NextAmp/compact_output_head/"
+	compactROIPrefix    = "NextAmp/compact_roi/"
 )
 
 type onnxWireField struct {
@@ -151,6 +152,100 @@ func allONNXBytes(fields []onnxWireField, number int) [][]byte {
 		}
 	}
 	return values
+}
+
+func onnxVarintValue(field onnxWireField) (uint64, bool) {
+	if field.wire != 0 {
+		return 0, false
+	}
+	pos := 0
+	if _, err := readONNXUvarint(field.raw, &pos); err != nil {
+		return 0, false
+	}
+	value, err := readONNXUvarint(field.raw, &pos)
+	return value, err == nil
+}
+
+func onnxInt64Values(fields []onnxWireField, number int) []int64 {
+	values := make([]int64, 0, 4)
+	for _, field := range fields {
+		if field.number != number {
+			continue
+		}
+		if field.wire == 0 {
+			if value, ok := onnxVarintValue(field); ok {
+				values = append(values, int64(value))
+			}
+			continue
+		}
+		if field.wire != 2 {
+			continue
+		}
+		pos := 0
+		for pos < len(field.value) {
+			value, err := readONNXUvarint(field.value, &pos)
+			if err != nil {
+				return nil
+			}
+			values = append(values, int64(value))
+		}
+	}
+	return values
+}
+
+func onnxNodeAttributeInts(nodeFields []onnxWireField, name string) []int64 {
+	for _, attribute := range allONNXBytes(nodeFields, 5) {
+		fields, err := parseONNXFields(attribute)
+		if err != nil || string(firstONNXBytes(fields, 1)) != name {
+			continue
+		}
+		values := onnxInt64Values(fields, 8) // AttributeProto.ints
+		if len(values) == 0 {
+			values = onnxInt64Values(fields, 3) // AttributeProto.i
+		}
+		return values
+	}
+	return nil
+}
+
+func onnxNodeNameMatches(nodeFields []onnxWireField, name string) bool {
+	return string(firstONNXBytes(nodeFields, 3)) == name
+}
+
+func rewriteONNXNodeInput(data []byte, oldName, newName string) ([]byte, bool, error) {
+	fields, err := parseONNXFields(data)
+	if err != nil {
+		return nil, false, err
+	}
+	result := make([]byte, 0, len(data)+len(newName))
+	replaced := false
+	for _, field := range fields {
+		if !replaced && field.number == 1 && field.wire == 2 && string(field.value) == oldName {
+			result = append(result, marshalONNXStringField(1, newName)...)
+			replaced = true
+			continue
+		}
+		result = append(result, field.raw...)
+	}
+	return result, replaced, nil
+}
+
+func rewriteONNXNodeOutput(data []byte, oldName, newName string) ([]byte, bool, error) {
+	fields, err := parseONNXFields(data)
+	if err != nil {
+		return nil, false, err
+	}
+	result := make([]byte, 0, len(data)+len(newName))
+	replaced := false
+	for _, field := range fields {
+		if !replaced && field.number == 2 && field.wire == 2 && string(field.value) == oldName {
+			result = append(result, marshalONNXStringField(2, newName)...)
+			replaced = true
+			continue
+		}
+		result = append(result, field.raw...)
+	}
+	return result, replaced, nil
 }
 
 func rewriteONNXDimension(data []byte, dimensionIndex int) ([]byte, bool, error) {
@@ -297,6 +392,86 @@ func makeONNXOutputSliceNode(inputName string) []byte {
 	return marshalONNXField(1, 2, result)
 }
 
+func makeONNXDecoderROISliceNode(inputName, outputName string) []byte {
+	result := make([]byte, 0, 190)
+	for _, input := range []string{
+		inputName,
+		compactROIPrefix + "starts",
+		compactROIPrefix + "ends",
+		compactROIPrefix + "axes",
+		compactROIPrefix + "steps",
+	} {
+		result = append(result, marshalONNXStringField(1, input)...)
+	}
+	result = append(result, marshalONNXStringField(2, outputName)...)
+	result = append(result, marshalONNXStringField(3, compactROIPrefix+"slice")...)
+	result = append(result, marshalONNXStringField(4, "Slice")...)
+	return marshalONNXField(1, 2, result)
+}
+
+type onnxROITarget struct {
+	convName       string
+	convInput      string
+	transposeName  string
+	transposeInput string
+}
+
+func findONNXFinalProjection(fields []onnxWireField) (onnxROITarget, bool, error) {
+	nodes := make([][]onnxWireField, 0, 128)
+	for _, field := range fields {
+		if field.number != 1 || field.wire != 2 {
+			continue
+		}
+		nodeFields, err := parseONNXFields(field.value)
+		if err != nil {
+			return onnxROITarget{}, false, err
+		}
+		nodes = append(nodes, nodeFields)
+	}
+	for _, transpose := range nodes {
+		if string(firstONNXBytes(transpose, 4)) != "Transpose" {
+			continue
+		}
+		outputs := allONNXBytes(transpose, 2)
+		if len(outputs) != 1 || string(outputs[0]) != "Identity" {
+			continue
+		}
+		perm := onnxNodeAttributeInts(transpose, "perm")
+		// Conv is NCHW here and the final transpose is NCHW -> NHWC.
+		// Consequently the audio time axis is Conv axis 3.
+		if len(perm) != 4 || perm[0] != 0 || perm[1] != 2 || perm[2] != 3 || perm[3] != 1 {
+			continue
+		}
+		transposeInput := string(firstONNXBytes(transpose, 1))
+		for _, conv := range nodes {
+			if string(firstONNXBytes(conv, 4)) != "Conv" ||
+				string(firstONNXBytes(conv, 2)) != transposeInput {
+				continue
+			}
+			kernel := onnxNodeAttributeInts(conv, "kernel_shape")
+			strides := onnxNodeAttributeInts(conv, "strides")
+			dilations := onnxNodeAttributeInts(conv, "dilations")
+			pads := onnxNodeAttributeInts(conv, "pads")
+			group := onnxNodeAttributeInts(conv, "group")
+			inputs := allONNXBytes(conv, 1)
+			if len(inputs) < 2 || len(kernel) != 2 || kernel[0] != 1 || kernel[1] != 1 ||
+				len(strides) != 2 || strides[0] != 1 || strides[1] != 1 ||
+				len(dilations) != 2 || dilations[0] != 1 || dilations[1] != 1 ||
+				len(pads) != 4 || pads[0] != 0 || pads[1] != 0 || pads[2] != 0 || pads[3] != 0 ||
+				len(group) != 1 || group[0] != 1 {
+				continue
+			}
+			return onnxROITarget{
+				convName:       string(firstONNXBytes(conv, 3)),
+				convInput:      string(inputs[0]),
+				transposeName:  string(firstONNXBytes(transpose, 3)),
+				transposeInput: transposeInput,
+			}, true, nil
+		}
+	}
+	return onnxROITarget{}, false, nil
+}
+
 func rewriteONNXGraphOutput(data []byte) ([]byte, bool, error) {
 	fields, err := parseONNXFields(data)
 	if err != nil {
@@ -326,10 +501,47 @@ func rewriteONNXGraphOutput(data []byte) ([]byte, bool, error) {
 	if identityOutput == "" {
 		return data, false, nil
 	}
+	roiTarget, roiAvailable, err := findONNXFinalProjection(fields)
+	if err != nil {
+		return nil, false, err
+	}
 
-	result := make([]byte, 0, len(data)+700)
+	result := make([]byte, 0, len(data)+1200)
 	outputChanged := false
+	roiApplied := false
 	for _, field := range fields {
+		if field.number == 1 && field.wire == 2 {
+			nodeFields, nodeErr := parseONNXFields(field.value)
+			if nodeErr != nil {
+				return nil, false, nodeErr
+			}
+			nodeName := string(firstONNXBytes(nodeFields, 3))
+			if roiAvailable && nodeName == roiTarget.convName {
+				croppedInput := compactROIPrefix + "decoder_input:0"
+				croppedNode, changed, rewriteErr := rewriteONNXNodeInput(field.value, roiTarget.convInput, croppedInput)
+				if rewriteErr != nil {
+					return nil, false, rewriteErr
+				}
+				if changed {
+					result = append(result, makeONNXDecoderROISliceNode(
+						roiTarget.convInput, croppedInput,
+					)...)
+					result = append(result, marshalONNXField(1, 2, croppedNode)...)
+					roiApplied = true
+					continue
+				}
+			}
+			if roiAvailable && nodeName == roiTarget.transposeName {
+				renamedNode, changed, renameErr := rewriteONNXNodeOutput(field.value, identityOutput, compactOutputName)
+				if renameErr != nil {
+					return nil, false, renameErr
+				}
+				if changed {
+					result = append(result, marshalONNXField(1, 2, renamedNode)...)
+					continue
+				}
+			}
+		}
 		if field.number == 12 && field.wire == 2 {
 			outputInfo, changed, err := rewriteONNXValueInfo(field.value, identityOutput, compactOutputName)
 			if err != nil {
@@ -347,11 +559,21 @@ func rewriteONNXGraphOutput(data []byte) ([]byte, bool, error) {
 		return data, false, nil
 	}
 
-	result = append(result, makeONNXOutputSliceNode(identityOutput)...)
-	result = append(result, makeONNXInitializer(compactOutputPrefix+"starts", []int64{0, 0, compactOutputStart, 0})...)
-	result = append(result, makeONNXInitializer(compactOutputPrefix+"ends", []int64{1, 1024, 64, 2})...)
-	result = append(result, makeONNXInitializer(compactOutputPrefix+"axes", []int64{0, 1, 2, 3})...)
-	result = append(result, makeONNXInitializer(compactOutputPrefix+"steps", []int64{1, 1, 1, 1})...)
+	if roiApplied {
+		// The 1x1 projection now produces exactly frames 32..63. The renamed
+		// transpose is already the compact output; adding another Slice would
+		// only waste a kernel and would be redundant.
+		result = append(result, makeONNXInitializer(compactROIPrefix+"starts", []int64{32})...)
+		result = append(result, makeONNXInitializer(compactROIPrefix+"ends", []int64{64})...)
+		result = append(result, makeONNXInitializer(compactROIPrefix+"axes", []int64{3})...)
+		result = append(result, makeONNXInitializer(compactROIPrefix+"steps", []int64{1})...)
+	} else {
+		result = append(result, makeONNXOutputSliceNode(identityOutput)...)
+		result = append(result, makeONNXInitializer(compactOutputPrefix+"starts", []int64{0, 0, compactOutputStart, 0})...)
+		result = append(result, makeONNXInitializer(compactOutputPrefix+"ends", []int64{1, 1024, 64, 2})...)
+		result = append(result, makeONNXInitializer(compactOutputPrefix+"axes", []int64{0, 1, 2, 3})...)
+		result = append(result, makeONNXInitializer(compactOutputPrefix+"steps", []int64{1, 1, 1, 1})...)
+	}
 	return result, true, nil
 }
 

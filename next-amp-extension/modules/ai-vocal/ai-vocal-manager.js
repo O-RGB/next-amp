@@ -786,7 +786,17 @@ export class AIVocalManager {
         // the first half of this shared 32-frame output window. The second
         // half is the already-computed tail used by overlap consensus. GO
         // keeps its original ONNX path.
-        outputHead: { start: 32, frames: 32, bins: _ }
+        outputHead: {
+          start: 32,
+          frames: 32,
+          bins: _,
+          // The final 1x1 projection is frame-independent. Restrict only
+          // that projection to the shared window; the decoder and all
+          // boundary context remain unchanged. The optimizer rejects this
+          // candidate automatically if the exported graph is different.
+          headStart: 0,
+          sourceCrop: { start: 32, frames: 32, inputFrames: 64, bins: _ }
+        }
       });
 
       const runWarmup = async () => {

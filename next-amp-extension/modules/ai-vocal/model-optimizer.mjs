@@ -50,6 +50,7 @@ function appendExactOutputHead(artifacts, nodes, options) {
   const frames = Number(options?.frames);
   const bins = Number(options?.bins || 1024);
   const inputFrames = Number(options?.inputFrames || 64);
+  const requestedHeadStart = Number(options?.headStart ?? start);
   if (!Number.isInteger(start) || !Number.isInteger(frames) ||
       !Number.isInteger(bins) || !Number.isInteger(inputFrames) ||
       start < 0 || frames <= 0 || bins <= 0 || inputFrames <= 0 ||
@@ -58,27 +59,88 @@ function appendExactOutputHead(artifacts, nodes, options) {
   const outputNode = nodes.find(node => node.name === "Identity" && node.op === "Identity");
   if (!outputNode || outputNode.input?.length !== 1) return null;
 
+  // The final 1x1 projection is frame-independent. Crop its decoder input
+  // before the projection so the backend does not run the last output layer
+  // over frames that the audio timeline will immediately discard. This is a
+  // deliberately narrow ROI candidate: if the final layer is not the known
+  // frame-independent projection, keep the exact output-head optimization
+  // but do not guess a crop that could change boundary semantics.
+  const sourceCrop = options?.sourceCrop;
+  const finalProjection = nodes.find(node => node.name === outputNode.input[0]);
+  const finalWeights = finalProjection?.input?.[1];
+  const finalWeightSpec = (artifacts.weightSpecs || []).find(spec => spec.name === finalWeights);
+  const projectionIsFrameIndependent = finalProjection?.op === "Conv2D" &&
+    finalProjection.input?.length === 2 &&
+    finalWeightSpec?.shape?.length === 4 &&
+    finalWeightSpec.shape[0] === 1 && finalWeightSpec.shape[1] === 1 &&
+    finalWeightSpec.shape[3] === 2 &&
+    finalProjection.attr?.data_format?.s === "TkhXQw==" && // NHWC
+    finalProjection.attr?.padding?.s === "U0FNRQ==" && // SAME
+    finalProjection.attr?.strides?.list?.i?.every(value => Number(value) === 1) &&
+    finalProjection.attr?.dilations?.list?.i?.every(value => Number(value) === 1);
+  const roiStart = Number(sourceCrop?.start);
+  const roiFrames = Number(sourceCrop?.frames);
+  const roiInputFrames = Number(sourceCrop?.inputFrames || inputFrames);
+  const roiChannels = Number(sourceCrop?.channels || finalWeightSpec?.shape?.[2]);
+  const canApplySourceCrop = !!sourceCrop && projectionIsFrameIndependent &&
+    Number.isInteger(roiStart) && Number.isInteger(roiFrames) &&
+    Number.isInteger(roiInputFrames) && Number.isInteger(roiChannels) &&
+    roiStart >= 0 && roiFrames > 0 && roiInputFrames > 0 && roiChannels > 0 &&
+    roiStart + roiFrames <= roiInputFrames &&
+    Number.isInteger(requestedHeadStart) && requestedHeadStart >= 0 &&
+    requestedHeadStart + frames <= roiFrames;
+
   const prefix = "NextAmp/optimized_output_head";
   const constants = [
-    { suffix: "begin", values: [0, 0, start, 0] },
-    { suffix: "end", values: [1, bins, start + frames, 2] },
+    { suffix: "begin", values: [0, 0, canApplySourceCrop ? requestedHeadStart : start, 0] },
+    { suffix: "end", values: [1, bins, (canApplySourceCrop ? requestedHeadStart : start) + frames, 2] },
     { suffix: "strides", values: [1, 1, 1, 1] },
     { suffix: "transpose_perm", values: [0, 3, 2, 1] },
     { suffix: "reshape_shape", values: [2, frames, bins] }
   ];
-  const extraSpecs = constants.map(({ suffix, values }) => ({
-    name: `${prefix}/${suffix}`,
+  const roiConstants = canApplySourceCrop ? [
+    { suffix: "begin", values: [0, 0, roiStart, 0] },
+    { suffix: "end", values: [1, bins, roiStart + roiFrames, roiChannels] },
+    { suffix: "strides", values: [1, 1, 1, 1] }
+  ] : [];
+  const allConstants = [
+    ...roiConstants.map(item => ({ ...item, prefix: "NextAmp/roi_decoder_input" })),
+    ...constants.map(item => ({ ...item, prefix }))
+  ];
+  const extraSpecs = allConstants.map(({ prefix: constantPrefix, suffix, values }) => ({
+    name: `${constantPrefix}/${suffix}`,
     shape: [values.length],
     dtype: "int32"
   }));
-  const appended = appendInt32Weights(artifacts, extraSpecs, constants.map(item => item.values));
+  const appended = appendInt32Weights(artifacts, extraSpecs, allConstants.map(item => item.values));
   if (!appended) return null;
 
-  const [begin, end, strides, transposePerm, reshape] = extraSpecs.map(spec => spec.name);
+  const roiSpecCount = roiConstants.length;
+  const [roiBegin, roiEnd, roiStrides] = extraSpecs.slice(0, roiSpecCount).map(spec => spec.name);
+  const [begin, end, strides, transposePerm, reshape] = extraSpecs.slice(roiSpecCount).map(spec => spec.name);
+  const roiPrefix = "NextAmp/roi_decoder_input";
+  const roiCropName = `${roiPrefix}/crop`;
   const cropName = `${prefix}/crop`;
   const transposeName = `${prefix}/transpose`;
   const reshapeName = `${prefix}/reshape`;
   const sigmoidName = `${prefix}/sigmoid`;
+  const roiNodes = canApplySourceCrop ? [
+    ...roiConstants.map(({ suffix, values }) => makeInt32ConstNode(`${roiPrefix}/${suffix}`, values)),
+    {
+      name: roiCropName,
+      op: "StridedSlice",
+      input: [finalProjection.input[0], roiBegin, roiEnd, roiStrides],
+      attr: {
+        shrink_axis_mask: { i: "0" },
+        new_axis_mask: { i: "0" },
+        Index: { type: "DT_INT32" },
+        begin_mask: { i: "0" },
+        end_mask: { i: "0" },
+        T: { type: "DT_FLOAT" },
+        ellipsis_mask: { i: "0" }
+      }
+    }
+  ] : [];
   const headNodes = [
     ...constants.map(({ suffix, values }) => makeInt32ConstNode(`${prefix}/${suffix}`, values)),
     {
@@ -115,7 +177,12 @@ function appendExactOutputHead(artifacts, nodes, options) {
     },
     { ...outputNode, input: [sigmoidName] }
   ];
-  const outputNodes = nodes.flatMap(node => node.name === outputNode.name ? headNodes : [node]);
+  const outputNodes = nodes.flatMap(node => {
+    if (canApplySourceCrop && node.name === finalProjection.name) {
+      return [...roiNodes, { ...node, input: [roiCropName, ...node.input.slice(1)] }];
+    }
+    return node.name === outputNode.name ? headNodes : [node];
+  });
   const signature = artifacts.signature;
   const outputSignature = signature?.outputs?.output_0;
   if (!outputSignature) return null;
@@ -138,7 +205,13 @@ function appendExactOutputHead(artifacts, nodes, options) {
         }
       }
     },
-    metadata: { start, frames, bins, inputFrames, activation: "sigmoid", layout: "[2,frames,bins]" }
+    metadata: {
+      start, frames, bins, inputFrames,
+      activation: "sigmoid", layout: "[2,frames,bins]",
+      decoderRoi: canApplySourceCrop
+        ? { start: roiStart, frames: roiFrames, inputFrames: roiInputFrames, channels: roiChannels }
+        : null
+    }
   };
 }
 

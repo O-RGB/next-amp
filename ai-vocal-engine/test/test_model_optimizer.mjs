@@ -16,7 +16,13 @@ const original = {
 const before = JSON.stringify(original.modelTopology);
 const { artifacts: optimized, foldedCount, explicitPadCount } = optimizeVocalModelArtifacts(original);
 const outputHeadResult = optimizeVocalModelArtifacts(original, {
-  outputHead: { start: 32, frames: 32, bins: 1024 }
+  outputHead: {
+    start: 32,
+    frames: 32,
+    bins: 1024,
+    headStart: 0,
+    sourceCrop: { start: 32, frames: 32, inputFrames: 64, bins: 1024 }
+  }
 });
 assert.equal(foldedCount, 12);
 assert.equal(explicitPadCount, 16);
@@ -26,9 +32,10 @@ assert.deepEqual(outputHeadResult.outputHead, {
   bins: 1024,
   inputFrames: 64,
   activation: 'sigmoid',
-  layout: '[2,frames,bins]'
+  layout: '[2,frames,bins]',
+  decoderRoi: { start: 32, frames: 32, inputFrames: 64, channels: 32 }
 });
-assert.equal(outputHeadResult.artifacts.weightData.byteLength, original.weightData.byteLength + 76);
+assert.equal(outputHeadResult.artifacts.weightData.byteLength, original.weightData.byteLength + 124);
 assert.equal(optimized.modelTopology.node.length, original.modelTopology.node.length - 40);
 assert.equal(optimized.weightData, original.weightData);
 assert.equal(optimized.weightSpecs, original.weightSpecs);
