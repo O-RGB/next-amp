@@ -77,7 +77,7 @@ function drainMessages() {
         message.chunkIndex
       ) });
       processedResponses++;
-      maxObservedQueue = Math.max(maxObservedQueue, processor.outQueueL.length);
+      maxObservedQueue = Math.max(maxObservedQueue, processor.outQueueSize);
 
       // Simulate an old result arriving just after a resync/mode boundary.
       if (totalChunks === 44 || totalChunks === 133) {
@@ -97,7 +97,7 @@ function runBlocks(count, { silent = false, missing = false } = {}) {
   for (let i = 0; i < count; i++) {
     maxOutputPeak = Math.max(maxOutputPeak, processBlock(processor, silent, missing));
     drainMessages();
-    maxObservedQueue = Math.max(maxObservedQueue, processor.outQueueL.length);
+    maxObservedQueue = Math.max(maxObservedQueue, processor.outQueueSize);
   }
 }
 
@@ -135,7 +135,7 @@ for (let block = 0; block < TOTAL_BLOCKS; block++) {
   const silent = block >= 18000 && block < 18000 + BLOCKS_PER_CHUNK * 3;
   maxOutputPeak = Math.max(maxOutputPeak, processBlock(processor, silent, missing));
   drainMessages();
-  maxObservedQueue = Math.max(maxObservedQueue, processor.outQueueL.length);
+  maxObservedQueue = Math.max(maxObservedQueue, processor.outQueueSize);
 }
 
 assert.ok(processedResponses > 1000, 'stress run must exercise sustained chunk processing');
@@ -149,6 +149,8 @@ assert.ok(Number.isFinite(maxOutputPeak) && maxOutputPeak <= 1,
   `non-finite or excessive output peak: ${maxOutputPeak}`);
 assert.equal(processor.outQueueL.length, processor.outQueueR.length);
 assert.equal(processor.outQueueL.length, processor.outQueueIndex.length);
+assert.ok(processor.outQueueSize >= 0 && processor.outQueueSize <= processor.outQueueL.length,
+  `invalid ring queue size: ${processor.outQueueSize}`);
 
 console.log(JSON.stringify({
   simulatedMinutes: 30,

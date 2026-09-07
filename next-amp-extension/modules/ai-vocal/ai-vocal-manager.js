@@ -168,9 +168,15 @@ export class AIVocalManager {
     this.queueNeedsResync = false;
     this.resyncChunkIndex = null;
     this.streamGeneration = 0;
-    this.chunkPeakHistory = new Map();
+    // Fixed-size histories keep the Web hot path allocation-free. Eight
+    // entries cover the current lookahead plus resync margin without Map
+    // churn; the four-slot max history preserves the original normalization.
+    this.chunkPeakHistoryIndex = new Int32Array(8).fill(-1);
+    this.chunkPeakHistoryValues = new Float32Array(8);
+    this.chunkPeakHistoryPos = 0;
     this.streamChunkFloor = null;
-    this.maxHistory = [1e-4, 1e-4, 1e-4, 1e-4];
+    this.maxHistory = new Float32Array([1e-4, 1e-4, 1e-4, 1e-4]);
+    this.maxHistoryPos = 0;
 
     this.lastInferMs = 0;
     this.backendName = "GPU";
@@ -318,11 +324,30 @@ export class AIVocalManager {
     this.chunkQueue = [];
     this.queueNeedsResync = false;
     this.resyncChunkIndex = null;
-    this.chunkPeakHistory.clear();
-    this.maxHistory = [1e-4, 1e-4, 1e-4, 1e-4];
+    this.chunkPeakHistoryIndex.fill(-1);
+    this.chunkPeakHistoryValues.fill(0);
+    this.chunkPeakHistoryPos = 0;
+    this.maxHistory.fill(1e-4);
+    this.maxHistoryPos = 0;
     if (this.exp && this.exp.stft_reset) {
       this.exp.stft_reset();
     }
+  }
+
+  recordChunkPeak(chunkIndex, chunkPeak) {
+    const slot = this.chunkPeakHistoryPos;
+    this.chunkPeakHistoryIndex[slot] = chunkIndex;
+    this.chunkPeakHistoryValues[slot] = chunkPeak;
+    this.chunkPeakHistoryPos = (slot + 1) & 7;
+  }
+
+  getChunkPeak(chunkIndex) {
+    for (let i = 0; i < this.chunkPeakHistoryIndex.length; i++) {
+      if (this.chunkPeakHistoryIndex[i] === chunkIndex) {
+        return this.chunkPeakHistoryValues[i];
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -900,16 +925,16 @@ export class AIVocalManager {
       if (this.exp.stft_get_chunk_peak) {
         chunkPeak = this.exp.stft_get_chunk_peak();
       }
-      this.chunkPeakHistory.set(chunkIndex, chunkPeak);
-      // Chunk indexes restart when the worklet changes mode. Keep only the
+      // Chunk indexes restart when the Worklet changes mode. Keep only the
       // small lookahead window needed for deciding whether an output chunk is
-      // truly silent.
-      for (const oldIndex of this.chunkPeakHistory.keys()) {
-        if (oldIndex < chunkIndex - 8) this.chunkPeakHistory.delete(oldIndex);
+      // truly silent, without Map allocation/cleanup in the hot path.
+      this.recordChunkPeak(chunkIndex, chunkPeak);
+      this.maxHistory[this.maxHistoryPos] = chunkPeak;
+      this.maxHistoryPos = (this.maxHistoryPos + 1) & 3;
+      let globalMax = 1e-4;
+      for (let i = 0; i < this.maxHistory.length; i++) {
+        if (this.maxHistory[i] > globalMax) globalMax = this.maxHistory[i];
       }
-      this.maxHistory.push(chunkPeak);
-      if (this.maxHistory.length > 4) this.maxHistory.shift();
-      const globalMax = Math.max(...this.maxHistory, 1e-4);
       const invMax = 1.0 / globalMax;
 
       // The delayed spectrum is the actual output target. Only bypass model
@@ -918,7 +943,7 @@ export class AIVocalManager {
       const targetChunkIndex = chunkIndex - delayChunks;
       const targetPeak = targetChunkIndex < 0
         ? 0
-        : this.chunkPeakHistory.get(targetChunkIndex);
+        : this.getChunkPeak(targetChunkIndex);
       const targetIsDigitalSilence = targetPeak !== undefined && targetPeak <= DIGITAL_SILENCE_PEAK;
       if (targetIsDigitalSilence) {
         this.exp.stft_apply_mask_delayed(delayChunks, frames, 2, 0.0);

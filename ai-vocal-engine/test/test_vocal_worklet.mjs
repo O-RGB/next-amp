@@ -94,6 +94,20 @@ processBlocks(diagnosticProcessor, 32);
 const debugStatus = messagesOfType(diagnosticProcessor, 'WORKLET_STATUS').at(-1);
 assert.ok(debugStatus.diagnostics, 'debug Worklet status must include diagnostics');
 
+// The fixed ring must retain only the newest five results and preserve FIFO
+// order after wrapping its storage slots.
+const ringProcessor = new Processor();
+ringProcessor.port.onmessage({ data: {
+  type: 'SET_MODE', mode: 'karaoke', engineType: 'webgl'
+} });
+for (let i = 0; i < 8; i++) ringProcessor.port.onmessage({ data: processed(i, 0.05) });
+const ringIndexes = Array.from({ length: ringProcessor.outQueueSize }, (_, i) => {
+  const slot = (ringProcessor.outQueueHead + i) % ringProcessor.outQueueL.length;
+  return ringProcessor.outQueueIndex[slot];
+});
+assert.deepEqual(ringIndexes, [3, 4, 5, 6, 7],
+  'ring queue must keep newest results in FIFO order after wrapping');
+
 processor.port.onmessage({ data: processed(0, 0.05) });
 processBlocks(processor, 60);
 chunks = messagesOfType(processor, 'PROCESS_CHUNK');
@@ -144,10 +158,10 @@ generationProcessor.port.onmessage({ data: {
   type: 'SET_MODE', mode: 'karaoke', engineType: 'webgl', generation: 7
 } });
 generationProcessor.port.onmessage({ data: processed(0, 0.05, 6) });
-assert.equal(generationProcessor.outQueueL.length, 0);
+assert.equal(generationProcessor.outQueueSize, 0);
 assert.equal(generationProcessor.diagnostics.staleDrops, 1);
 generationProcessor.port.onmessage({ data: processed(0, 0.05, 7) });
-assert.equal(generationProcessor.outQueueL.length, 1);
+assert.equal(generationProcessor.outQueueSize, 1);
 
 // Sustained digital silence marks a stream boundary and invalidates the
 // previous generation before a new song starts.
@@ -160,9 +174,9 @@ const reset = messagesOfType(silentProcessor, 'STREAM_RESET').at(-1);
 assert.ok(reset, 'sustained silence must emit STREAM_RESET');
 assert.equal(reset.generation, 21);
 assert.equal(silentProcessor.streamGeneration, 21);
-assert.equal(silentProcessor.outQueueL.length, 0);
+assert.equal(silentProcessor.outQueueSize, 0);
 silentProcessor.port.onmessage({ data: processed(0, 0.05, 20) });
-assert.equal(silentProcessor.outQueueL.length, 0, 'old stream response must stay dropped');
+assert.equal(silentProcessor.outQueueSize, 0, 'old stream response must stay dropped');
 
 // Missing input buffers (e.g. a paused/tearing-down source) also reset the
 // stream instead of retaining old playback state.

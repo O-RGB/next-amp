@@ -26,6 +26,7 @@ const context = {
   Array,
   Date,
   Float32Array,
+  Int32Array,
   Map,
   Math,
   Number,

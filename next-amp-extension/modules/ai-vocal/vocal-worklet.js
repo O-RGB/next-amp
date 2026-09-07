@@ -18,6 +18,7 @@ const READY_QUEUE_THRESHOLD = 2;   // 2 browser chunks (~348ms) cushion against 
 const MAX_QUEUE_THRESHOLD = 5;     // 5 browser chunks (~871ms) latency ceiling prevents delay accumulation
 const GO_READY_QUEUE_THRESHOLD = 3; // Native GO cushion without the old ~1s startup delay
 const GO_MAX_QUEUE_THRESHOLD = 4;   // ~743ms ceiling before stale native output is discarded
+const OUTPUT_QUEUE_CAPACITY = MAX_QUEUE_THRESHOLD + 1;
 const BROWSER_MAX_LAG_CHUNKS = 3;   // Drop browser results that are already too far behind live audio
 const CONCEAL_FADE_OUT_SPEED = 1.0 / 256; // hide an unavoidable GO underrun without a click
 const CONCEAL_FADE_IN_SPEED = 1.0 / 512;  // restore processed audio smoothly after recovery
@@ -47,10 +48,13 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.inSilenceBoundary = false;
     this.missingInputBlocks = 0;
 
-    // Output playback queue
-    this.outQueueL = [];
-    this.outQueueR = [];
-    this.outQueueIndex = [];
+    // Output playback queue. Keep the storage fixed so normal audio status
+    // and response delivery never call shift()/push() on a growing array.
+    this.outQueueL = new Array(OUTPUT_QUEUE_CAPACITY).fill(null);
+    this.outQueueR = new Array(OUTPUT_QUEUE_CAPACITY).fill(null);
+    this.outQueueIndex = new Array(OUTPUT_QUEUE_CAPACITY).fill(null);
+    this.outQueueHead = 0;
+    this.outQueueSize = 0;
     this.currChunkL = null;
     this.currChunkR = null;
     this.currChunkIndex = null;
@@ -108,9 +112,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
             ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
           this.maxQueueThreshold = this.engineType === "go_native"
             ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
-          this.outQueueL = [];
-          this.outQueueR = [];
-          this.outQueueIndex = [];
+          this.clearOutputQueue();
           this.currChunkL = null;
           this.currChunkR = null;
           this.currChunkIndex = null;
@@ -136,9 +138,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.engineType = nextEngine;
           this.setChunkSizeForEngine(this.engineType, data.browserChunkSize);
           this.isAiReady = false;
-          this.outQueueL = [];
-          this.outQueueR = [];
-          this.outQueueIndex = [];
+          this.clearOutputQueue();
           this.currChunkL = null;
           this.currChunkR = null;
           this.currChunkIndex = null;
@@ -171,9 +171,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
             ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
           this.maxQueueThreshold = this.engineType === "go_native"
             ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
-          this.outQueueL = [];
-          this.outQueueR = [];
-          this.outQueueIndex = [];
+          this.clearOutputQueue();
           this.currChunkL = null;
           this.currChunkR = null;
           this.currChunkIndex = null;
@@ -204,9 +202,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         // Preserve the configured/adaptive cushion across a resync. Dropping
         // to one chunk here makes a brief interruption recover too eagerly,
         // then immediately underrun again when the OS/GPU is still busy.
-        this.outQueueL = [];
-        this.outQueueR = [];
-        this.outQueueIndex = [];
+        this.clearOutputQueue();
         this.currChunkL = null;
         this.currChunkR = null;
         this.currChunkIndex = null;
@@ -251,6 +247,50 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.chunkPeak = 0.0;
   }
 
+  clearOutputQueue() {
+    for (let i = 0; i < OUTPUT_QUEUE_CAPACITY; i++) {
+      this.outQueueL[i] = null;
+      this.outQueueR[i] = null;
+      this.outQueueIndex[i] = null;
+    }
+    this.outQueueHead = 0;
+    this.outQueueSize = 0;
+  }
+
+  dropOldestOutputChunk() {
+    if (this.outQueueSize <= 0) return;
+    this.outQueueL[this.outQueueHead] = null;
+    this.outQueueR[this.outQueueHead] = null;
+    this.outQueueIndex[this.outQueueHead] = null;
+    this.outQueueHead = (this.outQueueHead + 1) % OUTPUT_QUEUE_CAPACITY;
+    this.outQueueSize--;
+  }
+
+  hasQueuedChunkIndex(chunkIndex) {
+    for (let i = 0; i < this.outQueueSize; i++) {
+      const slot = (this.outQueueHead + i) % OUTPUT_QUEUE_CAPACITY;
+      if (this.outQueueIndex[slot] === chunkIndex) return true;
+    }
+    return false;
+  }
+
+  enqueueOutputChunk(outL, outR, chunkIndex) {
+    // The configured threshold is below this capacity. Keep this guard so a
+    // future target change still drops the oldest result rather than growing
+    // the queue or replaying stale audio.
+    if (this.outQueueSize >= OUTPUT_QUEUE_CAPACITY) {
+      this.dropOldestOutputChunk();
+    }
+    const slot = (this.outQueueHead + this.outQueueSize) % OUTPUT_QUEUE_CAPACITY;
+    this.outQueueL[slot] = outL;
+    this.outQueueR[slot] = outR;
+    this.outQueueIndex[slot] = chunkIndex;
+    this.outQueueSize++;
+    while (this.outQueueSize > this.maxQueueThreshold) {
+      this.dropOldestOutputChunk();
+    }
+  }
+
   handleProcessedChunk(data) {
     if (this.targetMode === "bypass" || !data || !data.outL || !data.outR) return;
 
@@ -278,19 +318,16 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
       return;
     }
     if (chunkIndex !== null &&
-        (chunkIndex === this.currChunkIndex || this.outQueueIndex.includes(chunkIndex))) {
+        (chunkIndex === this.currChunkIndex || this.hasQueuedChunkIndex(chunkIndex))) {
       this.diagnostics.duplicateDrops++;
       return;
     }
 
-    this.outQueueL.push(data.outL instanceof Float32Array ? data.outL : new Float32Array(data.outL));
-    this.outQueueR.push(data.outR instanceof Float32Array ? data.outR : new Float32Array(data.outR));
-    this.outQueueIndex.push(chunkIndex);
-    while (this.outQueueL.length > this.maxQueueThreshold) {
-      this.outQueueL.shift();
-      this.outQueueR.shift();
-      this.outQueueIndex.shift();
-    }
+    this.enqueueOutputChunk(
+      data.outL instanceof Float32Array ? data.outL : new Float32Array(data.outL),
+      data.outR instanceof Float32Array ? data.outR : new Float32Array(data.outR),
+      chunkIndex
+    );
   }
 
   resetForStreamBoundary(nextChunkIndex) {
@@ -299,9 +336,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.isAiReady = false;
     this.readyThreshold = this.engineType === "go_native"
       ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
-    this.outQueueL = [];
-    this.outQueueR = [];
-    this.outQueueIndex = [];
+    this.clearOutputQueue();
     this.currChunkL = null;
     this.currChunkR = null;
     this.currChunkIndex = null;
@@ -314,13 +349,13 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.streamGeneration++;
     // Keep chunkSeq monotonic so late responses from the previous song can
     // be rejected without colliding with the new song's chunk indexes.
-        this.port.postMessage({
-        type: "STREAM_RESET",
-        nextChunkIndex,
-        generation: this.streamGeneration,
-        reason: "sustained-silence"
-        });
-        this.diagnostics.streamResets++;
+    this.port.postMessage({
+      type: "STREAM_RESET",
+      nextChunkIndex,
+      generation: this.streamGeneration,
+      reason: "sustained-silence"
+    });
+    this.diagnostics.streamResets++;
   }
 
   observeChunkBoundary(chunkPeak, chunkIndex) {
@@ -421,7 +456,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
     // 2. Check if AI queue has reached threshold to start playing
     if (!this.isAiReady) {
-      if (this.targetMode !== "bypass" && this.outQueueL.length >= this.readyThreshold) {
+      if (this.targetMode !== "bypass" && this.outQueueSize >= this.readyThreshold) {
         this.isAiReady = true;
       }
     }
@@ -440,7 +475,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     const statusInterval = this.isAiReady ? 128 : 32;
     if (this.statusCount >= statusInterval) {
       this.statusCount = 0;
-      const totalBuffered = this.outQueueL.length * this.chunkSize + (this.currChunkL ? this.currChunkL.length - this.currChunkPos : 0);
+      const totalBuffered = this.outQueueSize * this.chunkSize + (this.currChunkL ? this.currChunkL.length - this.currChunkPos : 0);
       const bufferedSec = (totalBuffered / WORKLET_SAMPLE_RATE).toFixed(1);
       const status = {
         type: "WORKLET_STATUS",
@@ -450,7 +485,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         readyThreshold: this.readyThreshold,
         aiGain: this.aiGain,
         bufferedSec: bufferedSec,
-        queueLen: this.outQueueL.length,
+        queueLen: this.outQueueSize,
         chunkSize: this.chunkSize,
         sampleRate: WORKLET_SAMPLE_RATE,
         inputFrame: this.latestInputChunkIndex === null
@@ -514,19 +549,23 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           // Discard responses that refer to audio already covered by the
           // playback cursor. This prevents a delayed response from replaying
           // old audio after a tab-switch scheduling hiccup.
-          while (this.outQueueL.length > 0 &&
+          while (this.outQueueSize > 0 &&
                  this.playbackChunkIndex !== null &&
-                 this.outQueueIndex[0] !== null &&
-                 this.outQueueIndex[0] < this.playbackChunkIndex) {
-            this.outQueueL.shift();
-            this.outQueueR.shift();
-            this.outQueueIndex.shift();
+                 this.outQueueIndex[this.outQueueHead] !== null &&
+                 this.outQueueIndex[this.outQueueHead] < this.playbackChunkIndex) {
+            this.dropOldestOutputChunk();
           }
 
-          if (this.outQueueL.length > 0) {
-            this.currChunkL = this.outQueueL.shift();
-            this.currChunkR = this.outQueueR.shift();
-            this.currChunkIndex = this.outQueueIndex.shift();
+          if (this.outQueueSize > 0) {
+            const slot = this.outQueueHead;
+            this.currChunkL = this.outQueueL[slot];
+            this.currChunkR = this.outQueueR[slot];
+            this.currChunkIndex = this.outQueueIndex[slot];
+            this.outQueueL[slot] = null;
+            this.outQueueR[slot] = null;
+            this.outQueueIndex[slot] = null;
+            this.outQueueHead = (this.outQueueHead + 1) % OUTPUT_QUEUE_CAPACITY;
+            this.outQueueSize--;
             this.currChunkPos = 0;
             if (this.playbackChunkIndex === null && this.currChunkIndex !== null) {
               this.playbackChunkIndex = this.currChunkIndex;
@@ -583,10 +622,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     }
 
     // Cleanup queue once completely switched back to bypass
-    if (this.targetMode === "bypass" && this.aiGain <= 0.0 && this.outQueueL.length > 0) {
-      this.outQueueL = [];
-      this.outQueueR = [];
-      this.outQueueIndex = [];
+    if (this.targetMode === "bypass" && this.aiGain <= 0.0 && this.outQueueSize > 0) {
+      this.clearOutputQueue();
       this.currChunkL = null;
       this.currChunkR = null;
       this.currChunkIndex = null;
