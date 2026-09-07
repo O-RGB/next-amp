@@ -116,6 +116,10 @@ func computePeakAndSpark(samples []float32, width int) (float32, string) {
 	}
 
 	var sb strings.Builder
+	// The dashboard is informational and refreshes only a few times per
+	// second. Sampling each bin keeps terminal telemetry from competing with
+	// the audio deadline while leaving the actual input/output samples intact.
+	const sampleStride = 16
 	for i := 0; i < width; i++ {
 		start := i * step
 		end := start + step
@@ -123,7 +127,7 @@ func computePeakAndSpark(samples []float32, width int) (float32, string) {
 			end = len(samples)
 		}
 		var binPeak float32
-		for j := start; j < end; j++ {
+		for j := start; j < end; j += sampleStride {
 			v := samples[j]
 			if v < 0 {
 				v = -v

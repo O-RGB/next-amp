@@ -247,7 +247,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [x] เปลี่ยน `ReadMessage()` เป็น `NextReader` + preallocated exact-size packet buffer พร้อม validation
 - [x] reuse silence output buffer ใน error/AI-unavailable path; ตัด `make([]float32, ...)` ออกจาก audio loop โดยไม่เปลี่ยน PCM ของ healthy path
 - [x] ลด dashboard เหลือ 5 FPS เพื่อไม่แย่ง audio deadline และ cache `runtime.ReadMemStats` ที่ 1 Hz
-- [ ] subsample meter/sparkline หรือคำนวณจาก peak ที่ DSP มีอยู่แล้ว
+- [x] subsample meter/sparkline ของ dashboard ด้วย stride 16; เป็น telemetry-only และไม่แตะ PCM/audio deadline
 - [x] มี `--headless` สำหรับไม่ render dashboard ที่ไม่เห็น
 - [ ] ปล่อย decrypted model bytes หลัง session stable; ถ้าต้อง recovery ให้ decrypt embedded model ใหม่เฉพาะตอนเกิด error
 - [ ] วัด GC pause/allocation bytes ต่อหนึ่งนาทีทั้งก่อนและหลัง
