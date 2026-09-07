@@ -6,12 +6,15 @@
 
 import { GoEngineClient } from "./go-engine-client.js";
 import { createVocalModelLoader } from "./model-optimizer.mjs";
-import { applyOverlapConsensusToMask } from "./overlap-consensus.mjs";
 
 const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
 const MAX_BROWSER_FRAMES = 16;
 const DEFAULT_VOCAL_PROFILE = "balanced";
+// Keep model/DSP output on the pre-extreme-optimization quality path until
+// each numerical candidate has passed a real WebGPU/WebGL listening gate.
+// Scheduling, queue and allocation optimizations remain enabled separately.
+const EXPERIMENTAL_MODEL_AUDIO_CANDIDATES = false;
 const VOCAL_PROFILES = Object.freeze({
   // Current production candidate: the cadence that was tested as the
   // smoothest on Apple and Windows GTX 1050 Ti.
@@ -154,7 +157,7 @@ export class AIVocalManager {
     // tail. This reuses an already-computed prediction; it never adds a model
     // execute. Web and GO use the same bounded consensus rule; GO applies it
     // in its existing full-output C extractor.
-    this.overlapConsensusEnabled = true;
+    this.overlapConsensusEnabled = EXPERIMENTAL_MODEL_AUDIO_CANDIDATES;
     this.overlapTail = new Float32Array(2 * MAX_BROWSER_FRAMES * _);
     this.overlapTailValid = false;
     this.rollingMags = null;
@@ -782,11 +785,12 @@ export class AIVocalManager {
         ? tf.io.browserHTTPRequest(modelUrl)
         : modelUrl;
       const modelLoader = createVocalModelLoader(tf, ioHandler, {
+        optimizeGraph: EXPERIMENTAL_MODEL_AUDIO_CANDIDATES,
         // Smooth (15 frames, start 34) and Detail (16 frames, start 32) use
         // the first half of this shared 32-frame output window. The second
         // half is the already-computed tail used by overlap consensus. GO
         // keeps its original ONNX path.
-        outputHead: {
+        outputHead: EXPERIMENTAL_MODEL_AUDIO_CANDIDATES ? {
           start: 32,
           frames: 32,
           bins: _,
@@ -801,7 +805,7 @@ export class AIVocalManager {
           // from its local [0..32] output. All other decoder layers keep
           // their full context until this candidate is proven exact.
           decoderCrop: { start: 31, frames: 33, inputFrames: 64, channels: 96, bins: _ }
-        }
+        } : undefined
       });
 
       const runWarmup = async () => {

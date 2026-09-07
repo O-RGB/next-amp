@@ -37,17 +37,17 @@ test('overlap consensus only moves Karaoke masks toward agreed vocal evidence', 
     applyOverlapConsensusToMask(agreedMask, HEAD_FRAMES, 0, ACTIVE_FRAMES, agreedTail, true, 1, BINS),
     true
   );
-  assert.ok(Math.abs(agreedMask[0] - 0.3515024) < 1e-6);
+  assert.ok(Math.abs(agreedMask[0] - 0.365) < 1e-6);
 
   const fallingMask = makeMask(0.3, 0.4);
   const fallingTail = new Float32Array(2 * ACTIVE_FRAMES * BINS).fill(0.4);
   assert.equal(
     applyOverlapConsensusToMask(fallingMask, HEAD_FRAMES, 0, ACTIVE_FRAMES, fallingTail, true, 1, BINS),
-    true
+    false
   );
-  // The transition is symmetric but bounded: a lower current mask is not
-  // allowed to jump abruptly and create a zipper artifact.
-  assert.ok(Math.abs(fallingMask[0] - 0.3149026) < 1e-6);
+  // A lower current mask already means stronger vocal suppression. It must
+  // never be raised by overlap calibration, or vocal residue becomes audible.
+  assert.ok(Math.abs(fallingMask[0] - 0.3) < 1e-6);
 });
 
 test('uncertain, acapella, and first-window masks preserve the baseline', () => {

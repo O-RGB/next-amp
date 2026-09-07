@@ -93,6 +93,9 @@ func TestCompactONNXOutputRuntime(t *testing.T) {
 	if os.Getenv("NEXTAMP_RUN_COMPACT_ONNX") != "1" {
 		t.Skip("set NEXTAMP_RUN_COMPACT_ONNX=1 to run the native compact-output session")
 	}
+	if !CompactModelOutputEnabled {
+		t.Skip("compact-output candidate is disabled in the production quality-baseline profile")
+	}
 
 	libPath, err := findOrExtractLibrary()
 	if err != nil {

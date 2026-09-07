@@ -45,8 +45,6 @@ static int g_overlap_tail_valid = 0;
 #define OVERLAP_CONSENSUS_VOCAL_MAX 0.45f
 #define OVERLAP_CONSENSUS_AGREEMENT 0.12f
 #define OVERLAP_CONSENSUS_BLEND 0.35f
-#define OVERLAP_CONSENSUS_LOGIT_MAX_DELTA 0.35f
-#define OVERLAP_CONSENSUS_LOGIT_BLEND 0.20f
 
 // Complex Spectrum Storage for current chunk
 static float g_spec_real[2][MAX_FRAMES][NUM_BINS];
@@ -523,44 +521,6 @@ void stft_extract_sigmoid_mask(const float* raw_out, int slice_start) {
     }
 }
 
-static float merge_agreed_vocal_mask(float current, float previous) {
-    const float raw_delta = current - previous;
-    if (!isfinite(current) || !isfinite(previous) ||
-        raw_delta == 0.0f ||
-        current > OVERLAP_CONSENSUS_VOCAL_MAX ||
-        previous > OVERLAP_CONSENSUS_VOCAL_MAX ||
-        fabsf(raw_delta) > OVERLAP_CONSENSUS_AGREEMENT) {
-        return current;
-    }
-
-    // Keep the existing conservative bias against a small upward mask jump:
-    // lower accompaniment mask means stronger vocal evidence in Karaoke mode.
-    float adjusted = current;
-    if (raw_delta > 0.0f) {
-        adjusted -= raw_delta * OVERLAP_CONSENSUS_BLEND;
-    }
-
-    // Interpolate in logit space so the same transition strength behaves
-    // consistently near both ends of the sigmoid, without hard thresholding.
-    const float epsilon = 1e-5f;
-    if (adjusted < epsilon) adjusted = epsilon;
-    else if (adjusted > 1.0f - epsilon) adjusted = 1.0f - epsilon;
-    float bounded_previous = previous;
-    if (bounded_previous < epsilon) bounded_previous = epsilon;
-    else if (bounded_previous > 1.0f - epsilon) bounded_previous = 1.0f - epsilon;
-
-    const float current_logit = logf(adjusted / (1.0f - adjusted));
-    const float previous_logit = logf(bounded_previous / (1.0f - bounded_previous));
-    float logit_delta = current_logit - previous_logit;
-    if (logit_delta > OVERLAP_CONSENSUS_LOGIT_MAX_DELTA) {
-        logit_delta = OVERLAP_CONSENSUS_LOGIT_MAX_DELTA;
-    } else if (logit_delta < -OVERLAP_CONSENSUS_LOGIT_MAX_DELTA) {
-        logit_delta = -OVERLAP_CONSENSUS_LOGIT_MAX_DELTA;
-    }
-    return 1.0f / (1.0f + expf(-(current_logit -
-        (logit_delta * OVERLAP_CONSENSUS_LOGIT_BLEND))));
-}
-
 // Reuse the model's already-computed tail as a second context for the next
 // chunk. The previous tail and current slice refer to the same absolute audio
 // frames when the native engine uses one-chunk lookahead. Only Karaoke (mode 1)
@@ -586,10 +546,18 @@ void stft_extract_sigmoid_mask_overlap_layout(const float* raw_out, int slice_st
             float current0 = 1.0f / (1.0f + expf(-v0));
             float current1 = 1.0f / (1.0f + expf(-v1));
             if (mode == 1 && has_tail && g_overlap_tail_valid) {
-                current0 = merge_agreed_vocal_mask(
-                    current0, g_overlap_tail[0][f * NUM_BINS + k]);
-                current1 = merge_agreed_vocal_mask(
-                    current1, g_overlap_tail[1][f * NUM_BINS + k]);
+                float delta0 = current0 - g_overlap_tail[0][f * NUM_BINS + k];
+                float delta1 = current1 - g_overlap_tail[1][f * NUM_BINS + k];
+                if (current0 <= OVERLAP_CONSENSUS_VOCAL_MAX &&
+                    g_overlap_tail[0][f * NUM_BINS + k] <= OVERLAP_CONSENSUS_VOCAL_MAX &&
+                    delta0 > 0.0f && delta0 <= OVERLAP_CONSENSUS_AGREEMENT) {
+                    current0 -= delta0 * OVERLAP_CONSENSUS_BLEND;
+                }
+                if (current1 <= OVERLAP_CONSENSUS_VOCAL_MAX &&
+                    g_overlap_tail[1][f * NUM_BINS + k] <= OVERLAP_CONSENSUS_VOCAL_MAX &&
+                    delta1 > 0.0f && delta1 <= OVERLAP_CONSENSUS_AGREEMENT) {
+                    current1 -= delta1 * OVERLAP_CONSENSUS_BLEND;
+                }
             }
             g_mask[0][f * NUM_BINS + k] = current0;
             g_mask[1][f * NUM_BINS + k] = current1;

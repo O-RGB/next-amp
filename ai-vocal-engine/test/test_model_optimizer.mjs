@@ -14,6 +14,11 @@ const original = {
   weightData: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
 };
 const before = JSON.stringify(original.modelTopology);
+const baselineResult = optimizeVocalModelArtifacts(original, { optimizeGraph: false });
+assert.equal(baselineResult.foldedCount, 0);
+assert.equal(baselineResult.explicitPadCount, 0);
+assert.equal(baselineResult.outputHead, null);
+assert.equal(baselineResult.artifacts, original, 'quality baseline must keep the original graph');
 const { artifacts: optimized, foldedCount, explicitPadCount } = optimizeVocalModelArtifacts(original);
 const outputHeadResult = optimizeVocalModelArtifacts(original, {
   outputHead: {

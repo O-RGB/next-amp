@@ -286,6 +286,9 @@ export function optimizeVocalModelArtifacts(artifacts, options = {}) {
       !(weightData instanceof ArrayBuffer)) {
     return { artifacts, foldedCount: 0, explicitPadCount: 0 };
   }
+  if (options.optimizeGraph === false && !options.outputHead) {
+    return { artifacts, foldedCount: 0, explicitPadCount: 0, outputHead: null };
+  }
 
   const weights = new Map();
   const data = new DataView(weightData);

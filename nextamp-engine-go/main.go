@@ -30,6 +30,9 @@ const (
 	Version            = "2.3.0-eco"
 	HeaderBytes        = 8
 	DigitalSilencePeak = 3.25e-5
+	// Keep the native model output on the pre-extreme-optimization quality
+	// path until compact-output audio is validated on every provider/GPU.
+	CompactModelOutputEnabled = false
 )
 
 var upgrader = websocket.Upgrader{
@@ -179,6 +182,9 @@ func createSessionOptionsForCoreML(dev AccelerationOption, computeUnits string, 
 }
 
 func createORTSession(modelData []byte, dev AccelerationOption) (*ort.AdvancedSession, *ort.Tensor[float32], *ort.Tensor[float32], string, error) {
+	if !CompactModelOutputEnabled {
+		return createORTSessionWithOutputFrames(modelData, dev, dsp.MaxFrames, "Identity")
+	}
 	modelForSession, compact, rewriteErr := rewriteONNXOutputWindow(modelData)
 	if rewriteErr != nil {
 		// Keep the full model as a safe fallback if an unknown ONNX export is

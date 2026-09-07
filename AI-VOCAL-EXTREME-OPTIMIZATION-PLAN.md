@@ -268,17 +268,17 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 ### 3A. Fused output head
 
 - [ ] สร้าง Web/ONNX model variant ที่รวม Slice → Transpose/reshape → Sigmoid เป็น output head
-- [x] Web exact candidate รวม crop → Transpose → Reshape → Sigmoid เป็น output head `[2,32,1024]` สำหรับ Smooth/Detail ร่วมกัน (active + next tail) พร้อม original-graph fallback; ไม่เปลี่ยน weights หรือ GO output graph
-- [x] GO output head แบบ runtime rewrite เหลือ `[1,1024,32,2]` (active + next tail) แทน `[1,1024,64,2]`; C รองรับทั้ง compact และ full fallback
-- [x] Web output head ลดผลลัพธ์จาก 64 เป็น shared 32 frames และตัด JS transpose/reshape/sigmoid เหลือ profile slice เดียว
+- [ ] Web exact candidate รวม crop → Transpose → Reshape → Sigmoid เป็น output head `[2,32,1024]` สำหรับ Smooth/Detail ร่วมกัน (active + next tail) — ปิด production ชั่วคราวหลังยังไม่มี WebGPU/WebGL listening gate
+- [ ] GO output head แบบ runtime rewrite เหลือ `[1,1024,32,2]` (active + next tail) — ปิด production ชั่วคราวหลังยังไม่มี provider/GPU listening gate
+- [ ] Web output head ลดผลลัพธ์จาก 64 เป็น shared 32 frames — ปิด production ชั่วคราวเพื่อคืน full-output quality baseline
 - [x] คง model IO เป็น FP32 ใน exact candidate
-- [x] เทียบ logits ก่อน sigmoid, mask หลัง sigmoid และ PCM ระหว่าง compact output กับ full-output reference ใน native opt-in regression
+- [x] เทียบ logits ก่อน sigmoid, mask หลัง sigmoid และ PCM ระหว่าง compact output กับ full-output reference ใน native opt-in regression; ยังไม่เพียงพอแทนการฟังบน backend จริง
 
 ประโยชน์ที่คาด: ลด GO device→CPU output จาก 512 KiB เหลือ 256 KiB ต่อ chunk และตัดการส่ง frame ที่ DSP ไม่ใช้; Web ลด post-op launches/readback synchronization บางส่วน
 
 ### 3B. ROI-specialized decoder graph
 
-- [x] เพิ่ม narrow exact ROI candidate ที่ final 3x3 decoder layer + final 1x1 projection ของ Web/GO: ใช้ halo `[31..63]` แล้วเลือกผล `[32..63]` ซึ่งรักษา boundary semantics เดิม; weights ไม่เปลี่ยน และมี graph-structure guard/fallback
+- [ ] เพิ่ม narrow exact ROI candidate ที่ final 3x3 decoder layer + final 1x1 projection ของ Web/GO: ใช้ halo `[31..63]` แล้วเลือกผล `[32..63]` — ปิด production ชั่วคราวจนผ่าน backend listening gate
 - [ ] เขียน static shape/dependency analyzer ย้อนจาก target output frames
 - [ ] สำหรับ Conv/Depthwise/Pool/Resize/Concat/Pad คำนวณ input halo ที่จำเป็นแบบ exact
 - [ ] Crop feature maps ใน decoder เฉพาะ ROI + receptive-field halo แทนคำนวณ time dimension เต็ม 64 ทุกชั้น
@@ -392,18 +392,18 @@ ONNX Runtime ระบุว่า quantization ไม่ lossless และอ�
 - [ ] candidate A: เลือก prediction จากตำแหน่งที่ calibrated ว่าแม่นสุดต่อ absolute frame
 - [ ] candidate B: center/reliability-weighted mean เฉพาะ frame ที่ซ้อนกัน โดยไม่เพิ่ม future lookahead
 - [ ] candidate C: weighted median หรือ trimmed consensus เพื่อไม่ให้ prediction หลุดหนึ่ง window ทำเสียงร้องเด้งกลับ
-- [x] candidate D: conservative suppression เฉพาะ bin ที่หลาย context เห็นตรงกันว่าเป็น vocal leakage; ถ้าความเห็นขัดกันให้ใช้ mask baseline เพื่อรักษาเครื่องดนตรี
-- [x] จำกัด cache เป็น 1 bounded chunk และล้าง/invalid เมื่อไม่มี context ใหม่; ห้ามให้ memory/latency โตตามเวลา
-- [x] reset cache เมื่อ stream/generation เปลี่ยน, silence boundary, backend fallback หรือ resync
-- [x] Web อ่านเพิ่มเฉพาะ frame ที่ candidate ต้องใช้: output head 32 frame (active + next tail) แทน output 64 ทั้งก้อน
+- [ ] candidate D: conservative suppression เฉพาะ bin ที่หลาย context เห็นตรงกันว่าเป็น vocal leakage — ปิด production หลังเทียบกับ quality baseline แล้วยังไม่มี stem/blind gate
+- [x] จำกัด cache เป็น 1 bounded chunk และล้าง/invalid เมื่อไม่มี context ใหม่; ห้ามให้ memory/latency โตตามเวลา (ใช้ได้เฉพาะเมื่อเปิด candidate)
+- [x] reset cache เมื่อ stream/generation เปลี่ยน, silence boundary, backend fallback หรือ resync (ใช้ได้เฉพาะเมื่อเปิด candidate)
+- [ ] Web อ่านเพิ่มเฉพาะ frame ที่ candidate ต้องใช้: output head 32 frame (active + next tail) แทน output 64 ทั้งก้อน — ปิด production ชั่วคราว
 - [ ] วัด extra CPU, readback, memory และ p99; budget ของ enhancement ต้องต่ำกว่า headroom ที่ Batch 1–5 ประหยัดได้
 
 ### 7C. Calibrate mask เพื่อกด residual vocal โดยไม่หั่นดนตรีทั้งย่าน
 
 - [ ] ทดลอง output-logit bias/temperature แบบ offline sweep เป็น baseline การศึกษาเท่านั้น
 - [ ] ทดลอง calibration แยกตาม frequency และ reliability เฉพาะบริเวณที่ tune set ยืนยันว่า model ปล่อย vocal ซ้ำ
-- [x] ใช้ agreement/confidence gate จาก 7B เปิด suppression เพิ่มเฉพาะจุด; ห้ามลด mask ทั่วทั้งเพลง
-- [x] จำกัด delta ของ mask ต่อ bin และทำ transition ใน logit domain เพื่อกัน zipper/pumping; ใช้เฉพาะจุดที่สอง context มี vocal evidence ตรงกัน และคง baseline เมื่อไม่แน่ใจ
+- [ ] ใช้ agreement/confidence gate จาก 7B เปิด suppression เพิ่มเฉพาะจุด; candidate ปิด production เพื่อคง baseline quality
+- [ ] จำกัด delta ของ mask ต่อ bin และทำ transition ใน logit domain เพื่อกัน zipper/pumping; candidate แรกถูก reject เพราะการ blend แบบสมมาตรยก mask ขึ้นและทำให้เกิด vocal leak
 - [ ] ห้ามใช้ center-channel cancellation เป็น default เพราะลบ kick, bass, snare และเครื่องดนตรีกลางพร้อมเสียงร้อง
 - [ ] ห้ามใช้ blanket `mask^gamma`, global threshold, min-mask หรือ hard binary mask เป็น production หากไม่มีหลักฐานว่า instrumental ไม่เสีย
 - [x] เก็บ current mask เป็น fallback ต่อ frame เมื่อ confidence ต่ำหรือข้อมูล context ไม่ครบ
