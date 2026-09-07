@@ -11,6 +11,7 @@
  * 6. Automated cross-reference URL rewriting for audio DSP, AI models, workers, fonts & styles
  * 7. Complete HTML & CSS minification (.min) + inline script/style minification
  * 8. Store-ready ZIP package generation
+ * 9. Native GO engine + self-contained macOS and Windows binaries
  */
 
 const { execSync } = require('child_process');
@@ -91,15 +92,25 @@ function run(cmd, desc) {
   }
 }
 
+// Build the native engine before packaging the extension so the shipped
+// release is always produced alongside the current GO AI implementation.
+// The script creates both nextamp-engine and nextamp-engine.exe using the
+// embedded model/runtime assets in nextamp-engine-go/.
+console.log('\n[0/9] Building native GO engine binaries...');
+run(
+  'bash "' + path.join(ROOT_DIR, 'nextamp-engine-go', 'build.sh') + '"',
+  'Building macOS + Windows GO engine binaries'
+);
+
 // 1. Prepare Output Directories
-console.log('\n[1/8] Cleaning and preparing output directories...');
+console.log('\n[1/9] Cleaning and preparing output directories...');
 fs.rmSync(TEMP_DIR, { recursive: true, force: true });
 fs.rmSync(DIST_DIR, { recursive: true, force: true });
 fs.mkdirSync(TEMP_DIR, { recursive: true });
 fs.mkdirSync(DIST_DIR, { recursive: true });
 
 // 2. Compile WASM Security Core
-console.log('\n[2/8] Compiling WebAssembly Security Core...');
+console.log('\n[2/9] Compiling WebAssembly Security Core...');
 const emccPath = fs.existsSync('/opt/homebrew/bin/emcc') ? '/opt/homebrew/bin/emcc' : 'emcc';
 const wasmSrc = path.join(ROOT_DIR, 'scripts', 'security', 'security-core.c');
 const wasmOut = path.join(DIST_DIR, FILE_NAMES.secWasm);
@@ -111,7 +122,7 @@ run(
 console.log('    ✓ ' + FILE_NAMES.secWasm + ' compiled successfully');
 
 // 3. Bundle JS Entry Points & Workers via esbuild
-console.log('\n[3/8] Bundling JavaScript modules & workers via esbuild...');
+console.log('\n[3/9] Bundling JavaScript modules & workers via esbuild...');
 
 const bundles = [
   { in: 'popup.js', out: FILE_NAMES.popup, temp: 'popup.tmp.js', format: 'esm', injectGuard: true },
@@ -137,7 +148,7 @@ bundles.forEach((b) => {
 });
 
 // 4. Cross-Reference Rewriting in JS Bundles
-console.log('\n[4/8] Rewriting cross-references to hashed assets in JS bundles...');
+console.log('\n[4/9] Rewriting cross-references to hashed assets in JS bundles...');
 
 function replaceInFile(filePath, search, replacement) {
   let content = fs.readFileSync(filePath, 'utf8');
@@ -189,7 +200,7 @@ guardCode = guardCode.replace('security-core.wasm', FILE_NAMES.secWasm);
 });
 
 // 5. Code Obfuscation
-console.log('\n[5/8] Applying Advanced Code Obfuscation & Anti-Tamper Protection...');
+console.log('\n[5/9] Applying Advanced Code Obfuscation & Anti-Tamper Protection...');
 
 bundles.forEach((b) => {
   const tempFile = path.join(TEMP_DIR, b.temp);
@@ -262,7 +273,7 @@ run(
 );
 
 // 6. Packaging & Minifying Libraries, Models, WASM
-console.log('\n[6/8] Packaging and minifying vendor libraries, WASM, and AI models...');
+console.log('\n[6/9] Packaging and minifying vendor libraries, WASM, and AI models...');
 
 // Minify large libraries via esbuild
 run(
@@ -301,7 +312,7 @@ fs.copyFileSync(path.join(SRC_DIR, 'assets', 'logo.png'), path.join(DIST_DIR, FI
 fs.copyFileSync(path.join(SRC_DIR, 'assets', 'fonts', 'Phosphor-Bold.woff2'), path.join(DIST_DIR, FILE_NAMES.phosphorFont));
 
 // 7. Minifying CSS & HTML (.min)
-console.log('\n[7/8] Minifying CSS stylesheets and HTML pages (.min)...');
+console.log('\n[7/9] Minifying CSS stylesheets and HTML pages (.min)...');
 
 // Minify Phosphor CSS with hashed font path
 let phosphorCssContent = fs.readFileSync(path.join(SRC_DIR, 'assets', 'css', 'phosphor.css'), 'utf8');
@@ -437,14 +448,14 @@ fs.writeFileSync(path.join(DIST_DIR, 'manifest.json'), JSON.stringify(manifest),
 fs.rmSync(TEMP_DIR, { recursive: true, force: true });
 
 // 8. Verify all generated JS files for syntax errors
-console.log('\n[8/8] Validating syntax of all JS files in production build...');
+console.log('\n[8/9] Validating syntax of all JS files in production build...');
 const jsFiles = fs.readdirSync(DIST_DIR).filter((f) => f.endsWith('.js'));
 jsFiles.forEach((f) => {
   run('node -c "' + path.join(DIST_DIR, f) + '"', 'Syntax check: ' + f);
 });
 
-// Generate Store-ready ZIP Archive
-console.log('\nGenerating store-ready ZIP archive...');
+// 9. Generate Store-ready ZIP Archive
+console.log('\n[9/9] Generating store-ready ZIP archive...');
 if (fs.existsSync(ZIP_FILE)) fs.unlinkSync(ZIP_FILE);
 run('cd "' + DIST_DIR + '" && zip -rq "' + ZIP_FILE + '" .', 'Compressing extension package');
 

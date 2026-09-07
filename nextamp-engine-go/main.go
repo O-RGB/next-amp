@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -24,9 +26,10 @@ import (
 )
 
 const (
-	ListenAddr  = "127.0.0.1:41919"
-	Version     = "2.2.0-eco"
-	HeaderBytes = 8
+	ListenAddr         = "127.0.0.1:41919"
+	Version            = "2.3.0-eco"
+	HeaderBytes        = 8
+	DigitalSilencePeak = 3.25e-5
 )
 
 var upgrader = websocket.Upgrader{
@@ -68,6 +71,9 @@ var (
 	totalBytesReceived  atomic.Uint64
 	lastStatusTime      time.Time
 	muStatus            sync.Mutex
+	coreMLComputeUnits  = "ALL"
+	coreMLProfile       bool
+	ortProfilePrefix    string
 )
 
 func cpuFallbackDevice(dev AccelerationOption) AccelerationOption {
@@ -80,22 +86,71 @@ func cpuFallbackDevice(dev AccelerationOption) AccelerationOption {
 }
 
 func createSessionOptions(dev AccelerationOption) (*ort.SessionOptions, string, error) {
+	opts, deviceLabel, err := createSessionOptionsForCoreML(dev, coreMLComputeUnits, coreMLProfile)
+	if err != nil {
+		return nil, "", err
+	}
+	if strings.TrimSpace(ortProfilePrefix) != "" {
+		if err := opts.EnableProfiling(ortProfilePrefix); err != nil {
+			opts.Destroy()
+			return nil, "", err
+		}
+	}
+	return opts, deviceLabel, nil
+}
+
+func createSessionOptionsForCoreML(dev AccelerationOption, computeUnits string, profileComputePlan bool) (*ort.SessionOptions, string, error) {
 	opts, err := ort.NewSessionOptions()
 	if err != nil {
 		return nil, "", err
 	}
 
-	// High-Performance Graph Optimization
-	opts.SetGraphOptimizationLevel(ort.GraphOptimizationLevelEnableAll)
-	opts.SetCpuMemArena(true)
-	opts.SetMemPattern(true)
-	opts.AddSessionConfigEntry("session.intra_op.allow_spinning", "0")
+	// High-Performance Graph Optimization. DirectML requires sequential
+	// execution with memory-pattern allocation disabled; leaving the generic
+	// ORT defaults here can make older Windows GPUs stall or fail at runtime.
+	if err := opts.SetGraphOptimizationLevel(ort.GraphOptimizationLevelEnableAll); err != nil {
+		opts.Destroy()
+		return nil, "", err
+	}
+	if err := opts.SetCpuMemArena(true); err != nil {
+		opts.Destroy()
+		return nil, "", err
+	}
+	if err := opts.SetExecutionMode(ort.ExecutionModeSequential); err != nil {
+		opts.Destroy()
+		return nil, "", err
+	}
+	useMemPattern := dev.Type != DeviceDirectML
+	if err := opts.SetMemPattern(useMemPattern); err != nil {
+		opts.Destroy()
+		return nil, "", err
+	}
+	if err := opts.AddSessionConfigEntry("session.intra_op.allow_spinning", "0"); err != nil {
+		opts.Destroy()
+		return nil, "", err
+	}
 
 	deviceLabel := dev.DisplayName
 	switch dev.Type {
 	case DeviceCoreML:
-		// Hardware Acceleration on Apple Silicon / macOS via CoreML
-		err = opts.AppendExecutionProviderCoreML(0)
+		// Hardware Acceleration on Apple Silicon / macOS via CoreML. This model
+		// contains an AvgPool form that the bundled CoreML parser cannot compile
+		// as MLProgram (it reports a missing `pad` parameter), so keep the
+		// provider-aware NeuralNetwork format for the exact FP32 graph.
+		if strings.TrimSpace(computeUnits) == "" {
+			computeUnits = "ALL"
+		}
+		coreMLOptions := map[string]string{
+			"ModelFormat":                        "NeuralNetwork",
+			"MLComputeUnits":                     computeUnits,
+			"RequireStaticInputShapes":           "1",
+			"SpecializationStrategy":             "FastPrediction",
+			"AllowLowPrecisionAccumulationOnGPU": "0",
+		}
+		if profileComputePlan {
+			coreMLOptions["ProfileComputePlan"] = "1"
+		}
+		err = opts.AppendExecutionProviderCoreMLV2(coreMLOptions)
 	case DeviceDirectML:
 		// Hardware Acceleration on Windows via DirectML (GPU)
 		err = opts.AppendExecutionProviderDirectML(dev.DeviceIndex)
@@ -474,20 +529,40 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		globalAI.mu.Unlock()
 	}
 
-	// Reusable preallocated packet buffer for responses
-	outBuf := make([]byte, 65544)
+	// The extension uses one fixed 8,192-sample packet for the native path.
+	// Reuse one exact-size receive buffer as well as the response buffer so a
+	// busy Windows/Apple machine does not create a new ~64 KiB payload on every
+	// WebSocket message.
+	packetBuf := make([]byte, HeaderBytes+(dsp.ChunkSamples*8))
+	outBuf := make([]byte, HeaderBytes+(dsp.ChunkSamples*8))
+	conn.SetReadLimit(int64(len(packetBuf)))
 
 	for {
-		messageType, payload, err := conn.ReadMessage()
+		messageType, messageReader, err := conn.NextReader()
 		if err != nil {
 			break
 		}
 
 		if messageType == websocket.BinaryMessage {
+			// ReadFull also handles a smaller valid packet: it returns the bytes
+			// read with io.ErrUnexpectedEOF at the WebSocket message boundary.
+			packetLen, readErr := io.ReadFull(messageReader, packetBuf)
+			if packetLen == len(packetBuf) {
+				// Reject oversized packets without allowing leftover bytes to be
+				// interpreted as a second audio message on the next iteration.
+				var extra [1]byte
+				if extraLen, _ := messageReader.Read(extra[:]); extraLen > 0 {
+					continue
+				}
+			}
+			if packetLen == 0 || (readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF) {
+				continue
+			}
+			payload := packetBuf[:packetLen]
 			t0 := time.Now()
-			chunkLen := len(payload)
+			chunkLen := packetLen
 
-			if chunkLen < HeaderBytes {
+			if chunkLen <= HeaderBytes || (chunkLen-HeaderBytes)%8 != 0 {
 				continue
 			}
 
@@ -503,35 +578,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			var respPayload []byte
 			var inferMs, dspMs float64
 
-			// Fast peak check for intelligent silence skip (Zero-Load VAD)
-			var inPeak float32
-			for i := 0; i < len(leftSamples); i += 16 {
-				vL := float32(math.Abs(float64(leftSamples[i])))
-				vR := float32(math.Abs(float64(rightSamples[i])))
-				if vL > inPeak {
-					inPeak = vL
-				}
-				if vR > inPeak {
-					inPeak = vR
-				}
-			}
-
-			// Near-zero energy (< -70 dB): instant skip neural network, saving 99% CPU/battery
-			if inPeak < 0.0003 && (mode == 1 || mode == 2) {
-				if mode == 1 {
-					// Karaoke: input already has no vocal, pass directly
-					outL, outR = leftSamples, rightSamples
-					respPayload = payload
-				} else {
-					// Acapella: vocals are silent, return zero silence
-					outL, outR = leftSamples, rightSamples
-					copy(outBuf, payload)
-					for i := HeaderBytes; i < chunkLen; i++ {
-						outBuf[i] = 0
-					}
-					respPayload = outBuf[:chunkLen]
-				}
-			} else if (mode == 1 || mode == 2) && globalAI != nil && globalAI.enabled {
+			if (mode == 1 || mode == 2) && globalAI != nil && globalAI.enabled {
 				// Process with Hardware-Accelerated AI Vocal Separation Pipeline
 				globalAI.mu.Lock()
 
@@ -539,51 +586,63 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				// 1. Forward STFT + Peak Tracking + Normalization (~0.25ms via SIMD)
 				normInput := globalAI.dspEngine.StepForward(leftSamples, rightSamples)
 				dspMs += float64(time.Since(tDSP1).Microseconds()) / 1000.0
-
-				// 2. Load into ONNX Tensor buffer
-				tensorBuf := globalAI.inputTensor.GetData()
-				copy(tensorBuf, normInput)
-
-				// 3. Neural Network U-Net Inference (~50ms via CoreML/DirectML)
-				tNN := time.Now()
-				runErr := globalAI.session.Run()
-				inferMs = float64(time.Since(tNN).Microseconds()) / 1000.0
-
-				if runErr != nil {
-					if !globalAI.runErrorLogged {
-						fmt.Printf("[!] ONNX inference failed on %s at chunk #%d: %v\n", globalAI.deviceInfo, chunkIndex, runErr)
-						globalAI.runErrorLogged = true
-					}
-					if !globalAI.recoveryTried {
-						if recoveryErr := globalAI.recoverWithCPU(); recoveryErr == nil {
-							// The replacement session owns a new input tensor; replay the
-							// current normalized chunk instead of dropping it.
-							copy(globalAI.inputTensor.GetData(), normInput)
-							runErr = globalAI.session.Run()
-							if runErr != nil {
-								fmt.Printf("[!] CPU recovery inference failed at chunk #%d: %v\n", chunkIndex, runErr)
-							}
-						} else {
-							fmt.Printf("[!] CPU recovery unavailable at chunk #%d: %v\n", chunkIndex, recoveryErr)
-						}
-					}
+				delayChunks := int(payload[5])
+				if delayChunks > 3 {
+					delayChunks = 0
 				}
 
-				if runErr != nil {
-					outL = make([]float32, len(leftSamples))
-					outR = make([]float32, len(rightSamples))
-					respPayload = packSilentSamples(chunkIndex, mode, len(leftSamples), outBuf)
-				} else {
-					// 4. Inverse STFT + Fast C SIMD Sigmoid + Overlap-Add (~0.06ms via SIMD)
+				// A delayed target that is already at the digital-silence floor still
+				// needs StepBackward so the STFT/lookahead/OLA timeline advances, but
+				// it does not need an ONNX run. The old gate happened before
+				// StepForward and could leave the native state one chunk behind.
+				targetIsDigitalSilence := globalAI.dspEngine.TargetChunkIsDigitalSilence(delayChunks, DigitalSilencePeak)
+				if targetIsDigitalSilence {
 					tDSP2 := time.Now()
-					rawOut := globalAI.outputTensor.GetData()
-					delayChunks := int(payload[5])
-					if delayChunks > 3 {
-						delayChunks = 0
-					}
-					outL, outR = globalAI.dspEngine.StepBackward(rawOut, delayChunks, int(mode), 1.0)
+					outL, outR = globalAI.dspEngine.StepBackwardSilence(delayChunks)
 					dspMs += float64(time.Since(tDSP2).Microseconds()) / 1000.0
 					respPayload = packChannelSamples(chunkIndex, mode, outL, outR, outBuf)
+				} else {
+					// 2. Load into ONNX Tensor buffer
+					tensorBuf := globalAI.inputTensor.GetData()
+					copy(tensorBuf, normInput)
+
+					// 3. Neural Network U-Net Inference (~50ms via CoreML/DirectML)
+					tNN := time.Now()
+					runErr := globalAI.session.Run()
+					inferMs = float64(time.Since(tNN).Microseconds()) / 1000.0
+
+					if runErr != nil {
+						if !globalAI.runErrorLogged {
+							fmt.Printf("[!] ONNX inference failed on %s at chunk #%d: %v\n", globalAI.deviceInfo, chunkIndex, runErr)
+							globalAI.runErrorLogged = true
+						}
+						if !globalAI.recoveryTried {
+							if recoveryErr := globalAI.recoverWithCPU(); recoveryErr == nil {
+								// The replacement session owns a new input tensor; replay the
+								// current normalized chunk instead of dropping it.
+								copy(globalAI.inputTensor.GetData(), normInput)
+								runErr = globalAI.session.Run()
+								if runErr != nil {
+									fmt.Printf("[!] CPU recovery inference failed at chunk #%d: %v\n", chunkIndex, runErr)
+								}
+							} else {
+								fmt.Printf("[!] CPU recovery unavailable at chunk #%d: %v\n", chunkIndex, recoveryErr)
+							}
+						}
+					}
+
+					if runErr != nil {
+						outL = make([]float32, len(leftSamples))
+						outR = make([]float32, len(rightSamples))
+						respPayload = packSilentSamples(chunkIndex, mode, len(leftSamples), outBuf)
+					} else {
+						// 4. Inverse STFT + Fast C SIMD Sigmoid + Overlap-Add (~0.06ms via SIMD)
+						tDSP2 := time.Now()
+						rawOut := globalAI.outputTensor.GetData()
+						outL, outR = globalAI.dspEngine.StepBackward(rawOut, delayChunks, int(mode), 1.0)
+						dspMs += float64(time.Since(tDSP2).Microseconds()) / 1000.0
+						respPayload = packChannelSamples(chunkIndex, mode, outL, outR, outBuf)
+					}
 				}
 				globalAI.mu.Unlock()
 			} else {
@@ -629,6 +688,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 
 		} else if messageType == websocket.TextMessage {
+			payload, readErr := io.ReadAll(messageReader)
+			if readErr != nil {
+				continue
+			}
 			var msg map[string]interface{}
 			if err := json.Unmarshal(payload, &msg); err == nil {
 				if msg["type"] == "PING" {
@@ -659,7 +722,13 @@ func main() {
 	flagTimeout := flag.Int("timeout", 3, "Countdown seconds for interactive device selection prompt (0 to skip)")
 	flagAddr := flag.String("addr", ListenAddr, "WebSocket listen address")
 	flagHeadless := flag.Bool("headless", false, "Disable interactive TUI dashboard")
+	flagCoreMLUnits := flag.String("coreml-units", "ALL", "CoreML compute units: ALL, CPUAndNeuralEngine, CPUAndGPU, or CPUOnly")
+	flagCoreMLProfile := flag.Bool("coreml-profile", false, "Enable CoreML compute-plan diagnostics (debug only)")
+	flagORTProfile := flag.String("ort-profile", "", "Write an ONNX Runtime Chrome-trace profile to this file prefix (debug only)")
 	flag.Parse()
+	coreMLComputeUnits = strings.TrimSpace(*flagCoreMLUnits)
+	coreMLProfile = *flagCoreMLProfile
+	ortProfilePrefix = strings.TrimSpace(*flagORTProfile)
 
 	// Set Go runtime garbage collection and memory tuning for minimal footprint & zero GC pauses
 	debug.SetGCPercent(400)
@@ -682,7 +751,14 @@ func main() {
 
 	// 4. Initialize and Start Dashboard
 	if !*flagHeadless {
-		globalDashboard = NewDashboard(hw, selectedDev.DisplayName, *flagAddr)
+		dashboardDevice := selectedDev.DisplayName
+		if ai != nil {
+			// Show the device that actually owns the initialized ORT session.
+			// This prevents a failed CoreML/DirectML partition from being
+			// presented as hardware acceleration after CPU fallback.
+			dashboardDevice = ai.deviceInfo
+		}
+		globalDashboard = NewDashboard(hw, dashboardDevice, *flagAddr)
 		globalDashboard.Start()
 		defer globalDashboard.Stop()
 	} else {

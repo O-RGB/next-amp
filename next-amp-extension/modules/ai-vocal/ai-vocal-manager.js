@@ -310,6 +310,24 @@ export class AIVocalManager {
             this.diagnostics.goChunks++;
             // DIFF is fixed at its proven former level 2: one chunk of
             // lookahead. Profile selection only changes the browser path.
+            // Keep the native bridge bounded. If the server cannot keep up,
+            // discard stale in-flight work, reset both DSP timelines, and
+            // continue from this newest chunk instead of building latency.
+            if (!this.goClient.canSendChunk()) {
+              const staleInFlight = this.goClient.pendingChunks.size;
+              this.diagnostics.staleWorkDrops += staleInFlight;
+              this.diagnostics.resyncs++;
+              this.streamGeneration++;
+              this.streamChunkFloor = data.chunkIndex;
+              this.goClient.resetStream();
+              if (this.workletNode) {
+                this.workletNode.port.postMessage({
+                  type: "RESYNC",
+                  nextChunkIndex: data.chunkIndex,
+                  generation: this.streamGeneration
+                });
+              }
+            }
             this.goClient.sendChunk(data.chunkIndex, data.rawL, data.rawR, data.mode, 1);
             // Never feed raw audio back into the GO path when the bridge is
             // unavailable. The worklet's GO concealment path will mute the
@@ -1212,6 +1230,11 @@ export class AIVocalManager {
         maxPending: this.diagnostics.maxPendingQueue,
         staleWorkDrops: this.diagnostics.staleWorkDrops,
         resyncs: this.diagnostics.resyncs
+      },
+      goBridge: {
+        pending: this.goClient.pendingChunks.size,
+        maxInFlight: this.goClient.maxInFlightChunks,
+        backpressureDrops: this.goClient.backpressureDrops
       },
       stream: {
         generation: this.streamGeneration,

@@ -16,6 +16,11 @@ export class GoEngineClient {
     this.deviceInfo = "Go Native Core";
 
     this.pendingChunks = new Map();
+    // The native server processes one audio packet at a time. Do not let the
+    // browser queue unbounded packets in the WebSocket when a CPU/GPU spike
+    // makes inference temporarily slower than realtime.
+    this.maxInFlightChunks = 2;
+    this.backpressureDrops = 0;
     this.reconnectTimer = null;
 
     // Some Chromium/Windows runtimes can still surface a binary WebSocket
@@ -201,8 +206,16 @@ export class GoEngineClient {
     } catch (_) {}
   }
 
+  canSendChunk() {
+    return this.pendingChunks.size < this.maxInFlightChunks;
+  }
+
   sendChunk(chunkIndex, rawL, rawR, mode, delayChunks = 1) {
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    if (!this.canSendChunk()) {
+      this.backpressureDrops++;
       return false;
     }
 

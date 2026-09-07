@@ -16,8 +16,8 @@ const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
 const FADE_IN_SPEED = 1.0 / 1024;  // ~23ms smooth fade-in
 const READY_QUEUE_THRESHOLD = 2;   // 2 browser chunks (~348ms) cushion against latency spikes
 const MAX_QUEUE_THRESHOLD = 5;     // 5 browser chunks (~871ms) latency ceiling prevents delay accumulation
-const GO_READY_QUEUE_THRESHOLD = 5; // Native GO gets a deeper cushion for OS scheduling spikes
-const GO_MAX_QUEUE_THRESHOLD = 8;   // ~1.48s ceiling before stale native output is discarded
+const GO_READY_QUEUE_THRESHOLD = 3; // Native GO cushion without the old ~1s startup delay
+const GO_MAX_QUEUE_THRESHOLD = 4;   // ~743ms ceiling before stale native output is discarded
 const BROWSER_MAX_LAG_CHUNKS = 3;   // Drop browser results that are already too far behind live audio
 const CONCEAL_FADE_OUT_SPEED = 1.0 / 256; // hide an unavoidable GO underrun without a click
 const CONCEAL_FADE_IN_SPEED = 1.0 / 512;  // restore processed audio smoothly after recovery
@@ -195,6 +195,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         // instead of replaying audio from before the scheduling interruption.
         const nextChunkIndex = Number.isInteger(data.nextChunkIndex)
           ? data.nextChunkIndex : null;
+        if (Number.isInteger(data.generation)) {
+          this.streamGeneration = data.generation;
+        }
         this.diagnostics.resyncs++;
         this.isAiReady = false;
         this.readyThreshold = 1;
@@ -208,6 +211,10 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         this.concealGain = 0.0;
         this.playbackChunkIndex = nextChunkIndex;
         this.playbackSamples = 0;
+        this.inAccumPos = 0;
+        this.chunkPeak = 0.0;
+        this.silentChunks = 0;
+        this.inSilenceBoundary = false;
       } else if (data.type === "CHUNK_PROCESSED") {
         this.handleProcessedChunk(data);
       }
@@ -408,9 +415,12 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     const targetLive = (this.targetMode === "bypass") ? 1.0 : 0.0;
     const targetAi = (this.targetMode !== "bypass" && this.isAiReady) ? 1.0 : 0.0;
 
-    // Report status telemetry to manager every ~100ms
+    // Report quickly while priming/recovering, but keep the steady-state
+    // MessagePort traffic near 2.7 Hz. The audio callback remains sample
+    // accurate; only UI telemetry is less chatty once the queue is healthy.
     this.statusCount++;
-    if (this.statusCount >= 32) {
+    const statusInterval = this.isAiReady ? 128 : 32;
+    if (this.statusCount >= statusInterval) {
       this.statusCount = 0;
       const totalBuffered = this.outQueueL.length * this.chunkSize + (this.currChunkL ? this.currChunkL.length - this.currChunkPos : 0);
       const bufferedSec = (totalBuffered / WORKLET_SAMPLE_RATE).toFixed(1);
@@ -431,6 +441,28 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           ? null : this.playbackChunkIndex * (this.chunkSize / 512),
         diagnostics: { ...this.diagnostics }
       });
+    }
+
+    // Stable processed playback is an exact copy operation. Avoid the
+    // per-sample gain/concealment branch while a full native/browser chunk is
+    // available; the slower loop below remains responsible for fades,
+    // underruns and chunk-boundary transitions.
+    if (this.isAiReady &&
+        this.liveGain === 0.0 && this.aiGain === 1.0 && this.concealGain === 1.0 &&
+        this.currChunkL && this.currChunkPos + len <= this.currChunkL.length) {
+      const start = this.currChunkPos;
+      this.currChunkPos += len;
+      outL.set(this.currChunkL.subarray(start, this.currChunkPos));
+      if (outR !== outL) {
+        outR.set(this.currChunkR.subarray(start, this.currChunkPos));
+      }
+      this.playbackSamples += len;
+      if (this.playbackSamples >= this.chunkSize) {
+        this.playbackSamples = 0;
+        if (this.playbackChunkIndex !== null) this.playbackChunkIndex++;
+      }
+      this.diagnostics.lastPlaybackChunkIndex = this.playbackChunkIndex;
+      return true;
     }
 
     // 3. Playback with clean mute-and-fade

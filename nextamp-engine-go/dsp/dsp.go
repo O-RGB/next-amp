@@ -30,7 +30,9 @@ type Engine struct {
 	outBufL     [ChunkSamples]float32
 	outBufR     [ChunkSamples]float32
 	maxHistory  [4]float32
+	peakHistory [4]float32
 	maxPos      int
+	peakCount   int
 	initialized bool
 }
 
@@ -57,7 +59,9 @@ func (e *Engine) Reset() {
 		e.outBufR[i] = 0
 	}
 	e.maxHistory = [4]float32{1e-4, 1e-4, 1e-4, 1e-4}
+	e.peakHistory = [4]float32{}
 	e.maxPos = 0
+	e.peakCount = 0
 }
 
 // StepForward feeds 8192 new samples and computes forward STFT + rolling spectrogram
@@ -81,7 +85,11 @@ func (e *Engine) StepForward(rawL, rawR []float32) []float32 {
 	// 3. Peak tracking (zero-allocation ring buffer)
 	chunkPeak := float32(C.stft_get_chunk_peak())
 	e.maxHistory[e.maxPos] = chunkPeak
+	e.peakHistory[e.maxPos] = chunkPeak
 	e.maxPos = (e.maxPos + 1) & 3
+	if e.peakCount < len(e.peakHistory) {
+		e.peakCount++
+	}
 
 	globalMax := float32(1e-4)
 	for _, v := range e.maxHistory {
@@ -97,18 +105,50 @@ func (e *Engine) StepForward(rawL, rawR []float32) []float32 {
 	return normPtr[:]
 }
 
+// TargetChunkIsDigitalSilence reports whether a delayed target chunk has
+// already been observed as digital silence. It is intentionally based on the
+// same post-STFT peak used by the app path, and only becomes true after that
+// target exists in the local stream history.
+func (e *Engine) TargetChunkIsDigitalSilence(delayChunks int, threshold float32) bool {
+	if delayChunks < 0 || delayChunks >= e.peakCount {
+		return false
+	}
+	idx := e.maxPos - 1 - delayChunks
+	for idx < 0 {
+		idx += len(e.peakHistory)
+	}
+	return e.peakHistory[idx] <= threshold
+}
+
 // StepBackward applies the neural network output, inverse STFTs, and overlap-adds
 // outData: raw ONNX output of shape [1, 1024, 64, 2] (131,072 floats)
 // mode: 0=bypass, 1=karaoke, 2=acapella (wire protocol values)
 // delayChunks: 0 for instant zero-delay real-time, 1 for 1-chunk lookahead
 func (e *Engine) StepBackward(rawOutput []float32, delayChunks int, mode int, strength float32) ([]float32, []float32) {
+	return e.stepBackward(rawOutput, delayChunks, mode, strength, true)
+}
+
+// StepBackwardSilence keeps the STFT/lookahead/OLA timeline moving without
+// running sigmoid extraction on a model output that does not exist. The
+// delayed target spectrum is passed through unchanged; it is already below
+// the digital-silence floor, so this preserves the exact stream cadence.
+func (e *Engine) StepBackwardSilence(delayChunks int) ([]float32, []float32) {
+	return e.stepBackward(nil, delayChunks, 2, 0.0, false)
+}
+
+func (e *Engine) stepBackward(rawOutput []float32, delayChunks int, mode int, strength float32, extractMask bool) ([]float32, []float32) {
 	sliceStart := 48 - (16 * delayChunks)
 	if sliceStart < 0 || sliceStart > 48 {
 		sliceStart = 48
 	}
 
-	// Fast C SIMD Sigmoid extraction (0.04ms)
-	C.stft_extract_sigmoid_mask((*C.float)(unsafe.Pointer(&rawOutput[0])), C.int(sliceStart))
+	if extractMask {
+		if len(rawOutput) < NumBins*MaxFrames*2 {
+			return nil, nil
+		}
+		// Fast C SIMD Sigmoid extraction (0.04ms)
+		C.stft_extract_sigmoid_mask((*C.float)(unsafe.Pointer(&rawOutput[0])), C.int(sliceStart))
+	}
 
 	// The model outputs the accompaniment/instrumental mask. Keep this mapping
 	// identical to the app's WASM path: Karaoke applies that mask (native mode 1)
@@ -119,6 +159,10 @@ func (e *Engine) StepBackward(rawOutput []float32, delayChunks int, mode int, st
 		cMode = 1
 	case 2: // Acapella: keep vocals, remove accompaniment.
 		cMode = 0
+	}
+	if !extractMask {
+		cMode = 2
+		strength = 0.0
 	}
 	if delayChunks == 0 {
 		C.stft_apply_mask(C.int(ChunkFrames), C.int(cMode), C.float(strength))
