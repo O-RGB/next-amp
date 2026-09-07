@@ -208,10 +208,6 @@ func onnxNodeAttributeInts(nodeFields []onnxWireField, name string) []int64 {
 	return nil
 }
 
-func onnxNodeNameMatches(nodeFields []onnxWireField, name string) bool {
-	return string(firstONNXBytes(nodeFields, 3)) == name
-}
-
 func rewriteONNXNodeInput(data []byte, oldName, newName string) ([]byte, bool, error) {
 	fields, err := parseONNXFields(data)
 	if err != nil {
@@ -376,44 +372,32 @@ func makeONNXInitializer(name string, values []int64) []byte {
 }
 
 func makeONNXOutputSliceNode(inputName string) []byte {
+	return makeONNXROISliceNode(compactOutputPrefix, inputName, compactOutputName)
+}
+
+func makeONNXROISliceNode(prefix, inputName, outputName string) []byte {
 	result := make([]byte, 0, 180)
 	for _, input := range []string{
 		inputName,
-		compactOutputPrefix + "starts",
-		compactOutputPrefix + "ends",
-		compactOutputPrefix + "axes",
-		compactOutputPrefix + "steps",
-	} {
-		result = append(result, marshalONNXStringField(1, input)...)
-	}
-	result = append(result, marshalONNXStringField(2, compactOutputName)...)
-	result = append(result, marshalONNXStringField(3, compactOutputPrefix+"slice")...)
-	result = append(result, marshalONNXStringField(4, "Slice")...)
-	return marshalONNXField(1, 2, result)
-}
-
-func makeONNXDecoderROISliceNode(inputName, outputName string) []byte {
-	result := make([]byte, 0, 190)
-	for _, input := range []string{
-		inputName,
-		compactROIPrefix + "starts",
-		compactROIPrefix + "ends",
-		compactROIPrefix + "axes",
-		compactROIPrefix + "steps",
+		prefix + "starts",
+		prefix + "ends",
+		prefix + "axes",
+		prefix + "steps",
 	} {
 		result = append(result, marshalONNXStringField(1, input)...)
 	}
 	result = append(result, marshalONNXStringField(2, outputName)...)
-	result = append(result, marshalONNXStringField(3, compactROIPrefix+"slice")...)
+	result = append(result, marshalONNXStringField(3, prefix+"slice")...)
 	result = append(result, marshalONNXStringField(4, "Slice")...)
 	return marshalONNXField(1, 2, result)
 }
 
 type onnxROITarget struct {
-	convName       string
-	convInput      string
-	transposeName  string
-	transposeInput string
+	convName      string
+	convInput     string
+	transposeName string
+	decoderName   string
+	decoderInput  string
 }
 
 func findONNXFinalProjection(fields []onnxWireField) (onnxROITarget, bool, error) {
@@ -461,12 +445,49 @@ func findONNXFinalProjection(fields []onnxWireField) (onnxROITarget, bool, error
 				len(group) != 1 || group[0] != 1 {
 				continue
 			}
-			return onnxROITarget{
-				convName:       string(firstONNXBytes(conv, 3)),
-				convInput:      string(inputs[0]),
-				transposeName:  string(firstONNXBytes(transpose, 3)),
-				transposeInput: transposeInput,
-			}, true, nil
+			target := onnxROITarget{
+				convName:      string(firstONNXBytes(conv, 3)),
+				convInput:     string(inputs[0]),
+				transposeName: string(firstONNXBytes(transpose, 3)),
+			}
+			// The layer immediately before the 1x1 projection is the final
+			// 3x3 SAME decoder layer. It needs one frame of left halo to
+			// produce global frames 32..63 exactly. If a different export has
+			// no such layer, the caller keeps the older projection-only crop.
+			decoderActivationInput := target.convInput
+			for _, activation := range nodes {
+				if string(firstONNXBytes(activation, 4)) == "Relu" &&
+					string(firstONNXBytes(activation, 2)) == target.convInput {
+					activationInputs := allONNXBytes(activation, 1)
+					if len(activationInputs) == 1 {
+						decoderActivationInput = string(activationInputs[0])
+					}
+					break
+				}
+			}
+			for _, decoder := range nodes {
+				if string(firstONNXBytes(decoder, 4)) != "Conv" ||
+					string(firstONNXBytes(decoder, 2)) != decoderActivationInput {
+					continue
+				}
+				decoderKernel := onnxNodeAttributeInts(decoder, "kernel_shape")
+				decoderStrides := onnxNodeAttributeInts(decoder, "strides")
+				decoderDilations := onnxNodeAttributeInts(decoder, "dilations")
+				decoderPads := onnxNodeAttributeInts(decoder, "pads")
+				decoderInputs := allONNXBytes(decoder, 1)
+				if len(decoderInputs) < 1 || len(decoderKernel) != 2 ||
+					decoderKernel[0] != 3 || decoderKernel[1] != 3 ||
+					len(decoderStrides) != 2 || decoderStrides[0] != 1 || decoderStrides[1] != 1 ||
+					len(decoderDilations) != 2 || decoderDilations[0] != 1 || decoderDilations[1] != 1 ||
+					len(decoderPads) != 4 || decoderPads[0] != 1 || decoderPads[1] != 1 ||
+					decoderPads[2] != 1 || decoderPads[3] != 1 {
+					continue
+				}
+				target.decoderName = string(firstONNXBytes(decoder, 3))
+				target.decoderInput = string(decoderInputs[0])
+				break
+			}
+			return target, true, nil
 		}
 	}
 	return onnxROITarget{}, false, nil
@@ -509,6 +530,8 @@ func rewriteONNXGraphOutput(data []byte) ([]byte, bool, error) {
 	result := make([]byte, 0, len(data)+1200)
 	outputChanged := false
 	roiApplied := false
+	deepROI := roiAvailable && roiTarget.decoderName != ""
+	decoderApplied := false
 	for _, field := range fields {
 		if field.number == 1 && field.wire == 2 {
 			nodeFields, nodeErr := parseONNXFields(field.value)
@@ -516,14 +539,39 @@ func rewriteONNXGraphOutput(data []byte) ([]byte, bool, error) {
 				return nil, false, nodeErr
 			}
 			nodeName := string(firstONNXBytes(nodeFields, 3))
+			if deepROI && nodeName == roiTarget.decoderName {
+				croppedInput := compactROIPrefix + "decoder_layer_input:0"
+				croppedNode, changed, rewriteErr := rewriteONNXNodeInput(field.value, roiTarget.decoderInput, croppedInput)
+				if rewriteErr != nil {
+					return nil, false, rewriteErr
+				}
+				if changed {
+					result = append(result, makeONNXROISliceNode(
+						compactROIPrefix+"decoder_layer/",
+						roiTarget.decoderInput,
+						croppedInput,
+					)...)
+					result = append(result, marshalONNXField(1, 2, croppedNode)...)
+					decoderApplied = true
+					continue
+				}
+			}
 			if roiAvailable && nodeName == roiTarget.convName {
 				croppedInput := compactROIPrefix + "decoder_input:0"
+				projectionPrefix := compactROIPrefix
+				if deepROI {
+					// The decoder crop starts at global frame 31, so the
+					// final projection selects local frames 1..32.
+					croppedInput = compactROIPrefix + "projection_input:0"
+					projectionPrefix = compactROIPrefix + "projection/"
+				}
 				croppedNode, changed, rewriteErr := rewriteONNXNodeInput(field.value, roiTarget.convInput, croppedInput)
 				if rewriteErr != nil {
 					return nil, false, rewriteErr
 				}
 				if changed {
-					result = append(result, makeONNXDecoderROISliceNode(
+					result = append(result, makeONNXROISliceNode(
+						projectionPrefix,
 						roiTarget.convInput, croppedInput,
 					)...)
 					result = append(result, marshalONNXField(1, 2, croppedNode)...)
@@ -558,15 +606,31 @@ func rewriteONNXGraphOutput(data []byte) ([]byte, bool, error) {
 	if !outputChanged {
 		return data, false, nil
 	}
+	if deepROI && (!decoderApplied || !roiApplied) {
+		// Never leave a partially specialized graph behind.
+		return data, false, nil
+	}
 
 	if roiApplied {
-		// The 1x1 projection now produces exactly frames 32..63. The renamed
-		// transpose is already the compact output; adding another Slice would
-		// only waste a kernel and would be redundant.
-		result = append(result, makeONNXInitializer(compactROIPrefix+"starts", []int64{32})...)
-		result = append(result, makeONNXInitializer(compactROIPrefix+"ends", []int64{64})...)
-		result = append(result, makeONNXInitializer(compactROIPrefix+"axes", []int64{3})...)
-		result = append(result, makeONNXInitializer(compactROIPrefix+"steps", []int64{1})...)
+		if deepROI {
+			// Decoder output is local frames 0..32 for global frames
+			// 31..63. The projection crop keeps local frames 1..32.
+			result = append(result, makeONNXInitializer(compactROIPrefix+"decoder_layer/starts", []int64{31})...)
+			result = append(result, makeONNXInitializer(compactROIPrefix+"decoder_layer/ends", []int64{64})...)
+			result = append(result, makeONNXInitializer(compactROIPrefix+"decoder_layer/axes", []int64{3})...)
+			result = append(result, makeONNXInitializer(compactROIPrefix+"decoder_layer/steps", []int64{1})...)
+			result = append(result, makeONNXInitializer(compactROIPrefix+"projection/starts", []int64{1})...)
+			result = append(result, makeONNXInitializer(compactROIPrefix+"projection/ends", []int64{33})...)
+			result = append(result, makeONNXInitializer(compactROIPrefix+"projection/axes", []int64{3})...)
+			result = append(result, makeONNXInitializer(compactROIPrefix+"projection/steps", []int64{1})...)
+		} else {
+			// Projection-only fallback: crop the frame-independent layer
+			// directly to global frames 32..63.
+			result = append(result, makeONNXInitializer(compactROIPrefix+"starts", []int64{32})...)
+			result = append(result, makeONNXInitializer(compactROIPrefix+"ends", []int64{64})...)
+			result = append(result, makeONNXInitializer(compactROIPrefix+"axes", []int64{3})...)
+			result = append(result, makeONNXInitializer(compactROIPrefix+"steps", []int64{1})...)
+		}
 	} else {
 		result = append(result, makeONNXOutputSliceNode(identityOutput)...)
 		result = append(result, makeONNXInitializer(compactOutputPrefix+"starts", []int64{0, 0, compactOutputStart, 0})...)

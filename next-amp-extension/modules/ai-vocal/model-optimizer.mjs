@@ -78,17 +78,46 @@ function appendExactOutputHead(artifacts, nodes, options) {
     finalProjection.attr?.padding?.s === "U0FNRQ==" && // SAME
     finalProjection.attr?.strides?.list?.i?.every(value => Number(value) === 1) &&
     finalProjection.attr?.dilations?.list?.i?.every(value => Number(value) === 1);
+  const decoderLayer = nodes.find(node => node.name === finalProjection?.input?.[0]);
+  const decoderWeights = decoderLayer?.input?.[1];
+  const decoderWeightSpec = (artifacts.weightSpecs || []).find(spec => spec.name === decoderWeights);
+  const decoderCrop = options?.decoderCrop;
+  const decoderStart = Number(decoderCrop?.start);
+  const decoderFrames = Number(decoderCrop?.frames);
+  const decoderInputFrames = Number(decoderCrop?.inputFrames || inputFrames);
+  const decoderInputChannels = Number(decoderCrop?.channels || decoderWeightSpec?.shape?.[2]);
+  const decoderIsFrameLocal = (decoderLayer?.op === "_FusedConv2D" || decoderLayer?.op === "Conv2D") &&
+    decoderLayer.input?.length >= 3 &&
+    decoderWeightSpec?.shape?.length === 4 &&
+    decoderWeightSpec.shape[0] === 3 && decoderWeightSpec.shape[1] === 3 &&
+    decoderWeightSpec.shape[3] === 32 &&
+    decoderLayer.attr?.data_format?.s === "TkhXQw==" && // NHWC
+    decoderLayer.attr?.padding?.s === "U0FNRQ==" && // SAME
+    decoderLayer.attr?.strides?.list?.i?.every(value => Number(value) === 1) &&
+    decoderLayer.attr?.dilations?.list?.i?.every(value => Number(value) === 1);
   const roiStart = Number(sourceCrop?.start);
   const roiFrames = Number(sourceCrop?.frames);
   const roiInputFrames = Number(sourceCrop?.inputFrames || inputFrames);
   const roiChannels = Number(sourceCrop?.channels || finalWeightSpec?.shape?.[2]);
+  const canApplyDecoderCrop = !!sourceCrop && !!decoderCrop && projectionIsFrameIndependent && decoderIsFrameLocal &&
+    Number.isInteger(decoderStart) && Number.isInteger(decoderFrames) &&
+    Number.isInteger(decoderInputFrames) && Number.isInteger(decoderInputChannels) &&
+    decoderStart >= 0 && decoderFrames > 0 && decoderInputFrames > 0 && decoderInputChannels > 0 &&
+    decoderStart + decoderFrames <= decoderInputFrames;
+  const effectiveRoiStart = canApplyDecoderCrop ? roiStart - decoderStart : roiStart;
+  const effectiveRoiInputFrames = canApplyDecoderCrop ? decoderFrames : roiInputFrames;
+  const effectiveRoiChannels = canApplyDecoderCrop ? decoderWeightSpec?.shape?.[3] : roiChannels;
   const canApplySourceCrop = !!sourceCrop && projectionIsFrameIndependent &&
     Number.isInteger(roiStart) && Number.isInteger(roiFrames) &&
     Number.isInteger(roiInputFrames) && Number.isInteger(roiChannels) &&
     roiStart >= 0 && roiFrames > 0 && roiInputFrames > 0 && roiChannels > 0 &&
     roiStart + roiFrames <= roiInputFrames &&
     Number.isInteger(requestedHeadStart) && requestedHeadStart >= 0 &&
-    requestedHeadStart + frames <= roiFrames;
+    requestedHeadStart + frames <= roiFrames &&
+    (!canApplyDecoderCrop ||
+      Number.isInteger(effectiveRoiStart) && Number.isInteger(effectiveRoiInputFrames) &&
+      Number.isInteger(effectiveRoiChannels) && effectiveRoiStart >= 0 &&
+      effectiveRoiStart + frames <= effectiveRoiInputFrames);
 
   const prefix = "NextAmp/optimized_output_head";
   const constants = [
@@ -99,11 +128,17 @@ function appendExactOutputHead(artifacts, nodes, options) {
     { suffix: "reshape_shape", values: [2, frames, bins] }
   ];
   const roiConstants = canApplySourceCrop ? [
-    { suffix: "begin", values: [0, 0, roiStart, 0] },
-    { suffix: "end", values: [1, bins, roiStart + roiFrames, roiChannels] },
+    { suffix: "begin", values: [0, 0, effectiveRoiStart, 0] },
+    { suffix: "end", values: [1, bins, effectiveRoiStart + frames, effectiveRoiChannels] },
+    { suffix: "strides", values: [1, 1, 1, 1] }
+  ] : [];
+  const decoderConstants = canApplyDecoderCrop ? [
+    { suffix: "begin", values: [0, 0, decoderStart, 0] },
+    { suffix: "end", values: [1, bins, decoderStart + decoderFrames, decoderInputChannels] },
     { suffix: "strides", values: [1, 1, 1, 1] }
   ] : [];
   const allConstants = [
+    ...decoderConstants.map(item => ({ ...item, prefix: "NextAmp/roi_decoder_layer" })),
     ...roiConstants.map(item => ({ ...item, prefix: "NextAmp/roi_decoder_input" })),
     ...constants.map(item => ({ ...item, prefix }))
   ];
@@ -115,15 +150,36 @@ function appendExactOutputHead(artifacts, nodes, options) {
   const appended = appendInt32Weights(artifacts, extraSpecs, allConstants.map(item => item.values));
   if (!appended) return null;
 
+  const decoderSpecCount = decoderConstants.length;
   const roiSpecCount = roiConstants.length;
-  const [roiBegin, roiEnd, roiStrides] = extraSpecs.slice(0, roiSpecCount).map(spec => spec.name);
-  const [begin, end, strides, transposePerm, reshape] = extraSpecs.slice(roiSpecCount).map(spec => spec.name);
+  const [decoderBegin, decoderEnd, decoderStrides] = extraSpecs.slice(0, decoderSpecCount).map(spec => spec.name);
+  const [roiBegin, roiEnd, roiStrides] = extraSpecs.slice(decoderSpecCount, decoderSpecCount + roiSpecCount).map(spec => spec.name);
+  const [begin, end, strides, transposePerm, reshape] = extraSpecs.slice(decoderSpecCount + roiSpecCount).map(spec => spec.name);
+  const decoderPrefix = "NextAmp/roi_decoder_layer";
   const roiPrefix = "NextAmp/roi_decoder_input";
   const roiCropName = `${roiPrefix}/crop`;
+  const decoderCropName = `${decoderPrefix}/crop`;
   const cropName = `${prefix}/crop`;
   const transposeName = `${prefix}/transpose`;
   const reshapeName = `${prefix}/reshape`;
   const sigmoidName = `${prefix}/sigmoid`;
+  const decoderNodes = canApplyDecoderCrop ? [
+    ...decoderConstants.map(({ suffix, values }) => makeInt32ConstNode(`${decoderPrefix}/${suffix}`, values)),
+    {
+      name: decoderCropName,
+      op: "StridedSlice",
+      input: [decoderLayer.input[0], decoderBegin, decoderEnd, decoderStrides],
+      attr: {
+        shrink_axis_mask: { i: "0" },
+        new_axis_mask: { i: "0" },
+        Index: { type: "DT_INT32" },
+        begin_mask: { i: "0" },
+        end_mask: { i: "0" },
+        T: { type: "DT_FLOAT" },
+        ellipsis_mask: { i: "0" }
+      }
+    }
+  ] : [];
   const roiNodes = canApplySourceCrop ? [
     ...roiConstants.map(({ suffix, values }) => makeInt32ConstNode(`${roiPrefix}/${suffix}`, values)),
     {
@@ -178,6 +234,9 @@ function appendExactOutputHead(artifacts, nodes, options) {
     { ...outputNode, input: [sigmoidName] }
   ];
   const outputNodes = nodes.flatMap(node => {
+    if (canApplyDecoderCrop && node.name === decoderLayer.name) {
+      return [...decoderNodes, { ...node, input: [decoderCropName, ...node.input.slice(1)] }];
+    }
     if (canApplySourceCrop && node.name === finalProjection.name) {
       return [...roiNodes, { ...node, input: [roiCropName, ...node.input.slice(1)] }];
     }
@@ -209,7 +268,10 @@ function appendExactOutputHead(artifacts, nodes, options) {
       start, frames, bins, inputFrames,
       activation: "sigmoid", layout: "[2,frames,bins]",
       decoderRoi: canApplySourceCrop
-        ? { start: roiStart, frames: roiFrames, inputFrames: roiInputFrames, channels: roiChannels }
+        ? { start: effectiveRoiStart, frames, inputFrames: effectiveRoiInputFrames, channels: effectiveRoiChannels }
+        : null,
+      decoderLayerRoi: canApplyDecoderCrop
+        ? { start: decoderStart, frames: decoderFrames, inputFrames: decoderInputFrames, channels: decoderInputChannels }
         : null
     }
   };

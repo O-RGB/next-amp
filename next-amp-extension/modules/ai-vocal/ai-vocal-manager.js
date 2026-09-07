@@ -795,7 +795,12 @@ export class AIVocalManager {
           // boundary context remain unchanged. The optimizer rejects this
           // candidate automatically if the exported graph is different.
           headStart: 0,
-          sourceCrop: { start: 32, frames: 32, inputFrames: 64, bins: _ }
+          sourceCrop: { start: 32, frames: 32, inputFrames: 64, bins: _ },
+          // The preceding 3x3 SAME decoder layer needs one-frame halo on
+          // the left. Crop only its input to [31..63], then select [32..63]
+          // from its local [0..32] output. All other decoder layers keep
+          // their full context until this candidate is proven exact.
+          decoderCrop: { start: 31, frames: 33, inputFrames: 64, channels: 96, bins: _ }
         }
       });
 

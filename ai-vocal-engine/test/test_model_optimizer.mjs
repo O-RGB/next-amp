@@ -21,7 +21,8 @@ const outputHeadResult = optimizeVocalModelArtifacts(original, {
     frames: 32,
     bins: 1024,
     headStart: 0,
-    sourceCrop: { start: 32, frames: 32, inputFrames: 64, bins: 1024 }
+    sourceCrop: { start: 32, frames: 32, inputFrames: 64, bins: 1024 },
+    decoderCrop: { start: 31, frames: 33, inputFrames: 64, channels: 96, bins: 1024 }
   }
 });
 assert.equal(foldedCount, 12);
@@ -33,9 +34,10 @@ assert.deepEqual(outputHeadResult.outputHead, {
   inputFrames: 64,
   activation: 'sigmoid',
   layout: '[2,frames,bins]',
-  decoderRoi: { start: 32, frames: 32, inputFrames: 64, channels: 32 }
+  decoderRoi: { start: 1, frames: 32, inputFrames: 33, channels: 32 },
+  decoderLayerRoi: { start: 31, frames: 33, inputFrames: 64, channels: 96 }
 });
-assert.equal(outputHeadResult.artifacts.weightData.byteLength, original.weightData.byteLength + 124);
+assert.equal(outputHeadResult.artifacts.weightData.byteLength, original.weightData.byteLength + 172);
 assert.equal(optimized.modelTopology.node.length, original.modelTopology.node.length - 40);
 assert.equal(optimized.weightData, original.weightData);
 assert.equal(optimized.weightSpecs, original.weightSpecs);

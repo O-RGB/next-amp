@@ -278,11 +278,11 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 
 ### 3B. ROI-specialized decoder graph
 
-- [x] เพิ่ม narrow exact ROI candidate ที่ final 1x1 projection ของ Web/GO: crop เฉพาะ time frames 32..63 ก่อน projection ซึ่งไม่มี temporal dependency; weights และ boundary semantics เดิม พร้อม graph-structure guard/fallback
+- [x] เพิ่ม narrow exact ROI candidate ที่ final 3x3 decoder layer + final 1x1 projection ของ Web/GO: ใช้ halo `[31..63]` แล้วเลือกผล `[32..63]` ซึ่งรักษา boundary semantics เดิม; weights ไม่เปลี่ยน และมี graph-structure guard/fallback
 - [ ] เขียน static shape/dependency analyzer ย้อนจาก target output frames
 - [ ] สำหรับ Conv/Depthwise/Pool/Resize/Concat/Pad คำนวณ input halo ที่จำเป็นแบบ exact
 - [ ] Crop feature maps ใน decoder เฉพาะ ROI + receptive-field halo แทนคำนวณ time dimension เต็ม 64 ทุกชั้น
-- [ ] ถ้า encoder/deep layer ต้องใช้เต็ม 64 ให้ crop เฉพาะชั้นที่ dependency อนุญาต ไม่เดา
+- [x] ยืนยันว่า decoder ชั้นถัดไปมี ResizeBilinear ที่ต้องคง full input geometry; จึงหยุด ROI ก่อน resize และ crop เฉพาะชั้นที่ dependency อนุญาต ไม่เดา
 - [ ] สร้าง variant 15-hop และ 16-hop จาก generator เดียวกัน
 - [ ] เก็บ weights เดิมทุกค่าและคง padding semantics ที่ขอบ
 - [ ] ตรวจ graph ด้วย random/adversarial inputs หลายร้อยชุดและเพลงจริง

@@ -51,7 +51,7 @@ func TestRewriteONNXOutputWindow(t *testing.T) {
 		t.Fatalf("parse compact graph: %v", err)
 	}
 
-	var sawSlice, sawROISlice, sawCompactOutput bool
+	var sawSlice, sawROISlice, sawDecoderLayerSlice, sawProjectionSlice, sawCompactOutput bool
 	for _, field := range graphFields {
 		if field.number == 1 && field.wire == 2 {
 			nodeFields, parseErr := parseONNXFields(field.value)
@@ -66,6 +66,12 @@ func TestRewriteONNXOutputWindow(t *testing.T) {
 				if len(outputs) == 1 && string(outputs[0]) == compactROIPrefix+"decoder_input:0" {
 					sawROISlice = true
 				}
+				if len(outputs) == 1 && string(outputs[0]) == compactROIPrefix+"decoder_layer_input:0" {
+					sawDecoderLayerSlice = true
+				}
+				if len(outputs) == 1 && string(outputs[0]) == compactROIPrefix+"projection_input:0" {
+					sawProjectionSlice = true
+				}
 			}
 		}
 		if field.number == 12 && field.wire == 2 {
@@ -78,8 +84,8 @@ func TestRewriteONNXOutputWindow(t *testing.T) {
 			}
 		}
 	}
-	if !sawROISlice || sawSlice || !sawCompactOutput {
-		t.Fatalf("compact graph missing Slice/output: outputSlice=%v roiSlice=%v output=%v", sawSlice, sawROISlice, sawCompactOutput)
+	if !sawDecoderLayerSlice || !sawProjectionSlice || sawSlice || sawROISlice || !sawCompactOutput {
+		t.Fatalf("compact graph missing Slice/output: outputSlice=%v roiSlice=%v decoderSlice=%v projectionSlice=%v output=%v", sawSlice, sawROISlice, sawDecoderLayerSlice, sawProjectionSlice, sawCompactOutput)
 	}
 }
 
