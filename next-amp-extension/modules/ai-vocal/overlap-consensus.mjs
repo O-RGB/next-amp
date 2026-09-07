@@ -7,6 +7,39 @@
 export const OVERLAP_CONSENSUS_VOCAL_MAX = 0.45;
 export const OVERLAP_CONSENSUS_AGREEMENT = 0.12;
 export const OVERLAP_CONSENSUS_BLEND = 0.35;
+export const OVERLAP_CONSENSUS_LOGIT_MAX_DELTA = 0.35;
+export const OVERLAP_CONSENSUS_LOGIT_BLEND = 0.20;
+
+function mergeAgreedVocalMask(current, previous) {
+  const rawDelta = current - previous;
+  if (!Number.isFinite(current) || !Number.isFinite(previous) ||
+      rawDelta === 0 ||
+      current > OVERLAP_CONSENSUS_VOCAL_MAX ||
+      previous > OVERLAP_CONSENSUS_VOCAL_MAX ||
+      Math.abs(rawDelta) > OVERLAP_CONSENSUS_AGREEMENT) {
+    return current;
+  }
+
+  // Keep the existing conservative bias against a small upward mask jump:
+  // lower accompaniment mask means stronger vocal evidence in Karaoke mode.
+  let adjusted = current;
+  if (rawDelta > 0) {
+    adjusted -= rawDelta * OVERLAP_CONSENSUS_BLEND;
+  }
+
+  // Interpolate in logit space so the same transition strength behaves
+  // consistently near both ends of the sigmoid, without hard thresholding.
+  const epsilon = 1e-5;
+  const boundedCurrent = Math.min(1 - epsilon, Math.max(epsilon, adjusted));
+  const boundedPrevious = Math.min(1 - epsilon, Math.max(epsilon, previous));
+  const currentLogit = Math.log(boundedCurrent / (1 - boundedCurrent));
+  const previousLogit = Math.log(boundedPrevious / (1 - boundedPrevious));
+  const logitDelta = Math.max(
+    -OVERLAP_CONSENSUS_LOGIT_MAX_DELTA,
+    Math.min(OVERLAP_CONSENSUS_LOGIT_MAX_DELTA, currentLogit - previousLogit)
+  );
+  return 1 / (1 + Math.exp(-(currentLogit - (logitDelta * OVERLAP_CONSENSUS_LOGIT_BLEND))));
+}
 
 /**
  * Merge the previous window's tail into the current mask in-place.
@@ -58,11 +91,9 @@ export function applyOverlapConsensusToMask(
         const current = maskData[currentFrame + bin];
         if (modeCode === 1 && previousTailValid) {
           const previous = previousTail[previousFrame + bin];
-          const delta = current - previous;
-          if (current <= OVERLAP_CONSENSUS_VOCAL_MAX &&
-              previous <= OVERLAP_CONSENSUS_VOCAL_MAX &&
-              delta > 0 && delta <= OVERLAP_CONSENSUS_AGREEMENT) {
-            maskData[currentFrame + bin] = current - (delta * OVERLAP_CONSENSUS_BLEND);
+          const merged = mergeAgreedVocalMask(current, previous);
+          if (merged !== current) {
+            maskData[currentFrame + bin] = merged;
             changed = true;
           }
         }

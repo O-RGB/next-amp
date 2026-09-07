@@ -403,7 +403,7 @@ ONNX Runtime ระบุว่า quantization ไม่ lossless และอ�
 - [ ] ทดลอง output-logit bias/temperature แบบ offline sweep เป็น baseline การศึกษาเท่านั้น
 - [ ] ทดลอง calibration แยกตาม frequency และ reliability เฉพาะบริเวณที่ tune set ยืนยันว่า model ปล่อย vocal ซ้ำ
 - [x] ใช้ agreement/confidence gate จาก 7B เปิด suppression เพิ่มเฉพาะจุด; ห้ามลด mask ทั่วทั้งเพลง
-- [ ] จำกัด delta ของ mask ต่อ bin และทำ transition ใน logit domain เพื่อกัน zipper/pumping
+- [x] จำกัด delta ของ mask ต่อ bin และทำ transition ใน logit domain เพื่อกัน zipper/pumping; ใช้เฉพาะจุดที่สอง context มี vocal evidence ตรงกัน และคง baseline เมื่อไม่แน่ใจ
 - [ ] ห้ามใช้ center-channel cancellation เป็น default เพราะลบ kick, bass, snare และเครื่องดนตรีกลางพร้อมเสียงร้อง
 - [ ] ห้ามใช้ blanket `mask^gamma`, global threshold, min-mask หรือ hard binary mask เป็น production หากไม่มีหลักฐานว่า instrumental ไม่เสีย
 - [x] เก็บ current mask เป็น fallback ต่อ frame เมื่อ confidence ต่ำหรือข้อมูล context ไม่ครบ
