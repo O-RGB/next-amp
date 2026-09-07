@@ -214,6 +214,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [x] GO receive path เปลี่ยนเป็น preallocated `NextReader` buffer และ Worklet steady-state playback ใช้ exact bulk copy
 - [x] GO adaptive jitter target: เก็บ RTT ล่าสุด 24 ตัวอย่าง, รอ warmup 8 ผล, เลือก ready queue 2/3/4 ตาม measured p95 และส่ง target ไป Worklet เฉพาะ native path; stale result ไม่ถูกนำมาปรับค่า
 - [x] GO mode/song boundary ใช้ native stream token ผ่าน reserved header bytes และ reset DSP ก่อนเริ่มโหมดใหม่ จึงไม่ให้ response เก่าที่ chunk index ชนกันหลุดเข้าเพลงใหม่
+- [x] GO Smooth/Detail profile switch ใช้ native stream reset เดียวกับ Worklet พร้อม regression test; ไม่ให้ STFT/lookahead state เก่าชนกับ profile ใหม่
 - [x] GO DSP เปิด platform SIMD ให้ inverse-FFT scaling และ 131,072-float normalization บน ARM NEON/x86 SSE แทน scalar loop โดยคงลำดับคำนวณเดิม; WASM branch เดิมยังคงอยู่ใน source ชุด DSP
 - [x] Native build packer ตรวจ mtime ก่อนเข้ารหัสใหม่ จึงไม่สุ่มเขียน `model.enc/key_gen.go` ซ้ำทุก build เมื่อ source asset ไม่ได้เปลี่ยน
 - [x] native build สร้าง macOS arm64 และ Windows x64 `.exe` จาก source ชุดเดียวกันสำเร็จ

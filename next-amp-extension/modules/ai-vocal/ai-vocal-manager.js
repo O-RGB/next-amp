@@ -284,6 +284,13 @@ export class AIVocalManager {
     this.streamGeneration++;
     this.streamChunkFloor = null;
     this.resetState();
+    // A profile switch is a new audio timeline even on native GO. The
+    // Worklet flush alone is not enough: native STFT/lookahead state and
+    // in-flight responses must cross the same boundary or Smooth/Detail can
+    // start with mismatched chunks and temporarily produce silence.
+    if (this.engineType === "go_native") {
+      this.goClient.resetStream();
+    }
     if (this.workletNode) {
       this.workletNode.port.postMessage({
         type: "SET_PROFILE",
