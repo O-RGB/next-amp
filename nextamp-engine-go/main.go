@@ -30,6 +30,11 @@ const (
 	Version            = "2.3.0-eco"
 	HeaderBytes        = 8
 	DigitalSilencePeak = 3.25e-5
+	// A valid model run should never produce an entirely empty tensor for an
+	// audible probe. Keep this threshold far below any usable audio/mask value;
+	// it is only used by the provider-health guard, not by the audio DSP.
+	ModelOutputSignalFloor = 1e-12
+	FastInferenceLimitMs   = 1.0
 	// The compact head is output-only: it keeps the same FP32 model weights and
 	// selected frames while cutting the native output/readback in half. The
 	// overlap-consensus quality candidate remains disabled independently.
@@ -257,6 +262,46 @@ func createORTSessionWithOutputFrames(modelData []byte, dev AccelerationOption, 
 	return session, inputTensor, outputTensor, deviceLabel, nil
 }
 
+// validateModelOutput catches provider paths that report a successful Run but
+// leave the output tensor empty or non-finite. This is especially useful for
+// older DirectML adapters: a broken provider can otherwise make the rest of
+// the pipeline synthesize silence with no error to recover from.
+func validateModelOutput(raw []float32, requireSignal bool) error {
+	expected := dsp.NumBins * dsp.MaxFrames * 2
+	if len(raw) != expected {
+		return fmt.Errorf("unexpected model output length: got %d, want %d", len(raw), expected)
+	}
+
+	hasSignal := false
+	for _, value := range raw {
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+			return fmt.Errorf("model output contains non-finite values")
+		}
+		if requireSignal && math.Abs(float64(value)) > ModelOutputSignalFloor {
+			hasSignal = true
+		}
+	}
+	if requireSignal && !hasSignal {
+		return fmt.Errorf("provider returned an empty model output")
+	}
+	return nil
+}
+
+// runInferenceProbe performs a deterministic non-zero first run. A zero-filled
+// warmup can pass through a faulty GPU provider while leaving the real output
+// path unusable, so initialization must exercise the same tensor/output path
+// that playback will use.
+func runInferenceProbe(session *ort.AdvancedSession, input *ort.Tensor[float32], output *ort.Tensor[float32]) error {
+	inputData := input.GetData()
+	for i := range inputData {
+		inputData[i] = 0.125 + float32(i%17)/64.0
+	}
+	if err := session.Run(); err != nil {
+		return err
+	}
+	return validateModelOutput(output.GetData(), true)
+}
+
 func initAIEngine(dev AccelerationOption) (*AIEngine, error) {
 	libPath, err := findOrExtractLibrary()
 	if err != nil {
@@ -287,9 +332,11 @@ func initAIEngine(dev AccelerationOption) (*AIEngine, error) {
 		return nil, fmt.Errorf("failed to initialize ONNX session: %w", err)
 	}
 
-	// Warmup is part of validation. If hardware execution fails here, retry
-	// with the same model on CPU instead of silently serving a broken stream.
-	warmupErr := session.Run()
+	// Warmup is part of validation. Use a non-zero probe so a hardware provider
+	// cannot pass initialization with an empty output tensor. If hardware
+	// execution fails here, retry with the same model on CPU instead of silently
+	// serving a broken stream.
+	warmupErr := runInferenceProbe(session, inputTensor, outputTensor)
 	if warmupErr != nil && dev.Type != DeviceCPU {
 		session.Destroy()
 		inputTensor.Destroy()
@@ -299,7 +346,7 @@ func initAIEngine(dev AccelerationOption) (*AIEngine, error) {
 			return createORTSession(modelData, cpuFallbackDevice(dev))
 		}()
 		if warmupErr == nil {
-			warmupErr = session.Run()
+			warmupErr = runInferenceProbe(session, inputTensor, outputTensor)
 		}
 	}
 	if warmupErr != nil {
@@ -361,11 +408,11 @@ func (ai *AIEngine) recoverWithCPU() error {
 	if err != nil {
 		return fmt.Errorf("CPU session creation failed: %w", err)
 	}
-	if err := newSession.Run(); err != nil {
+	if err := runInferenceProbe(newSession, newInput, newOutput); err != nil {
 		newSession.Destroy()
 		newInput.Destroy()
 		newOutput.Destroy()
-		return fmt.Errorf("CPU warmup failed: %w", err)
+		return fmt.Errorf("CPU warmup/output validation failed: %w", err)
 	}
 
 	oldSession := ai.session
@@ -654,7 +701,12 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				// needs StepBackward so the STFT/lookahead/OLA timeline advances, but
 				// it does not need an ONNX run. The old gate happened before
 				// StepForward and could leave the native state one chunk behind.
-				targetIsDigitalSilence := globalAI.dspEngine.TargetChunkIsDigitalSilence(delayChunks, DigitalSilencePeak)
+				// Only skip inference when both the delayed target and the current
+				// chunk are silent. This preserves the first audible chunk after a
+				// pause/song boundary, where the delayed target is correctly silent
+				// but the current input already contains real audio.
+				targetIsDigitalSilence := globalAI.dspEngine.TargetChunkIsDigitalSilence(delayChunks, DigitalSilencePeak) &&
+					globalAI.dspEngine.TargetChunkIsDigitalSilence(0, DigitalSilencePeak)
 				if targetIsDigitalSilence {
 					tDSP2 := time.Now()
 					outL, outR = globalAI.dspEngine.StepBackwardSilence(delayChunks)
@@ -670,6 +722,13 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 					runErr := globalAI.session.Run()
 					inferMs = float64(time.Since(tNN).Microseconds()) / 1000.0
 
+					// A provider that returns in near-zero time is not plausibly
+					// executing this model. Inspect the tensor only on that anomaly
+					// path so the normal realtime loop keeps its low overhead.
+					if runErr == nil && inferMs < FastInferenceLimitMs {
+						runErr = validateModelOutput(globalAI.outputTensor.GetData(), true)
+					}
+
 					if runErr != nil {
 						if !globalAI.runErrorLogged {
 							fmt.Printf("[!] ONNX inference failed on %s at chunk #%d: %v\n", globalAI.deviceInfo, chunkIndex, runErr)
@@ -681,6 +740,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 								// current normalized chunk instead of dropping it.
 								copy(globalAI.inputTensor.GetData(), normInput)
 								runErr = globalAI.session.Run()
+								if runErr == nil {
+									runErr = validateModelOutput(globalAI.outputTensor.GetData(), true)
+								}
 								if runErr != nil {
 									fmt.Printf("[!] CPU recovery inference failed at chunk #%d: %v\n", chunkIndex, runErr)
 								}

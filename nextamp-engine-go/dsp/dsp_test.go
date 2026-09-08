@@ -1,6 +1,9 @@
 package dsp
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestSilenceGateKeepsDelayedTimeline(t *testing.T) {
 	e := NewEngine()
@@ -26,5 +29,23 @@ func TestSilenceGateKeepsDelayedTimeline(t *testing.T) {
 		if sample != 0 || outR[i] != 0 {
 			t.Fatalf("silence timeline produced non-zero output at sample %d: %g/%g", i, sample, outR[i])
 		}
+	}
+}
+
+func TestSilenceGateDoesNotSkipAudibleChunk(t *testing.T) {
+	e := NewEngine()
+	audible := make([]float32, ChunkSamples)
+	for i := range audible {
+		audible[i] = float32(math.Sin(2*math.Pi*440*float64(i)/44100)) * 0.5
+	}
+
+	e.StepForward(audible, audible)
+	if e.TargetChunkIsDigitalSilence(1, 3.25e-5) {
+		t.Fatal("first audible chunk must not be considered available before one chunk exists")
+	}
+
+	e.StepForward(audible, audible)
+	if e.TargetChunkIsDigitalSilence(1, 3.25e-5) {
+		t.Fatal("audible delayed target must not be skipped by the digital-silence gate")
 	}
 }
