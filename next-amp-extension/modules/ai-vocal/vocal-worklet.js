@@ -19,6 +19,7 @@ const MAX_QUEUE_THRESHOLD = 5;     // 5 browser chunks (~871ms) latency ceiling 
 const GO_READY_QUEUE_THRESHOLD = 3; // Native GO cushion without the old ~1s startup delay
 const GO_MAX_QUEUE_THRESHOLD = 4;   // ~743ms ceiling before stale native output is discarded
 const OUTPUT_QUEUE_CAPACITY = MAX_QUEUE_THRESHOLD + 1;
+const TRANSFER_BUFFER_POOL_CAPACITY = 3; // active + bounded pending work
 const BROWSER_MAX_LAG_CHUNKS = 3;   // Drop browser results that are already too far behind live audio
 const CONCEAL_FADE_OUT_SPEED = 1.0 / 256; // hide an unavoidable GO underrun without a click
 const CONCEAL_FADE_IN_SPEED = 1.0 / 512;  // restore processed audio smoothly after recovery
@@ -47,6 +48,22 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.silentChunks = 0;
     this.inSilenceBoundary = false;
     this.missingInputBlocks = 0;
+
+    // One active chunk plus the two bounded pending chunks can be in flight.
+    // Returned buffers are transferred back from the manager after it copies
+    // the input into WASM. The fallback is only for an abnormal backlog race.
+    this.inputBufferPools = {
+      [BROWSER_CHUNK_SIZE]: [],
+      [GO_CHUNK_SIZE]: []
+    };
+    for (const size of [BROWSER_CHUNK_SIZE, GO_CHUNK_SIZE]) {
+      for (let i = 0; i < TRANSFER_BUFFER_POOL_CAPACITY; i++) {
+        this.inputBufferPools[size].push({
+          rawL: new Float32Array(size),
+          rawR: new Float32Array(size)
+        });
+      }
+    }
 
     // Output playback queue. Keep the storage fixed so normal audio status
     // and response delivery never call shift()/push() on a growing array.
@@ -112,6 +129,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
             ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
           this.maxQueueThreshold = this.engineType === "go_native"
             ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
+          this.releaseCurrentChunk();
           this.clearOutputQueue();
           this.currChunkL = null;
           this.currChunkR = null;
@@ -138,6 +156,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.engineType = nextEngine;
           this.setChunkSizeForEngine(this.engineType, data.browserChunkSize);
           this.isAiReady = false;
+          this.releaseCurrentChunk();
           this.clearOutputQueue();
           this.currChunkL = null;
           this.currChunkR = null;
@@ -171,6 +190,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
             ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
           this.maxQueueThreshold = this.engineType === "go_native"
             ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
+          this.releaseCurrentChunk();
           this.clearOutputQueue();
           this.currChunkL = null;
           this.currChunkR = null;
@@ -202,6 +222,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         // Preserve the configured/adaptive cushion across a resync. Dropping
         // to one chunk here makes a brief interruption recover too eagerly,
         // then immediately underrun again when the OS/GPU is still busy.
+        this.releaseCurrentChunk();
         this.clearOutputQueue();
         this.currChunkL = null;
         this.currChunkR = null;
@@ -229,6 +250,17 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         );
       } else if (data.type === "SET_DIAGNOSTICS") {
         this.diagnosticsEnabled = data.enabled === true;
+      } else if (data.type === "RETURN_INPUT_BUFFERS") {
+        const rawL = data.rawL;
+        const rawR = data.rawR;
+        const size = rawL instanceof Float32Array ? rawL.length : 0;
+        const pool = this.inputBufferPools[size];
+        if (!pool || !(rawR instanceof Float32Array) || rawR.length !== size ||
+            rawL.byteOffset !== 0 || rawR.byteOffset !== 0 ||
+            rawL.byteLength !== rawL.buffer.byteLength ||
+            rawR.byteLength !== rawR.buffer.byteLength ||
+            pool.length >= TRANSFER_BUFFER_POOL_CAPACITY) return;
+        pool.push({ rawL, rawR });
       } else if (data.type === "CHUNK_PROCESSED") {
         this.handleProcessedChunk(data);
       }
@@ -249,6 +281,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
   clearOutputQueue() {
     for (let i = 0; i < OUTPUT_QUEUE_CAPACITY; i++) {
+      if (this.outQueueL[i]) this.returnOutputBuffers(this.outQueueL[i], this.outQueueR[i]);
       this.outQueueL[i] = null;
       this.outQueueR[i] = null;
       this.outQueueIndex[i] = null;
@@ -259,6 +292,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
   dropOldestOutputChunk() {
     if (this.outQueueSize <= 0) return;
+    this.returnOutputBuffers(this.outQueueL[this.outQueueHead], this.outQueueR[this.outQueueHead]);
     this.outQueueL[this.outQueueHead] = null;
     this.outQueueR[this.outQueueHead] = null;
     this.outQueueIndex[this.outQueueHead] = null;
@@ -291,11 +325,40 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     }
   }
 
+  releaseCurrentChunk() {
+    if (!this.currChunkL || !this.currChunkR) return;
+    this.returnOutputBuffers(this.currChunkL, this.currChunkR);
+    this.currChunkL = null;
+    this.currChunkR = null;
+    this.currChunkIndex = null;
+    this.currChunkPos = 0;
+  }
+
+  returnOutputBuffers(outL, outR) {
+    // GO returns two views into one WebSocket packet; that packet cannot be
+    // pooled by the manager. Only return Web output buffers that own their
+    // complete, separate ArrayBuffers.
+    if (!(outL instanceof Float32Array) || !(outR instanceof Float32Array) ||
+        outL.byteOffset !== 0 || outR.byteOffset !== 0 ||
+        outL.byteLength !== outL.buffer.byteLength ||
+        outR.byteLength !== outR.buffer.byteLength ||
+        outL.buffer === outR.buffer) return;
+    this.port.postMessage(
+      { type: "RETURN_OUTPUT_BUFFERS", outL, outR },
+      [outL.buffer, outR.buffer]
+    );
+  }
+
   handleProcessedChunk(data) {
-    if (this.targetMode === "bypass" || !data || !data.outL || !data.outR) return;
+    if (!data || !data.outL || !data.outR) return;
+    if (this.targetMode === "bypass") {
+      this.returnOutputBuffers(data.outL, data.outR);
+      return;
+    }
 
     if (Number.isInteger(data.generation) && data.generation !== this.streamGeneration) {
       this.diagnostics.staleDrops++;
+      this.returnOutputBuffers(data.outL, data.outR);
       return;
     }
 
@@ -308,6 +371,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         this.latestInputChunkIndex !== null &&
         chunkIndex < this.latestInputChunkIndex - BROWSER_MAX_LAG_CHUNKS) {
       this.diagnostics.staleDrops++;
+      this.returnOutputBuffers(data.outL, data.outR);
       return;
     }
 
@@ -315,11 +379,13 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     // current chunk. This is cheap because the queue is intentionally small.
     if (chunkIndex !== null && this.playbackChunkIndex !== null && chunkIndex < this.playbackChunkIndex) {
       this.diagnostics.staleDrops++;
+      this.returnOutputBuffers(data.outL, data.outR);
       return;
     }
     if (chunkIndex !== null &&
         (chunkIndex === this.currChunkIndex || this.hasQueuedChunkIndex(chunkIndex))) {
       this.diagnostics.duplicateDrops++;
+      this.returnOutputBuffers(data.outL, data.outR);
       return;
     }
 
@@ -336,11 +402,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.isAiReady = false;
     this.readyThreshold = this.engineType === "go_native"
       ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
+    this.releaseCurrentChunk();
     this.clearOutputQueue();
-    this.currChunkL = null;
-    this.currChunkR = null;
-    this.currChunkIndex = null;
-    this.currChunkPos = 0;
     this.concealGain = 1.0;
     this.aiGain = 0.0;
     this.playbackChunkIndex = null;
@@ -425,8 +488,15 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         offset += toCopy;
 
         if (this.inAccumPos >= this.chunkSize) {
-          const rawL = new Float32Array(this.inAccumL.subarray(0, this.chunkSize));
-          const rawR = new Float32Array(this.inAccumR.subarray(0, this.chunkSize));
+          const pool = this.inputBufferPools[this.chunkSize];
+          const buffers = pool && pool.length > 0 ? pool.pop() : {
+            rawL: new Float32Array(this.chunkSize),
+            rawR: new Float32Array(this.chunkSize)
+          };
+          const rawL = buffers.rawL;
+          const rawR = buffers.rawR;
+          rawL.set(this.inAccumL.subarray(0, this.chunkSize));
+          rawR.set(this.inAccumR.subarray(0, this.chunkSize));
           const chunkIndex = this.chunkSeq++;
           const chunkPeak = this.chunkPeak;
           this.chunkPeak = 0.0;
@@ -546,6 +616,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
       // Consume from AI queue only if AI is ready / playing
       if (this.isAiReady) {
         if (!this.currChunkL || this.currChunkPos >= this.currChunkL.length) {
+          this.releaseCurrentChunk();
           // Discard responses that refer to audio already covered by the
           // playback cursor. This prevents a delayed response from replaying
           // old audio after a tab-switch scheduling hiccup.
@@ -622,12 +693,10 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     }
 
     // Cleanup queue once completely switched back to bypass
-    if (this.targetMode === "bypass" && this.aiGain <= 0.0 && this.outQueueSize > 0) {
+    if (this.targetMode === "bypass" && this.aiGain <= 0.0 &&
+        (this.currChunkL || this.outQueueSize > 0)) {
+      this.releaseCurrentChunk();
       this.clearOutputQueue();
-      this.currChunkL = null;
-      this.currChunkR = null;
-      this.currChunkIndex = null;
-      this.currChunkPos = 0;
       this.playbackChunkIndex = null;
       this.playbackSamples = 0;
     }

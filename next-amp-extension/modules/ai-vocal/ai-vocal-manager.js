@@ -48,6 +48,7 @@ const VOCAL_PROFILES = Object.freeze({
 const DIGITAL_SILENCE_PEAK = 3.25e-5;
 const WEBGPU_BACKEND_ASSET = "assets/libs/js/tf-backend-webgpu.min.js";
 const MAX_BROWSER_PENDING_CHUNKS = 2; // Keep at most ~348ms pending; drop stale work under interruption.
+const TRANSFER_BUFFER_POOL_CAPACITY = 3; // active + bounded pending work
 const DIAGNOSTIC_SAMPLE_LIMIT = 120;
 const GO_STATUS_UPDATE_INTERVAL_MS = 500; // UI/IPC only; audio response cadence stays unchanged.
 const GO_LATENCY_SAMPLE_CAPACITY = 24;
@@ -108,6 +109,22 @@ export class AIVocalManager {
     this.currentStatus = "ORIGINAL";
     this.onStatusChange = null;
     this.lastError = null;
+
+    // Web output buffers are returned by the Worklet after playback and
+    // reused for the next prediction. Keep one bounded pool per profile
+    // cadence. GO output is a view into a WebSocket packet and is not pooled.
+    this.outputBufferPools = {
+      [VOCAL_PROFILES.balanced.chunkSamples]: [],
+      [VOCAL_PROFILES.ai_remove.chunkSamples]: []
+    };
+    for (const size of Object.keys(this.outputBufferPools)) {
+      for (let i = 0; i < TRANSFER_BUFFER_POOL_CAPACITY; i++) {
+        this.outputBufferPools[size].push({
+          outL: new Float32Array(Number(size)),
+          outR: new Float32Array(Number(size))
+        });
+      }
+    }
 
     // Former DIFF=2 behavior is now fixed: one chunk of lookahead.
     this.vocalProfile = DEFAULT_VOCAL_PROFILE;
@@ -245,6 +262,38 @@ export class AIVocalManager {
         total: []
       }
     };
+  }
+
+  returnInputBuffers(rawL, rawR) {
+    if (!this.workletNode || !(rawL instanceof Float32Array) || !(rawR instanceof Float32Array)) return;
+    if (rawL.byteOffset !== 0 || rawR.byteOffset !== 0 ||
+        rawL.byteLength !== rawL.buffer.byteLength ||
+        rawR.byteLength !== rawR.buffer.byteLength ||
+        rawL.buffer === rawR.buffer) return;
+    this.workletNode.port.postMessage(
+      { type: "RETURN_INPUT_BUFFERS", rawL, rawR },
+      [rawL.buffer, rawR.buffer]
+    );
+  }
+
+  acquireOutputBuffers(chunkSamples) {
+    const pool = this.outputBufferPools[chunkSamples];
+    if (pool && pool.length > 0) return pool.pop();
+    return {
+      outL: new Float32Array(chunkSamples),
+      outR: new Float32Array(chunkSamples)
+    };
+  }
+
+  recycleOutputBuffers(outL, outR) {
+    if (!(outL instanceof Float32Array) || !(outR instanceof Float32Array) ||
+        outL.byteOffset !== 0 || outR.byteOffset !== 0 ||
+        outL.byteLength !== outL.buffer.byteLength ||
+        outR.byteLength !== outR.buffer.byteLength ||
+        outL.buffer === outR.buffer) return;
+    const pool = this.outputBufferPools[outL.length];
+    if (!pool || outR.length !== outL.length || pool.length >= TRANSFER_BUFFER_POOL_CAPACITY) return;
+    pool.push({ outL, outR });
   }
 
   setStatus(status) {
@@ -428,6 +477,8 @@ export class AIVocalManager {
 
   clearChunkQueue() {
     for (let i = 0; i < MAX_BROWSER_PENDING_CHUNKS; i++) {
+      const chunk = this.chunkQueue[i];
+      if (chunk) this.returnInputBuffers(chunk.rawL, chunk.rawR);
       this.chunkQueue[i] = null;
     }
     this.chunkQueueSize = 0;
@@ -476,7 +527,10 @@ export class AIVocalManager {
       this.workletNode.port.onmessage = (e) => {
         const data = e.data;
         if (data.type === "PROCESS_CHUNK") {
-          if (this.currentMode === "bypass") return;
+          if (this.currentMode === "bypass") {
+            this.returnInputBuffers(data.rawL, data.rawR);
+            return;
+          }
           this.diagnostics.inputChunks++;
           this.diagnostics.lastInputChunkIndex = data.chunkIndex;
 
@@ -503,6 +557,7 @@ export class AIVocalManager {
               }
             }
             this.goClient.sendChunk(data.chunkIndex, data.rawL, data.rawR, data.mode, 1);
+            this.returnInputBuffers(data.rawL, data.rawR);
             // Never feed raw audio back into the GO path when the bridge is
             // unavailable. The worklet's GO concealment path will mute the
             // brief underrun instead of leaking the original vocal signal.
@@ -531,6 +586,8 @@ export class AIVocalManager {
               if (!this.isBusy) {
                 this.runChunkQueue();
               }
+            } else {
+              this.returnInputBuffers(data.rawL, data.rawR);
             }
           }
         } else if (data.type === "WORKLET_STATUS") {
@@ -547,6 +604,8 @@ export class AIVocalManager {
             diagnostics: data.diagnostics || null
           };
           this.handleWorkletStatus(data);
+        } else if (data.type === "RETURN_OUTPUT_BUFFERS") {
+          this.recycleOutputBuffers(data.outL, data.outR);
         } else if (data.type === "STREAM_RESET") {
           // Flush the browser-side scheduler immediately. Then reset the
           // native DSP after all packets already sent before this marker.
@@ -999,9 +1058,13 @@ export class AIVocalManager {
   }
 
   async processChunk(chunkIndex, rawL, rawR, mode, strength = 1.0, generation = this.streamGeneration) {
-    if (!this.exp || !this.model || !this.workletNode) return;
+    if (!this.exp || !this.model || !this.workletNode) {
+      this.returnInputBuffers(rawL, rawR);
+      return;
+    }
     if (generation !== this.streamGeneration || this.currentMode === "bypass" || mode !== this.currentMode) {
       this.diagnostics.generationDrops++;
+      this.returnInputBuffers(rawL, rawR);
       return;
     }
 
@@ -1016,6 +1079,7 @@ export class AIVocalManager {
     let modelReadbackMs = 0;
     let inferenceMs = 0;
     let synthesisStart = 0;
+    let outputBuffers = null;
 
     try {
       if (this.mem.buffer !== this.exp.memory.buffer) {
@@ -1030,6 +1094,11 @@ export class AIVocalManager {
       this.mem.subarray(this.inPtr1, this.inPtr1 + TAIL).set(this.inHistoryR);
       this.mem.subarray(this.inPtr1 + TAIL, this.inPtr1 + TAIL + chunkSamples).set(rawR);
       this.inHistoryR.set(rawR.subarray(chunkSamples - TAIL, chunkSamples));
+
+      // All synchronous input copies are complete before the first await.
+      // Return the transferred pair immediately so Worklet can reuse it while
+      // GPU inference/readback remains asynchronous.
+      this.returnInputBuffers(rawL, rawR);
 
       // 2. SIMD128 Forward STFT: profile-sized frame batch.
       const stftStart = diagnosticsEnabled ? performance.now() : 0;
@@ -1194,8 +1263,11 @@ export class AIVocalManager {
       }
 
       // Extract exactly one browser cadence: 7,680 continuous samples
-      const outL = new Float32Array(synthL.subarray(0, chunkSamples));
-      const outR = new Float32Array(synthR.subarray(0, chunkSamples));
+      outputBuffers = this.acquireOutputBuffers(chunkSamples);
+      const outL = outputBuffers.outL;
+      const outR = outputBuffers.outR;
+      outL.set(synthL.subarray(0, chunkSamples));
+      outR.set(synthR.subarray(0, chunkSamples));
 
       // Save overlap tail for next chunk
       this.outTailL.set(synthL.subarray(chunkSamples, chunkSamples + TAIL));
@@ -1226,6 +1298,7 @@ export class AIVocalManager {
       this.lastInferMs = Math.round(performance.now() - tStart);
 
       if (generation !== this.streamGeneration || this.currentMode === "bypass" || mode !== this.currentMode) {
+        this.recycleOutputBuffers(outL, outR);
         return;
       }
 
@@ -1248,6 +1321,7 @@ export class AIVocalManager {
         [outL.buffer, outR.buffer]
       );
     } catch (err) {
+      if (outputBuffers) this.recycleOutputBuffers(outputBuffers.outL, outputBuffers.outR);
       this.diagnostics.processErrors++;
       console.error("[NextAmp AI] processChunk error:", err);
       this.lastError = err.message || err.toString();

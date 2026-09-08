@@ -226,19 +226,19 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 
 ### 2A. AudioWorklet real-time path
 
-- [ ] ทำ ping-pong/transferable buffer pool สำหรับ input L/R; manager คืน buffer หลัง copy เข้า WASM หรือ WebSocket
-- [ ] ทำ output buffer pool โดย worklet คืนก้อนที่เล่นจบแล้ว
+- [x] ทำ ping-pong/transferable buffer pool สำหรับ input L/R; manager คืน buffer หลัง copy เข้า WASM หรือ WebSocket โดยจำกัด pool ที่ active + pending 2 ก้อน
+- [x] ทำ output buffer pool โดย worklet คืนก้อนที่เล่นจบแล้ว; ใช้เฉพาะ Web-owned buffers และไม่พยายาม pool GO socket packet views
 - [x] เปลี่ยน Worklet output array queue + `shift()/includes()` เป็น fixed-capacity ring พร้อม index lookup ขนาดเล็ก โดยคง queue ceiling เดิม
 - [x] เพิ่ม stable-AI bulk copy fast path เมื่อ `liveGain=0`, `aiGain=1`, `concealGain=1` แทน per-sample multiply loop
 - [x] คง per-sample path เฉพาะ fade/conceal/mode transition
 - [x] ลด WORKLET_STATUS เป็นประมาณ 2.7 Hz ตอนนิ่งและประมาณ 10.7 Hz ตอน buffering/recovering
 - [x] ไม่ spread/copy diagnostics object ใน audio thread ถ้า diagnostics ปิด; เปิด clone เฉพาะเมื่อ debug diagnostics ถูกเรียก
-- [ ] ตรวจว่า process callback ไม่มี allocation ใน steady state หลัง warmup
+- [x] ตรวจ code path ว่า `process()` steady state ไม่มี typed-array allocation หลัง warmup เมื่อ bounded pool ไม่ว่าง; fallback allocation ถูกจำกัดไว้เฉพาะ backlog/race ผิดปกติ
 
 ### 2B. Web manager
 
-- [ ] คืน transferred input buffers ทันทีหลัง ingest
-- [ ] ใช้ preallocated output pool แทน `new Float32Array` ทุก chunk
+- [x] คืน transferred input buffers ทันทีหลัง ingest/copy เข้า WASM หรือ WebSocket
+- [x] ใช้ preallocated output pool แทน `new Float32Array` ทุก chunk ใน Web path
 - [x] เปลี่ยน Web pending chunk queue จาก `push()/shift()` เป็น fixed-capacity queue ขนาด 2 พร้อม latest-wins/resync semantics เดิม
 - [x] ลด Map/key cleanup ที่วนทุก chunkเป็น fixed peak ring ขนาด 8 ตาม lookahead/resync window
 - [x] throttle GO status/UI callback เหลือประมาณ 2 Hz โดยไม่เปลี่ยน audio response และ latency telemetry
