@@ -284,14 +284,14 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 ### 3B. ROI-specialized decoder graph
 
 - [x] เพิ่ม narrow exact ROI candidate ที่ final 3x3 decoder layer + final 1x1 projection ของ Web: ใช้ halo `[31..63]` แล้วเลือกผล `[32..63]`; เปิดเฉพาะ Web พร้อม fallback, GO ยังปิดจนผ่าน provider/GPU listening gate
-- [ ] เขียน static shape/dependency analyzer ย้อนจาก target output frames
-- [ ] สำหรับ Conv/Depthwise/Pool/Resize/Concat/Pad คำนวณ input halo ที่จำเป็นแบบ exact
+- [x] เขียน static shape/dependency analyzer ย้อนจาก target output frames
+- [ ] สำหรับ Conv/Depthwise/Pool/Resize/Concat/Pad คำนวณ input halo ที่จำเป็นแบบ exact (รองรับครบใน folded graph แล้ว; ยังไม่เปิดรับ raw SpaceToBatch/Pad graph โดยตรง)
 - [ ] Crop feature maps ใน decoder เฉพาะ ROI + receptive-field halo แทนคำนวณ time dimension เต็ม 64 ทุกชั้น
 - [x] ยืนยันว่า decoder ชั้นถัดไปมี ResizeBilinear ที่ต้องคง full input geometry; จึงหยุด ROI ก่อน resize และ crop เฉพาะชั้นที่ dependency อนุญาต ไม่เดา
 - [ ] สร้าง variant 15-hop และ 16-hop จาก generator เดียวกัน
 - [ ] เก็บ weights เดิมทุกค่าและคง padding semantics ที่ขอบ
 - [ ] ตรวจ graph ด้วย random/adversarial inputs หลายร้อยชุดและเพลงจริง
-- [ ] รายงาน MACs, peak activation memory, kernel count และ actual GPU time ก่อน/หลัง
+- [x] รายงาน temporal dependency, convolution MACs, node count และ theoretical ROI work จาก analyzer; actual GPU time ยังรอ profiler จริง
 - [ ] ใช้ candidate ต่อเมื่อ selected logits ตรง baseline ภายใน strict tolerance ทุก backend
 
 นี่เป็นโอกาสลด model compute โดยไม่ retrain ที่ดีที่สุดในแผน แต่เปอร์เซ็นต์จริงยังห้ามเดาจน dependency cone และ profiler เสร็จ
