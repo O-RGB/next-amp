@@ -33,7 +33,10 @@ let isEqOn = true;
 let isVocalOn = false;
 let currentVocalMode = "bypass";
 let aiEngineType = "webgl"; // "webgl" or "go_native"
+// Smooth/balanced is the single production profile. Keep the old profile
+// value readable for state compatibility, but do not expose or restore Detail.
 let currentVocalProfile = "balanced";
+let currentVocalDevice = "";
 
 let isNormalizeOn = false;
 let currentEqValues = [...PRESETS.flat];
@@ -250,7 +253,8 @@ async function finalizeInitialization() {
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
   if (savedToggles.isVocalOn !== undefined) isVocalOn = savedToggles.isVocalOn;
   if (savedToggles.aiEngineType !== undefined) aiEngineType = savedToggles.aiEngineType;
-  if (savedToggles.vocalProfile !== undefined) currentVocalProfile = savedToggles.vocalProfile === "ai_remove" ? "ai_remove" : "balanced";
+  currentVocalProfile = "balanced";
+  await sessionManager.setSetting({ vocalProfile: currentVocalProfile });
   updateVocalProfileUI(currentVocalProfile);
   updateAiEngineUI();
   checkGoEngineHealth();
@@ -327,7 +331,7 @@ async function finalizeInitialization() {
       } else {
         updateVocalMasterUI();
       }
-      if (sharedParams.vocalProfile) updateVocalProfileUI(sharedParams.vocalProfile);
+      if (sharedParams.vocalProfile) updateVocalProfileUI("balanced");
 
       if (sharedParams.reverbTime)
         $("#adv-rev-time").value = sharedParams.reverbTime;
@@ -676,6 +680,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       txtStatus.textContent = msg.status;
       txtStatus.title = "AI Vocal: " + msg.status;
     }
+    updateVocalRuntimeUI(msg.engine, msg.device);
   } else if (msg.type === "RECORDING_SAVED") {
     handleRecordingSaved();
   } else if (msg.type === "AI_HARDWARE_WARNING") {
@@ -778,7 +783,9 @@ function updateVocalMasterUI() {
 }
 
 function updateVocalProfileUI(profile) {
-  const selected = profile === "ai_remove" ? "ai_remove" : "balanced";
+  // Profile controls are intentionally hidden. Smooth/balanced is the only
+  // production profile exposed by the popup.
+  const selected = "balanced";
   currentVocalProfile = selected;
   $$(".btn-vocal-profile").forEach((btn) => {
     if (btn.dataset.profile === selected) {
@@ -787,6 +794,35 @@ function updateVocalProfileUI(profile) {
       btn.classList.remove("pressed");
     }
   });
+}
+
+function updateVocalRuntimeUI(engine = aiEngineType, device) {
+  const runtimeText = $("#txt-vocal-runtime");
+  const runtimeDot = $("#vocal-runtime-dot");
+  const deviceText = $("#txt-vocal-device");
+  const normalizedEngine = engine === "go_native" ? "go_native" : "webgl";
+
+  if (device !== undefined && device !== null && String(device).trim()) {
+    currentVocalDevice = String(device).trim();
+  } else if (normalizedEngine === "go_native" && !currentVocalDevice) {
+    currentVocalDevice = "Go Native Core";
+  } else if (normalizedEngine === "webgl" && !currentVocalDevice) {
+    currentVocalDevice = "Detecting GPU...";
+  }
+
+  const deviceLabel = currentVocalDevice || (normalizedEngine === "go_native" ? "Go Native Core" : "Detecting GPU...");
+  const isCpu = /cpu|swiftshader|software|loopback/i.test(deviceLabel);
+  const isOffline = /offline|unavailable|lost|error/i.test(deviceLabel);
+  if (runtimeText) {
+    runtimeText.textContent = isOffline ? "ENGINE OFFLINE" : (isCpu ? "CPU RUNNING" : "GPU RUNNING");
+  }
+  if (runtimeDot) {
+    runtimeDot.className = `ph-fill ph-circle text-[4px] ${isOffline ? "text-red-500" : (isCpu ? "text-amber-400" : "text-emerald-400")}`;
+  }
+  if (deviceText) {
+    deviceText.textContent = deviceLabel;
+    deviceText.title = `${normalizedEngine === "go_native" ? "GO" : "WEB"} active device: ${deviceLabel}`;
+  }
 }
 
 function updateUIFromExternal(key, value, index) {
@@ -880,6 +916,8 @@ function updateAiEngineUI() {
   if (selEngine) {
     selEngine.value = aiEngineType;
   }
+  currentVocalDevice = isGo ? "Go Native Core" : "Detecting GPU...";
+  updateVocalRuntimeUI(aiEngineType);
 }
 
 async function checkGoEngineHealth() {
@@ -1654,7 +1692,18 @@ function loadAudioState(state) {
   } else {
     updateVocalMasterUI();
   }
-  updateVocalProfileUI(state.vocalProfile || currentVocalProfile);
+  updateVocalProfileUI("balanced");
+  if (state.vocalProfile !== "balanced") {
+    sendParam("vocalProfile", "balanced");
+  }
+  if (state.aiVocalDiagnostics) {
+    updateVocalRuntimeUI(
+      state.aiVocalDiagnostics.engine || aiEngineType,
+      state.aiVocalDiagnostics.backend || ""
+    );
+  } else {
+    updateVocalRuntimeUI(aiEngineType);
+  }
   if (state.vocalStatus) {
     const txtStatus = $("#txt-vocal-status");
     if (txtStatus) {

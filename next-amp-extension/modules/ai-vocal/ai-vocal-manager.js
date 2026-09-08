@@ -1589,7 +1589,7 @@ export class AIVocalManager {
       enabled: this.diagnostics.enabled,
       engine: this.engineType,
       backendType: this.backendType,
-      backend: this.backendName,
+      backend: this.engineType === "go_native" ? this.goClient.deviceInfo : this.backendName,
       sampleRate,
       texturePrecision,
       profile: this.vocalProfile,

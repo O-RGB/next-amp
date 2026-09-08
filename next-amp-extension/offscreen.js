@@ -292,7 +292,11 @@ async function startAudio(
       chrome.runtime.sendMessage({
         type: "AI_VOCAL_STATUS",
         tabId: tabId,
-        status: status
+        status: status,
+        engine: aiVocal.engineType,
+        device: aiVocal.engineType === "go_native"
+          ? aiVocal.goClient.deviceInfo
+          : aiVocal.backendName
       }).catch(() => {});
     };
     const aiVocalNode = await aiVocal.init();

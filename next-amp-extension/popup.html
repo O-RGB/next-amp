@@ -743,33 +743,32 @@
           </button>
           <i class="ph-bold ph-microphone-stage"></i>
           <span>AI VOCAL</span>
+        </div>
+        <div class="flex items-center gap-1 overflow-hidden min-w-0">
+          <span id="txt-vocal-status" class="text-[8px] font-pixel text-gray-500 font-bold truncate max-w-[105px]" title="AI Vocal Status">ORIGINAL</span>
           <button
             id="btn-engine-toggle"
-            class="win-btn h-3 px-1 text-[7px] font-bold text-gray-400 cursor-pointer"
+            class="win-btn h-3 px-1 text-[7px] font-bold text-gray-400 cursor-pointer flex-none"
             title="Switch AI Engine: Browser WebGL (WEB) / Go Desktop Engine (GO)"
           >
             WEB
           </button>
         </div>
-        <div class="flex items-center gap-1.5 overflow-hidden">
-          <span id="txt-vocal-status" class="text-[8px] font-pixel text-gray-500 font-bold truncate max-w-[130px]" title="AI Vocal Status">ORIGINAL</span>
-        </div>
       </div>
       <div class="p-1 flex flex-col gap-1 bg-[#222]" id="vocal-controls-area" style="opacity: 0.4; filter: grayscale(100%); pointer-events: none;">
-        <!-- Modes & Model Detail Controls -->
+        <!-- Modes & active accelerator -->
         <div class="win-border-in bg-[#1a1a1a] p-1 flex items-center justify-between gap-1">
           <div class="flex items-center gap-0.5">
             <button id="btn-vocal-bypass" class="win-btn h-4 px-1.5 text-[7px] font-bold pressed text-black flex items-center justify-center gap-0.5" title="Original Track"><i class="ph-bold ph-speaker-high text-[8px]"></i><span>ORIG</span></button>
             <button id="btn-vocal-karaoke" class="win-btn h-4 px-1.5 text-[7px] font-bold text-black flex items-center justify-center gap-0.5" title="Remove Vocals (Karaoke)"><i class="ph-bold ph-microphone-slash text-[8px]"></i><span>KARA</span></button>
             <button id="btn-vocal-acapella" class="win-btn h-4 px-1.5 text-[7px] font-bold text-black flex items-center justify-center gap-0.5" title="Isolate Vocals (Acapella)"><i class="ph-bold ph-music-notes-simple text-[8px]"></i><span>SOLO</span></button>
           </div>
-          <!-- Keep the current low-power profile, or raise only the model cadence/detail. -->
-          <div class="flex items-center gap-1 bg-black px-1.5 py-0.5 border border-gray-700">
-            <span class="text-[7px] font-pixel text-gray-400 font-bold flex items-center gap-0.5"><i class="ph-bold ph-gauge text-[8px]"></i>MODEL:</span>
-            <div class="flex gap-0.5" id="vocal-profile-buttons">
-              <button class="win-btn btn-vocal-profile h-3.5 px-1 text-[6px] font-bold pressed text-black flex items-center justify-center gap-0.5" data-profile="balanced" title="Current optimized profile: smoothest and lowest power"><i class="ph-bold ph-waveform text-[7px]"></i><span>SMOOTH</span></button>
-              <button class="win-btn btn-vocal-profile h-3.5 px-1 text-[6px] font-bold text-black flex items-center justify-center gap-0.5" data-profile="ai_remove" title="Higher model detail: same optimized app pipeline, more processing"><i class="ph-bold ph-sparkle text-[7px]"></i><span>DETAIL</span></button>
-            </div>
+          <div id="vocal-runtime-status" class="flex min-w-0 flex-col items-end justify-center leading-none text-right" title="Active AI accelerator">
+            <span class="flex items-center gap-0.5 text-[6px] font-pixel font-bold text-emerald-400 whitespace-nowrap">
+              <i id="vocal-runtime-dot" class="ph-fill ph-circle text-[4px]"></i>
+              <span id="txt-vocal-runtime">GPU RUNNING</span>
+            </span>
+            <span id="txt-vocal-device" class="mt-0.5 max-w-[126px] truncate text-[5px] font-pixel text-gray-500" title="Active AI device">Detecting GPU...</span>
           </div>
         </div>
       </div>
