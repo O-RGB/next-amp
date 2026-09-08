@@ -235,6 +235,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [x] ไม่ spread/copy diagnostics object ใน audio thread ถ้า diagnostics ปิด; เปิด clone เฉพาะเมื่อ debug diagnostics ถูกเรียก
 - [x] ตรวจ code path ว่า `process()` steady state ไม่มี typed-array allocation หลัง warmup เมื่อ bounded pool ไม่ว่าง; fallback allocation ถูกจำกัดไว้เฉพาะ backlog/race ผิดปกติ
 - [x] recycle envelope ของ `PROCESS_CHUNK` และ `RETURN_OUTPUT_BUFFERS` ด้วย bounded message pool; ไม่สร้าง object ใหม่ต่อ chunk ใน Worklet
+- [x] เปลี่ยน rolling magnitude window ใน DSP จาก per-bin `memmove` เป็น circular frame storage; จัดกลับเป็น `[1024,64,2]` เดิมก่อนเข้า model และตรวจเทียบกับ linear reference แล้ว
 
 ### 2B. Web manager
 

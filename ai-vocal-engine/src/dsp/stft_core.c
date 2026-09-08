@@ -48,9 +48,10 @@ static float g_interleaved_mags[NUM_BINS * DEFAULT_CHUNK_FRAMES * 2];
 static float g_chunk_peak = 1e-5f;
 
 // Full 64-Frame Rolling Window & Normalized Model Input: [NUM_BINS][64][2] (1024 * 64 * 2 = 131,072 floats)
-// Pre-slides 48 frames forward and normalizes with SIMD for instant 0.02ms zero-copy ingestion
+// Circularly stores frames and linearizes them only for model upload.
 static float g_rolling_mags[NUM_BINS][MAX_FRAMES][2];
 static float g_norm_input[NUM_BINS][MAX_FRAMES][2];
+static int g_rolling_start = 0;
 
 // Working buffer for in-place FFT
 static float g_work_real[FFT_SIZE];
@@ -192,6 +193,7 @@ void stft_reset(void) {
     memset(g_norm_input, 0, sizeof(g_norm_input));
     g_chunk_peak = 1e-5f;
     g_queue_head = 0;
+    g_rolling_start = 0;
 }
 
 float* stft_get_input_ptr(int ch) {
@@ -278,23 +280,23 @@ void stft_forward(int num_frames) {
     // Replaces all JavaScript tensor slice, concat, mul, and memory thrashing with 0.02ms C loop!
     float peak = 1e-5f;
     int p = 0;
-    int shift_frames = MAX_FRAMES - num_frames;
     for (int k = 0; k < NUM_BINS; k++) {
-        // 1. Shift previous 48 frames forward in linear memory
-        memmove(&g_rolling_mags[k][0][0], &g_rolling_mags[k][num_frames][0], shift_frames * 2 * sizeof(float));
-
-        // 2. Append the current chunk's frames into the tail of the 64-frame window
+        // Write the new chunk into the slots that just expired from the
+        // logical window. The frame ring removes the 48-frame memmove that
+        // previously ran once per bin on every chunk.
         for (int f = 0; f < num_frames; f++) {
             float v0 = g_magnitudes[0][f * NUM_BINS + k];
             float v1 = g_magnitudes[1][f * NUM_BINS + k];
-            g_rolling_mags[k][shift_frames + f][0] = v0;
-            g_rolling_mags[k][shift_frames + f][1] = v1;
+            int slot = (g_rolling_start + f) % MAX_FRAMES;
+            g_rolling_mags[k][slot][0] = v0;
+            g_rolling_mags[k][slot][1] = v1;
             g_interleaved_mags[p++] = v0;
             g_interleaved_mags[p++] = v1;
             if (v0 > peak) peak = v0;
             if (v1 > peak) peak = v1;
         }
     }
+    g_rolling_start = (g_rolling_start + num_frames) % MAX_FRAMES;
     g_chunk_peak = peak;
 }
 
@@ -303,18 +305,46 @@ float* stft_get_norm_input_ptr(void) {
 }
 
 void stft_prepare_norm_input(float inv_max) {
-    int total_floats = NUM_BINS * MAX_FRAMES * 2; // 131,072 floats
-    float* src = (float*)g_rolling_mags;
     float* dst = (float*)g_norm_input;
+    int first_frames = MAX_FRAMES - g_rolling_start;
+    int first_floats = first_frames * 2;
 #if USE_SIMD
     v128_t vinv = wasm_f32x4_splat(inv_max);
-    for (int i = 0; i < total_floats; i += 4) {
-        v128_t v = wasm_v128_load(&src[i]);
-        wasm_v128_store(&dst[i], wasm_f32x4_mul(v, vinv));
+    for (int k = 0; k < NUM_BINS; k++) {
+        const float* src = &g_rolling_mags[k][g_rolling_start][0];
+        float* out = &dst[k * MAX_FRAMES * 2];
+        int first_vector_floats = first_floats & ~3;
+        for (int i = 0; i < first_vector_floats; i += 4) {
+            v128_t v = wasm_v128_load(&src[i]);
+            wasm_v128_store(&out[i], wasm_f32x4_mul(v, vinv));
+        }
+        for (int i = first_vector_floats; i < first_floats; i++) {
+            out[i] = src[i] * inv_max;
+        }
+        src = &g_rolling_mags[k][0][0];
+        out += first_floats;
+        int second_floats = (MAX_FRAMES * 2) - first_floats;
+        int second_vector_floats = second_floats & ~3;
+        for (int i = 0; i < second_vector_floats; i += 4) {
+            v128_t v = wasm_v128_load(&src[i]);
+            wasm_v128_store(&out[i], wasm_f32x4_mul(v, vinv));
+        }
+        for (int i = second_vector_floats; i < second_floats; i++) {
+            out[i] = src[i] * inv_max;
+        }
     }
 #else
-    for (int i = 0; i < total_floats; i++) {
-        dst[i] = src[i] * inv_max;
+    for (int k = 0; k < NUM_BINS; k++) {
+        const float* src = &g_rolling_mags[k][g_rolling_start][0];
+        float* out = &dst[k * MAX_FRAMES * 2];
+        for (int i = 0; i < first_floats; i++) {
+            out[i] = src[i] * inv_max;
+        }
+        src = &g_rolling_mags[k][0][0];
+        out += first_floats;
+        for (int i = 0; i < (MAX_FRAMES * 2) - first_floats; i++) {
+            out[i] = src[i] * inv_max;
+        }
     }
 #endif
 }
