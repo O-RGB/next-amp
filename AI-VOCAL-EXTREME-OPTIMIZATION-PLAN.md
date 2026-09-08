@@ -342,7 +342,7 @@ ONNX Runtime WebGPU รองรับ graph capture สำหรับ static g
 - [x] vectorize mask multiply/clamp ใน direct และ delayed DSP path บน WASM SIMD128, x86 SSE และ ARM NEON โดยคงสมการเดิม
 - [x] fuse delayed-mask application กับการเตรียม iFFT เพื่อตัด `g_spec_*` copy/pass ที่ซ้ำ; production Web และ GO ใช้ `stft_backward_masked` พร้อม fallback ไป API เดิมถ้าเจอ WASM asset เก่า
 - [ ] reuse target lookahead spectrum slot หลังหมดอายุอย่างปลอดภัย
-- [ ] vectorize normalization/magnitude/OLA ต่อจากจุดที่ profilerชี้ว่าคุ้ม
+- [x] vectorize normalization/magnitude/OLA: normalization/OLA ใช้ SIMD อยู่แล้ว และเพิ่ม SIMD magnitude บน WASM/ARM NEON/x86 SSE; differential PCM gate ผ่านโดย magnitude max error `5.96e-8` และ PCM SNR สูงกว่า `184 dB`
 - [ ] แยก build flags ต่อ architecture; อย่าให้ Windows binary จบที่ generic x64 ถ้า CPU รองรับ AVX2
 - [x] เปรียบเทียบ spectrum/PCM ของ WASM SIMD กับ scalar reference และตั้ง reconstruction SNR gate สูงกว่า 120 dB; differential fixture ผ่านทุก mode ที่มากกว่า 319 dB PCM SNR
 - [ ] ตรวจ denormal/very-low-level audio; optimization ต้องไม่สร้าง CPU spike หรือ noise floor ใหม่

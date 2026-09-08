@@ -261,7 +261,23 @@ void stft_forward(int num_frames) {
 
             // Store complex spectrum in internal queue and compute magnitudes
             float* mag_out = &g_magnitudes[ch][f * NUM_BINS];
-            for (int k = 0; k < NUM_BINS; k++) {
+            int k = 0;
+#if USE_SIMD
+            const v128_t vepsilon = wasm_f32x4_splat(1e-9f);
+            for (; k + 3 < NUM_BINS; k += 4) {
+                v128_t real = wasm_v128_load(&g_work_real[k]);
+                v128_t imag = wasm_v128_load(&g_work_imag[k]);
+                wasm_v128_store(&g_spec_real[ch][f][k], real);
+                wasm_v128_store(&g_spec_imag[ch][f][k], imag);
+                wasm_v128_store(&g_queue_real[ch][g_queue_head][f][k], real);
+                wasm_v128_store(&g_queue_imag[ch][g_queue_head][f][k], imag);
+                v128_t magnitude = wasm_f32x4_sqrt(wasm_f32x4_add(
+                    wasm_f32x4_mul(real, real),
+                    wasm_f32x4_add(wasm_f32x4_mul(imag, imag), vepsilon)));
+                wasm_v128_store(&mag_out[k], magnitude);
+            }
+#endif
+            for (; k < NUM_BINS; k++) {
                 float r = g_work_real[k];
                 float im = g_work_imag[k];
                 g_spec_real[ch][f][k] = r;

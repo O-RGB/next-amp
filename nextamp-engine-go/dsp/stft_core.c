@@ -333,7 +333,51 @@ void stft_forward(int num_frames) {
 
             // Store complex spectrum in internal queue and compute magnitudes
             float* mag_out = &g_magnitudes[ch][f * NUM_BINS];
-            for (int k = 0; k < NUM_BINS; k++) {
+            int k = 0;
+#if defined(USE_ARM_NEON)
+            float32x4_t vepsilon = vdupq_n_f32(1e-9f);
+            for (; k + 3 < NUM_BINS; k += 4) {
+                float32x4_t real = vld1q_f32(&g_work_real[k]);
+                float32x4_t imag = vld1q_f32(&g_work_imag[k]);
+                vst1q_f32(&g_spec_real[ch][f][k], real);
+                vst1q_f32(&g_spec_imag[ch][f][k], imag);
+                vst1q_f32(&g_queue_real[ch][g_queue_head][f][k], real);
+                vst1q_f32(&g_queue_imag[ch][g_queue_head][f][k], imag);
+                float32x4_t magnitude = vsqrtq_f32(vaddq_f32(
+                    vmulq_f32(real, real),
+                    vaddq_f32(vmulq_f32(imag, imag), vepsilon)));
+                vst1q_f32(&mag_out[k], magnitude);
+            }
+#elif defined(USE_X86_SSE)
+            __m128 vepsilon = _mm_set1_ps(1e-9f);
+            for (; k + 3 < NUM_BINS; k += 4) {
+                __m128 real = _mm_loadu_ps(&g_work_real[k]);
+                __m128 imag = _mm_loadu_ps(&g_work_imag[k]);
+                _mm_storeu_ps(&g_spec_real[ch][f][k], real);
+                _mm_storeu_ps(&g_spec_imag[ch][f][k], imag);
+                _mm_storeu_ps(&g_queue_real[ch][g_queue_head][f][k], real);
+                _mm_storeu_ps(&g_queue_imag[ch][g_queue_head][f][k], imag);
+                __m128 magnitude = _mm_sqrt_ps(_mm_add_ps(
+                    _mm_mul_ps(real, real),
+                    _mm_add_ps(_mm_mul_ps(imag, imag), vepsilon)));
+                _mm_storeu_ps(&mag_out[k], magnitude);
+            }
+#elif defined(USE_WASM_SIMD)
+            v128_t vepsilon = wasm_f32x4_splat(1e-9f);
+            for (; k + 3 < NUM_BINS; k += 4) {
+                v128_t real = wasm_v128_load(&g_work_real[k]);
+                v128_t imag = wasm_v128_load(&g_work_imag[k]);
+                wasm_v128_store(&g_spec_real[ch][f][k], real);
+                wasm_v128_store(&g_spec_imag[ch][f][k], imag);
+                wasm_v128_store(&g_queue_real[ch][g_queue_head][f][k], real);
+                wasm_v128_store(&g_queue_imag[ch][g_queue_head][f][k], imag);
+                v128_t magnitude = wasm_f32x4_sqrt(wasm_f32x4_add(
+                    wasm_f32x4_mul(real, real),
+                    wasm_f32x4_add(wasm_f32x4_mul(imag, imag), vepsilon)));
+                wasm_v128_store(&mag_out[k], magnitude);
+            }
+#endif
+            for (; k < NUM_BINS; k++) {
                 float r = g_work_real[k];
                 float im = g_work_imag[k];
                 g_spec_real[ch][f][k] = r;
