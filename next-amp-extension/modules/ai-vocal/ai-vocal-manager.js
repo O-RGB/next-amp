@@ -51,22 +51,32 @@ const MAX_BROWSER_PENDING_CHUNKS = 2; // Keep at most ~348ms pending; drop stale
 const TRANSFER_BUFFER_POOL_CAPACITY = 3; // active + bounded pending work
 const MESSAGE_POOL_CAPACITY = 3; // active + bounded pending MessagePort envelopes
 const DIAGNOSTIC_SAMPLE_LIMIT = 120;
+const DIAGNOSTIC_SUMMARY_CACHE_MS = 250;
 const GO_STATUS_UPDATE_INTERVAL_MS = 500; // UI/IPC only; audio response cadence stays unchanged.
 const GO_LATENCY_SAMPLE_CAPACITY = 24;
 let webGpuBackendPromise = null;
 
-function pushDiagnosticSample(samples, value) {
-  if (!Number.isFinite(value) || value <= 0) return;
-  if (samples.length >= DIAGNOSTIC_SAMPLE_LIMIT) samples.shift();
-  samples.push(value);
+function createDiagnosticRing() {
+  return {
+    values: new Float64Array(DIAGNOSTIC_SAMPLE_LIMIT),
+    count: 0,
+    next: 0
+  };
 }
 
-function summarizeDiagnosticSamples(samples) {
-  if (!samples.length) return { count: 0, p50Ms: null, p95Ms: null, p99Ms: null, maxMs: null };
-  const sorted = [...samples].sort((a, b) => a - b);
+function pushDiagnosticSample(ring, value) {
+  if (!Number.isFinite(value) || value <= 0) return;
+  ring.values[ring.next] = value;
+  ring.next = (ring.next + 1) % DIAGNOSTIC_SAMPLE_LIMIT;
+  if (ring.count < DIAGNOSTIC_SAMPLE_LIMIT) ring.count++;
+}
+
+function summarizeDiagnosticSamples(ring) {
+  if (!ring.count) return { count: 0, p50Ms: null, p95Ms: null, p99Ms: null, maxMs: null };
+  const sorted = Array.from(ring.values.subarray(0, ring.count)).sort((a, b) => a - b);
   const percentile = ratio => sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)];
   return {
-    count: samples.length,
+    count: ring.count,
     p50Ms: Number(percentile(0.50).toFixed(2)),
     p95Ms: Number(percentile(0.95).toFixed(2)),
     p99Ms: Number(percentile(0.99).toFixed(2)),
@@ -268,14 +278,16 @@ export class AIVocalManager {
       lastProcessed: null,
       lastWorkletStatus: null,
       timings: {
-        stftForward: [],
-        normalization: [],
-        modelLaunch: [],
-        modelReadback: [],
-        inference: [],
-        synthesis: [],
-        total: []
-      }
+        stftForward: createDiagnosticRing(),
+        normalization: createDiagnosticRing(),
+        modelLaunch: createDiagnosticRing(),
+        modelReadback: createDiagnosticRing(),
+        inference: createDiagnosticRing(),
+        synthesis: createDiagnosticRing(),
+        total: createDiagnosticRing()
+      },
+      timingSummaryCache: null,
+      timingSummaryAt: 0
     };
   }
 
@@ -1341,6 +1353,7 @@ export class AIVocalManager {
       // Discard Chunk 0 so it never injects one cadence of digital silence into playback.
       if (chunkIndex === 0) {
         this.diagnostics.intentionalWarmupDrops++;
+        this.recycleOutputBuffers(outL, outR);
         return;
       }
 
@@ -1540,10 +1553,17 @@ export class AIVocalManager {
   }
 
   getDiagnostics() {
-    const timingMs = {};
-    for (const [name, samples] of Object.entries(this.diagnostics.timings)) {
-      timingMs[name] = summarizeDiagnosticSamples(samples);
+    const now = performance.now();
+    if (!this.diagnostics.timingSummaryCache ||
+        now - this.diagnostics.timingSummaryAt >= DIAGNOSTIC_SUMMARY_CACHE_MS) {
+      const timingMs = {};
+      for (const [name, samples] of Object.entries(this.diagnostics.timings)) {
+        timingMs[name] = summarizeDiagnosticSamples(samples);
+      }
+      this.diagnostics.timingSummaryCache = timingMs;
+      this.diagnostics.timingSummaryAt = now;
     }
+    const timingMs = this.diagnostics.timingSummaryCache;
     let tensorCount = null;
     try { tensorCount = typeof tf !== "undefined" ? tf.memory().numTensors : null; } catch (_) {}
     let texturePrecision = null;

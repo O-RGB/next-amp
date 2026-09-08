@@ -247,7 +247,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [x] เปลี่ยน GO adaptive latency window เป็น fixed typed-array ring และ in-place sort ไม่สร้าง array ต่อ response
 - [x] เปลี่ยน GO bridge in-flight ledger จาก `Map` เป็น fixed typed-array slots 2 ช่อง; คง backpressure/stale-response semantics เดิมโดยไม่ allocate ต่อ packet
 - [x] recycle envelope ของ `RETURN_INPUT_BUFFERS` และ `CHUNK_PROCESSED`; output L/R ใช้ paired typed-array pools และ lease เดียวใน Web processing loop
-- [ ] ย้าย detailed telemetry aggregation ออกจาก realtime cadence
+- [x] ย้าย detailed telemetry aggregation ออกจาก realtime cadence: timing samples ใช้ fixed `Float64Array` ring และ percentile summary cache 250 ms; ไม่ทำ `shift()`/array sort ในทุก diagnostics call และ warmup output lease ถูก recycle กลับ pool ครบ
 
 ### 2C. GO server/UI
 
