@@ -729,9 +729,6 @@ select {
       </div>
       <div class="flex items-center gap-2">
         <span id="txt-vocal-status" class="font-pixel" style="font-size:11px;color:#fbbf24;font-weight:bold">ORIGINAL</span>
-        <button class="win-btn win-btn-sm" style="color:#f87171" title="Reset" onclick="resetVocalFull()">
-          <i class="ph-bold ph-arrow-counter-clockwise"></i>
-        </button>
       </div>
     </div>
 
@@ -753,17 +750,6 @@ select {
           </button>
         </div>
 
-        <!-- Row 2: DIFF -->
-        <div class="flex justify-between items-center font-pixel" style="border-top:1px solid #333;padding-top:6px;margin-top:2px">
-          <span class="section-label" style="color:#f43f5e"><i class="ph-bold ph-gauge"></i> DIFF</span>
-          <span id="txt-diff-desc" class="font-pixel" style="color:#f43f5e;font-size:11px;font-weight:bold">2: STD (1.0x)</span>
-        </div>
-        <div class="grid grid-cols-4 gap-1.5">
-          <button id="btn-diff-1" class="win-btn win-btn-sm btn-remote-diff" data-level="1" onclick="setDiff(1)">1: SOFT</button>
-          <button id="btn-diff-2" class="win-btn win-btn-sm btn-remote-diff pressed active-rose" data-level="2" onclick="setDiff(2)">2: STD</button>
-          <button id="btn-diff-3" class="win-btn win-btn-sm btn-remote-diff" data-level="3" onclick="setDiff(3)">3: DEEP</button>
-          <button id="btn-diff-4" class="win-btn win-btn-sm btn-remote-diff" data-level="4" onclick="setDiff(4)">4: ULTRA</button>
-        </div>
       </div>
     </div>
   </div>
@@ -1172,28 +1158,6 @@ function syncView(k, v, index = null) {
     } else {
       if (btnBypass) btnBypass.classList.add("pressed", "active-amber");
     }
-  } else if (k === "vocalDiff") {
-    const lvl = Number(v) || 2;
-    const descs = {
-      1: "1: SOFT (0.8x)",
-      2: "2: STD (1.0x)",
-      3: "3: DEEP (1.3x)",
-      4: "4: ULTRA (1.6x)"
-    };
-    if (G("txt-diff-desc")) G("txt-diff-desc").textContent = descs[lvl] || "2: STD (1.0x)";
-    [1, 2, 3, 4].forEach((l) => {
-      const b = G("btn-diff-" + l);
-      if (b) {
-        const isMatch = (l === lvl);
-        b.classList.toggle("pressed", isMatch);
-        b.classList.toggle("active-rose", isMatch);
-      }
-    });
-    document.querySelectorAll(".btn-remote-diff").forEach((b) => {
-      const isMatch = (Number(b.dataset.level) === lvl);
-      b.classList.toggle("pressed", isMatch);
-      b.classList.toggle("active-rose", isMatch);
-    });
   }
 }
 
@@ -1343,14 +1307,6 @@ if (G("btn-vocal-acapella")) {
     snd("vocalMode", "acapella");
   };
 }
-document.querySelectorAll(".btn-remote-diff").forEach((b) => {
-  b.onclick = function() {
-    vib(15);
-    const lvl = Number(this.dataset.level) || 2;
-    snd("vocalDiff", lvl);
-  };
-});
-
 window.setVol = v => { vib(12); snd("volume", v); };
 window.setPan = v => { vib(12); snd("pan", v); };
 window.setZoom = z => { vib(12); snd("videoZoom", z); };
@@ -1379,13 +1335,6 @@ window.resetVideoFull = () => {
 };
 
 window.setVocal = m => { vib(15); snd("vocalMode", m); };
-window.setDiff = lvl => { vib(15); snd("vocalDiff", lvl); };
-window.resetVocalFull = () => {
-  vib(20);
-  snd("isVocalOn", true);
-  snd("vocalMode", "bypass");
-  snd("vocalDiff", 2);
-};
 
 const PRESETS = {
   flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
