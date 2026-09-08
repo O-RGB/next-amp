@@ -813,9 +813,9 @@ function updateVocalRuntimeUI(engine = aiEngineType, device) {
   const deviceLabel = currentVocalDevice || (normalizedEngine === "go_native" ? "Go Native Core" : "Detecting GPU...");
   const isCpu = /cpu|swiftshader|software|loopback/i.test(deviceLabel);
   const isOffline = /offline|unavailable|lost|error/i.test(deviceLabel);
-  if (runtimeText) {
-    runtimeText.textContent = isOffline ? "ENGINE OFFLINE" : (isCpu ? "CPU RUNNING" : "GPU RUNNING");
-  }
+  // Keep the compact heading as a stable label. The second line carries the
+  // actual active device, including CPU fallback or an offline engine state.
+  if (runtimeText) runtimeText.textContent = "GPU STATUS";
   if (runtimeDot) {
     runtimeDot.className = `ph-fill ph-circle text-[4px] ${isOffline ? "text-red-500" : (isCpu ? "text-amber-400" : "text-emerald-400")}`;
   }
