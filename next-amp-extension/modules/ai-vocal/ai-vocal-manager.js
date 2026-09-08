@@ -56,6 +56,58 @@ const GO_STATUS_UPDATE_INTERVAL_MS = 500; // UI/IPC only; audio response cadence
 const GO_LATENCY_SAMPLE_CAPACITY = 24;
 let webGpuBackendPromise = null;
 
+function describeWebHardware(renderer, backendType) {
+  const raw = String(renderer || "").trim();
+  const backend = String(backendType || "webgl").toLowerCase();
+  let api = backend === "webgpu" ? "WEBGPU" : "WEBGL";
+
+  if (backend !== "webgpu") {
+    if (/direct3d\s*12|d3d12/i.test(raw)) api = "WEBGL • D3D12";
+    else if (/direct3d\s*11|d3d11/i.test(raw)) api = "WEBGL • D3D11";
+    else if (/metal/i.test(raw)) api = "WEBGL • METAL";
+    else if (/vulkan/i.test(raw)) api = "WEBGL • VULKAN";
+  }
+
+  if (!raw) {
+    return {
+      device: backend === "cpu" ? "CPU (Software)" : "Web Renderer",
+      raw: "",
+      api
+    };
+  }
+
+  const angleMatch = raw.match(/^ANGLE\s*\((.*)\)$/i);
+  const parts = angleMatch
+    ? angleMatch[1].split(",").map((part) => part.trim()).filter(Boolean)
+    : [];
+  let device = parts.find((part) => /renderer:/i.test(part));
+  if (!device) {
+    // ANGLE commonly puts the vendor in the first item and the useful model
+    // name in the second item. Prefer the model-bearing item so "NVIDIA"
+    // does not hide the more useful "NVIDIA GeForce MX130" label.
+    device = parts.find((part) => /geforce|intel\s*\(r\)|radeon|apple\s+m\d|mali|adreno|graphics/i.test(part)) ||
+      parts.find((part) => /nvidia|intel|amd|apple/i.test(part));
+  }
+  if (!device) device = parts[1] || parts[0] || raw;
+
+  device = device
+    .replace(/^.*?renderer:\s*/i, "")
+    .replace(/\s+(?:direct3d|d3d)\s*\d+.*$/i, "")
+    .replace(/\s+(?:opengl|vulkan)\s+.*$/i, "")
+    .replace(/\s+vs_\d+.*$/i, "")
+    .replace(/\s*\((?:d3d|direct3d)\s*\d+\)$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return { device: device || raw, raw, api };
+}
+
+function compactNativeHardwareLabel(device) {
+  const raw = String(device || "").trim();
+  if (!raw) return "Go Native Core";
+  return raw.replace(/\s*\(DirectML\s+Device\s+#\d+\)\s*$/i, "").trim() || raw;
+}
+
 function createDiagnosticRing() {
   return {
     values: new Float64Array(DIAGNOSTIC_SAMPLE_LIMIT),
@@ -249,6 +301,9 @@ export class AIVocalManager {
     this.lastInferMs = 0;
     this.backendName = "GPU";
     this.backendType = "unknown";
+    this.hardwareDevice = "Detecting GPU...";
+    this.hardwareDeviceRaw = "";
+    this.hardwareApi = "WEBGL";
     this.benchmarkMs = 0;
     this.isHardwareSlow = false;
     this.modelGraphFoldedBranches = 0;
@@ -289,6 +344,78 @@ export class AIVocalManager {
       timingSummaryCache: null,
       timingSummaryAt: 0
     };
+  }
+
+  async detectWebHardwareInfo(backendType) {
+    const backend = String(backendType || "webgl").toLowerCase();
+
+    // WebGPU exposes adapter identity separately from the WebGL renderer
+    // string. Keep this best-effort because browsers may intentionally redact
+    // adapter details for privacy.
+    if (backend === "webgpu") {
+      try {
+        const tfBackend = typeof tf !== "undefined" && tf.backend ? tf.backend() : null;
+        let adapter = tfBackend?.adapter || null;
+        if (!adapter && typeof navigator !== "undefined" && navigator.gpu) {
+          adapter = await navigator.gpu.requestAdapter();
+        }
+        let info = adapter?.info || null;
+        if (!info && adapter?.requestAdapterInfo) {
+          info = await adapter.requestAdapterInfo();
+        }
+        const adapterLabel = [info?.description, info?.device, info?.vendor, info?.architecture]
+          .filter((value) => value && String(value).trim())
+          .map((value) => String(value).trim())
+          .join(" / ");
+        if (adapterLabel) {
+          const description = describeWebHardware(adapterLabel, backend);
+          this.hardwareDevice = description.device;
+          this.hardwareDeviceRaw = description.raw;
+          this.hardwareApi = description.api;
+          this.backendName = description.device;
+          return description;
+        }
+      } catch (error) {
+        console.debug("[NextAmp AI] WebGPU adapter details unavailable:", error);
+      }
+    }
+
+    let renderer = "";
+    try {
+      const gl = typeof tf !== "undefined" && tf.backend()?.gpgpu?.gl;
+      if (gl) {
+        const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+        if (debugInfo) {
+          renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || "";
+        }
+      }
+    } catch (_) {}
+
+    const description = describeWebHardware(renderer, backend);
+    this.hardwareDevice = description.device;
+    this.hardwareDeviceRaw = description.raw || description.device;
+    this.hardwareApi = description.api;
+    this.backendName = description.device;
+    return description;
+  }
+
+  getHardwareDevice() {
+    if (this.engineType === "go_native") {
+      return compactNativeHardwareLabel(this.goClient.deviceInfo);
+    }
+    return this.hardwareDevice || this.backendName || "Detecting GPU...";
+  }
+
+  getHardwareDeviceRaw() {
+    if (this.engineType === "go_native") {
+      return this.goClient.deviceInfo || "Go Native Core";
+    }
+    return this.hardwareDeviceRaw || this.getHardwareDevice();
+  }
+
+  getHardwareApi() {
+    if (this.engineType === "go_native") return "DIRECTML";
+    return this.hardwareApi || String(this.backendType || "WEBGL").toUpperCase();
   }
 
   returnInputBuffers(rawL, rawR) {
@@ -820,30 +947,8 @@ export class AIVocalManager {
       // Detect GPU hardware device label early before loading model
       currentBackend = tf.getBackend() || currentBackend || "webgl";
       this.backendType = currentBackend;
-      let deviceLabel = currentBackend.toUpperCase();
-      try {
-        const gl = tf.backend()?.gpgpu?.gl;
-        if (gl) {
-          const dbg = gl.getExtension("WEBGL_debug_renderer_info");
-          if (dbg) {
-            const unmasked = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "";
-            if (unmasked.includes("SwiftShader")) deviceLabel = "SwiftShader (CPU)";
-            else if (unmasked.includes("GeForce") || unmasked.includes("NVIDIA")) {
-              const m = unmasked.match(/NVIDIA GeForce [^,)]+/);
-              deviceLabel = m ? m[0] : "NVIDIA";
-            } else if (unmasked.includes("Intel")) {
-              const m = unmasked.match(/Intel\(R\) [^,)]+/);
-              deviceLabel = m ? m[0] : "Intel HD";
-            } else if (unmasked.includes("AMD") || unmasked.includes("Radeon")) {
-              const m = unmasked.match(/(AMD|Radeon) [^,)]+/);
-              deviceLabel = m ? m[0] : "AMD";
-            } else if (unmasked.includes("Apple")) {
-              deviceLabel = "Apple GPU";
-            }
-          }
-        }
-      } catch (_) {}
-      this.backendName = deviceLabel;
+      const hardwareDescription = await this.detectWebHardwareInfo(currentBackend);
+      let deviceLabel = hardwareDescription.device;
 
       // Early fast check before loading model:
       // If software CPU / SwiftShader is used, or if cached benchmark says slow, alert user immediately!
@@ -952,8 +1057,8 @@ export class AIVocalManager {
         }
         currentBackend = await configureWebGL();
         this.backendType = currentBackend;
-        deviceLabel = currentBackend.toUpperCase();
-        this.backendName = deviceLabel;
+        const hardwareDescription = await this.detectWebHardwareInfo(currentBackend);
+        deviceLabel = hardwareDescription.device;
         if (currentBackend === "cpu") {
           throw new Error("WebGPU unavailable and WebGL fell back to CPU");
         }
@@ -1590,6 +1695,9 @@ export class AIVocalManager {
       engine: this.engineType,
       backendType: this.backendType,
       backend: this.engineType === "go_native" ? this.goClient.deviceInfo : this.backendName,
+      hardwareDevice: this.getHardwareDevice(),
+      hardwareDeviceRaw: this.getHardwareDeviceRaw(),
+      api: this.getHardwareApi(),
       sampleRate,
       texturePrecision,
       profile: this.vocalProfile,

@@ -294,9 +294,10 @@ async function startAudio(
         tabId: tabId,
         status: status,
         engine: aiVocal.engineType,
-        device: aiVocal.engineType === "go_native"
-          ? aiVocal.goClient.deviceInfo
-          : aiVocal.backendName
+        device: aiVocal.getHardwareDevice(),
+        hardwareDevice: aiVocal.getHardwareDevice(),
+        hardwareDeviceRaw: aiVocal.getHardwareDeviceRaw(),
+        api: aiVocal.getHardwareApi()
       }).catch(() => {});
     };
     const aiVocalNode = await aiVocal.init();

@@ -37,6 +37,8 @@ let aiEngineType = "webgl"; // "webgl" or "go_native"
 // value readable for state compatibility, but do not expose or restore Detail.
 let currentVocalProfile = "balanced";
 let currentVocalDevice = "";
+let currentVocalDeviceRaw = "";
+let currentVocalApi = "WEBGL";
 
 let isNormalizeOn = false;
 let currentEqValues = [...PRESETS.flat];
@@ -675,12 +677,12 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (currentTabId && msg.tabId === currentTabId)
       drawVisualizer(msg.data, msg.mode);
   } else if (msg.type === "AI_VOCAL_STATUS") {
-    const txtStatus = $("#txt-vocal-status");
-    if (txtStatus) {
-      txtStatus.textContent = msg.status;
-      txtStatus.title = "AI Vocal: " + msg.status;
-    }
-    updateVocalRuntimeUI(msg.engine, msg.device);
+    updateVocalRuntimeUI(
+      msg.engine,
+      msg.hardwareDevice || msg.device,
+      msg.api,
+      msg.hardwareDeviceRaw || msg.device
+    );
   } else if (msg.type === "RECORDING_SAVED") {
     handleRecordingSaved();
   } else if (msg.type === "AI_HARDWARE_WARNING") {
@@ -689,13 +691,6 @@ chrome.runtime.onMessage.addListener((msg) => {
 });
 
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.aiVocalStatus && changes.aiVocalStatus.newValue) {
-    const txtStatus = $("#txt-vocal-status");
-    if (txtStatus) {
-      txtStatus.textContent = changes.aiVocalStatus.newValue;
-      txtStatus.title = "AI Vocal: " + changes.aiVocalStatus.newValue;
-    }
-  }
   if (changes.aiHardwareWarning && changes.aiHardwareWarning.newValue) {
     const val = changes.aiHardwareWarning.newValue;
     if (val && val.benchmarkMs > 185) {
@@ -719,7 +714,6 @@ function updateVocalUI(mode) {
   const btnBypass = $("#btn-vocal-bypass");
   const btnKaraoke = $("#btn-vocal-karaoke");
   const btnAcapella = $("#btn-vocal-acapella");
-  const txtStatus = $("#txt-vocal-status");
 
   if (!btnBypass || !btnKaraoke || !btnAcapella) return;
 
@@ -730,13 +724,10 @@ function updateVocalUI(mode) {
 
   if (currentVocalMode === "karaoke") {
     btnKaraoke.classList.add("pressed");
-    if (txtStatus) txtStatus.textContent = "KARAOKE";
   } else if (currentVocalMode === "acapella") {
     btnAcapella.classList.add("pressed");
-    if (txtStatus) txtStatus.textContent = "ACAPELLA";
   } else {
     btnBypass.classList.add("pressed");
-    if (txtStatus) txtStatus.textContent = "ORIGINAL";
   }
 
   updateVocalMasterUI();
@@ -745,7 +736,6 @@ function updateVocalUI(mode) {
 function updateVocalMasterUI() {
   const btnToggle = $("#btn-toggle-vocal");
   const vocalArea = $("#vocal-controls-area");
-  const txtStatus = $("#txt-vocal-status");
 
   if (btnToggle) {
     if (isVocalOn) {
@@ -771,15 +761,6 @@ function updateVocalMasterUI() {
     }
   }
 
-  if (txtStatus) {
-    if (!isVocalOn) {
-      txtStatus.classList.remove("text-yellow-300");
-      txtStatus.classList.add("text-gray-500");
-    } else {
-      txtStatus.classList.remove("text-gray-500");
-      txtStatus.classList.add("text-yellow-300");
-    }
-  }
 }
 
 function updateVocalProfileUI(profile) {
@@ -796,32 +777,54 @@ function updateVocalProfileUI(profile) {
   });
 }
 
-function updateVocalRuntimeUI(engine = aiEngineType, device) {
+function updateVocalRuntimeUI(engine = aiEngineType, device, api, rawDevice) {
   const runtimeText = $("#txt-vocal-runtime");
   const runtimeDot = $("#vocal-runtime-dot");
   const deviceText = $("#txt-vocal-device");
+  const apiText = $("#txt-vocal-api");
+  const runtimePanel = $("#vocal-runtime-status");
   const normalizedEngine = engine === "go_native" ? "go_native" : "webgl";
 
   if (device !== undefined && device !== null && String(device).trim()) {
     currentVocalDevice = String(device).trim();
-  } else if (normalizedEngine === "go_native" && !currentVocalDevice) {
+  } else if (normalizedEngine === "go_native") {
     currentVocalDevice = "Go Native Core";
-  } else if (normalizedEngine === "webgl" && !currentVocalDevice) {
+  } else if (!currentVocalDevice) {
     currentVocalDevice = "Detecting GPU...";
+  }
+  if (rawDevice !== undefined && rawDevice !== null && String(rawDevice).trim()) {
+    currentVocalDeviceRaw = String(rawDevice).trim();
+  } else if (!currentVocalDeviceRaw || normalizedEngine === "go_native") {
+    currentVocalDeviceRaw = currentVocalDevice;
+  }
+  if (api !== undefined && api !== null && String(api).trim()) {
+    currentVocalApi = String(api).trim().toUpperCase();
+  } else if (normalizedEngine === "go_native") {
+    currentVocalApi = "DIRECTML";
+  } else if (!currentVocalApi) {
+    currentVocalApi = "WEBGL";
   }
 
   const deviceLabel = currentVocalDevice || (normalizedEngine === "go_native" ? "Go Native Core" : "Detecting GPU...");
+  const visibleDevice = deviceLabel.replace(/\s*\(DirectML\s+Device\s+#\d+\)\s*$/i, "").trim();
+  const apiLabel = currentVocalApi || (normalizedEngine === "go_native" ? "DIRECTML" : "WEBGL");
+  const fullHardware = currentVocalDeviceRaw || deviceLabel;
   const isCpu = /cpu|swiftshader|software|loopback/i.test(deviceLabel);
   const isOffline = /offline|unavailable|lost|error/i.test(deviceLabel);
-  // Keep the compact heading as a stable label. The second line carries the
-  // actual active device, including CPU fallback or an offline engine state.
   if (runtimeText) runtimeText.textContent = "GPU STATUS";
   if (runtimeDot) {
     runtimeDot.className = `ph-fill ph-circle text-[4px] ${isOffline ? "text-red-500" : (isCpu ? "text-amber-400" : "text-emerald-400")}`;
   }
   if (deviceText) {
-    deviceText.textContent = deviceLabel;
-    deviceText.title = `${normalizedEngine === "go_native" ? "GO" : "WEB"} active device: ${deviceLabel}`;
+    deviceText.textContent = `HW: ${visibleDevice}`;
+    deviceText.title = `Hardware Device: ${fullHardware}`;
+  }
+  if (apiText) {
+    apiText.textContent = `API: ${apiLabel}`;
+    apiText.title = `AI API: ${apiLabel}`;
+  }
+  if (runtimePanel) {
+    runtimePanel.title = `Hardware Device: ${fullHardware}; API: ${apiLabel}`;
   }
 }
 
@@ -917,6 +920,8 @@ function updateAiEngineUI() {
     selEngine.value = aiEngineType;
   }
   currentVocalDevice = isGo ? "Go Native Core" : "Detecting GPU...";
+  currentVocalDeviceRaw = currentVocalDevice;
+  currentVocalApi = isGo ? "DIRECTML" : "WEBGL";
   updateVocalRuntimeUI(aiEngineType);
 }
 
@@ -1699,17 +1704,12 @@ function loadAudioState(state) {
   if (state.aiVocalDiagnostics) {
     updateVocalRuntimeUI(
       state.aiVocalDiagnostics.engine || aiEngineType,
-      state.aiVocalDiagnostics.backend || ""
+      state.aiVocalDiagnostics.hardwareDevice || state.aiVocalDiagnostics.backend || "",
+      state.aiVocalDiagnostics.api,
+      state.aiVocalDiagnostics.hardwareDeviceRaw || state.aiVocalDiagnostics.backend || ""
     );
   } else {
     updateVocalRuntimeUI(aiEngineType);
-  }
-  if (state.vocalStatus) {
-    const txtStatus = $("#txt-vocal-status");
-    if (txtStatus) {
-      txtStatus.textContent = state.vocalStatus;
-      txtStatus.title = "AI Vocal: " + state.vocalStatus;
-    }
   }
 
   if (state.eq && state.eq.length > 0) {
