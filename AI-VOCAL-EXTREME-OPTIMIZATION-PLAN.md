@@ -143,6 +143,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [ ] สร้าง workload ซ้ำได้: idle, scroll, hide popup, tab switch, YouTube page load, เปลี่ยนเพลง, CPU load และ GPU load
 - [ ] วัด energy อย่างน้อย 3 รอบสลับ A/B หลังอุณหภูมินิ่ง
 - [ ] วัด actual speaker latency ด้วย loopback/cross-correlation แยกจากค่าประมาณใน UI
+- [x] เพิ่ม local benchmark harness ให้บันทึก model JSON/bin SHA-256, browser/OS/renderer/adapter, profile และแยก launch/readback/total p50/p95/max ของ WebGPU/WebGL; ผลยังเป็น diagnostic ไม่ใช่ quality/energy gate
 
 เกณฑ์จบ Batch 0:
 
