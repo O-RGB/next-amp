@@ -309,6 +309,30 @@ export function analyzeVocalModelRoi({ start = 32, frames = 32, optimized = true
   }
 
   const inputRequirement = requirements.get('input') || interval(0, INPUT_SHAPE[TIME_AXIS], INPUT_SHAPE[TIME_AXIS]);
+  const resizeGeometryBarrierMap = new Map();
+  for (const note of relationNotes) {
+    if (note.op !== 'ResizeBilinear') continue;
+    const key = `${note.node}|${note.input}`;
+    const inputSize = shape(note.input)?.[TIME_AXIS] || null;
+    const previous = resizeGeometryBarrierMap.get(key);
+    resizeGeometryBarrierMap.set(key, {
+      node: note.node,
+      input: note.input,
+      requiredInput: mergeInterval(previous?.requiredInput, note.required, inputSize),
+      inputSize,
+      outputSize: shape(note.node)?.[TIME_AXIS] || null
+    });
+  }
+  const resizeGeometryBarriers = [...resizeGeometryBarrierMap.values()];
+  const statefulFeasibility = {
+    overlapFrames: INPUT_SHAPE[TIME_AXIS] - frames,
+    inputContextIsFull: inputRequirement.start === 0 && inputRequirement.end === INPUT_SHAPE[TIME_AXIS],
+    resizeGeometryBarriers,
+    exactActivationReuse: false,
+    verdict: inputRequirement.start === 0 && inputRequirement.end === INPUT_SHAPE[TIME_AXIS]
+      ? 'Do not reuse decoder activations across windows: the active ROI still depends on the full 64-frame input and align-corners resize geometry.'
+      : 'Activation reuse requires a layer-wise numerical equivalence pass before it can be enabled.'
+  };
   return {
     optimized,
     nodes: topology.length,
@@ -324,6 +348,7 @@ export function analyzeVocalModelRoi({ start = 32, frames = 32, optimized = true
     fullMacs,
     roiMacs,
     theoreticalMacReduction: fullMacs ? 1 - roiMacs / fullMacs : 0,
+    statefulFeasibility,
     verdict: inputRequirement.start === 0 && inputRequirement.end === INPUT_SHAPE[TIME_AXIS]
       ? 'Full 64-frame input context is required; keep only the existing final-output crop.'
       : 'A narrower exact temporal ROI may be possible, but it must pass graph-output equivalence before production.'

@@ -11,6 +11,9 @@ for (const result of [detail, smooth]) {
   assert.deepEqual(result.unsupportedOps, []);
   assert.ok(result.convolutionCount > 0);
   assert.ok(result.fullMacs > 0);
+  assert.equal(result.statefulFeasibility.inputContextIsFull, true);
+  assert.equal(result.statefulFeasibility.exactActivationReuse, false);
+  assert.ok(result.statefulFeasibility.resizeGeometryBarriers.length > 0);
   assert.equal(result.verdict, 'Full 64-frame input context is required; keep only the existing final-output crop.');
 }
 
@@ -19,12 +22,14 @@ console.log(JSON.stringify({
     input: detail.inputRequirement,
     convolutionCount: detail.convolutionCount,
     theoreticalMacReduction: detail.theoreticalMacReduction,
+    stateful: detail.statefulFeasibility,
     verdict: detail.verdict
   },
   smooth: {
     input: smooth.inputRequirement,
     convolutionCount: smooth.convolutionCount,
     theoreticalMacReduction: smooth.theoreticalMacReduction,
+    stateful: smooth.statefulFeasibility,
     verdict: smooth.verdict
   }
 }, null, 2));

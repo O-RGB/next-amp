@@ -298,10 +298,10 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 
 ### 3C. Incremental/stateful exact inference feasibility
 
-- [ ] วิเคราะห์ว่า activation ของ 48–49 overlapping frames ใด reuse ได้โดยไม่เปลี่ยน boundary context
+- [x] วิเคราะห์ว่า activation ของ 48–49 overlapping frames ใด reuse ได้โดยไม่เปลี่ยน boundary context — analyzer พบว่า target ROI ยังชน full 64-frame context และ align-corners resize geometry
 - [ ] คำนวณ receptive field ต่อ layer; cache เฉพาะ interior ที่ผลไม่ขึ้นกับ padding/window boundary ใหม่
 - [ ] prototype state tensor ต่อ layerและ compare selected logits กับ full-window model
-- [ ] ถ้า exact caching เป็นไปไม่ได้เพราะ receptive field ครอบคลุมทั้ง 64 frames ให้หยุด track นี้ ไม่ฝืนใช้ approximation
+- [x] ถ้า exact caching เป็นไปไม่ได้เพราะ receptive field ครอบคลุมทั้ง 64 frames ให้หยุด track นี้ ไม่ฝืนใช้ approximation
 - [ ] ถ้าผ่าน ให้ประมวลผล sub-chunk 8 hops พร้อมคง lookahead 16 frames เพื่อลด packetization latencyโดยไม่เพิ่ม compute เท่าตัว
 
 ## Batch 4 — Backend/provider autotuning ต่อเครื่อง
