@@ -19,11 +19,17 @@ export class GoEngineClient {
     // never collide with the new stream's chunk #0.
     this.streamToken = 0;
 
-    this.pendingChunks = new Map();
     // The native server processes one audio packet at a time. Do not let the
     // browser queue unbounded packets in the WebSocket when a CPU/GPU spike
     // makes inference temporarily slower than realtime.
     this.maxInFlightChunks = 2;
+    // Keep the bounded in-flight ledger in typed arrays. A Map entry per
+    // packet is unnecessary here and creates avoidable GC work during a long
+    // stream, especially while an older Windows application is busy.
+    this.pendingChunkIndexes = new Uint32Array(this.maxInFlightChunks);
+    this.pendingChunkTimes = new Float64Array(this.maxInFlightChunks);
+    this.pendingChunkValid = new Uint8Array(this.maxInFlightChunks);
+    this.pendingChunkCount = 0;
     this.backpressureDrops = 0;
     this.reconnectTimer = null;
 
@@ -67,7 +73,7 @@ export class GoEngineClient {
     }
     this.isConnected = false;
     this.isConnecting = false;
-    this.pendingChunks.clear();
+    this.clearPendingChunks();
   }
 
   connect() {
@@ -109,7 +115,7 @@ export class GoEngineClient {
         this.isConnected = false;
         this.isConnecting = false;
         this.advanceStreamToken();
-        this.pendingChunks.clear();
+        this.clearPendingChunks();
 
         if (this.enabled) {
           if (this.onStatusChange) {
@@ -186,12 +192,13 @@ export class GoEngineClient {
     const streamToken = view.getUint16(6, true);
     if (streamToken !== this.streamToken) return;
 
-    const sendTime = this.pendingChunks.get(chunkIndex);
+    const pendingSlot = this.findPendingSlot(chunkIndex);
     // A response without a matching current request is stale/out-of-band
     // (for example, it arrived after RESET_STREAM). Never enqueue it.
-    if (!sendTime) return;
+    if (pendingSlot < 0) return;
+    const sendTime = this.pendingChunkTimes[pendingSlot];
     this.lastRtt = Math.round((performance.now() - sendTime) * 10) / 10;
-    this.pendingChunks.delete(chunkIndex);
+    this.deletePendingSlot(pendingSlot);
 
     // Zero-Copy sub-array views (no buf.slice, no duplicate ArrayBuffer allocation)
     const numSamples = payloadBytes / 8;
@@ -207,7 +214,7 @@ export class GoEngineClient {
 
   resetStream() {
     this.advanceStreamToken();
-    this.pendingChunks.clear();
+    this.clearPendingChunks();
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     try {
       // WebSocket preserves ordering: packets sent before this marker are
@@ -222,7 +229,42 @@ export class GoEngineClient {
   }
 
   canSendChunk() {
-    return this.pendingChunks.size < this.maxInFlightChunks;
+    return this.pendingChunkCount < this.maxInFlightChunks;
+  }
+
+  getPendingCount() {
+    return this.pendingChunkCount;
+  }
+
+  findPendingSlot(chunkIndex) {
+    for (let i = 0; i < this.maxInFlightChunks; i++) {
+      if (this.pendingChunkValid[i] && this.pendingChunkIndexes[i] === chunkIndex) return i;
+    }
+    return -1;
+  }
+
+  allocatePendingSlot(chunkIndex, sendTime) {
+    for (let i = 0; i < this.maxInFlightChunks; i++) {
+      if (!this.pendingChunkValid[i]) {
+        this.pendingChunkValid[i] = 1;
+        this.pendingChunkIndexes[i] = chunkIndex;
+        this.pendingChunkTimes[i] = sendTime;
+        this.pendingChunkCount++;
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  deletePendingSlot(slot) {
+    if (slot < 0 || slot >= this.maxInFlightChunks || !this.pendingChunkValid[slot]) return;
+    this.pendingChunkValid[slot] = 0;
+    this.pendingChunkCount--;
+  }
+
+  clearPendingChunks() {
+    this.pendingChunkValid.fill(0);
+    this.pendingChunkCount = 0;
   }
 
   sendChunk(chunkIndex, rawL, rawR, mode, delayChunks = 1) {
@@ -263,14 +305,18 @@ export class GoEngineClient {
       bufferToSend = packet.buffer;
     }
 
-    this.pendingChunks.set(chunkIndex, performance.now());
+    if (this.allocatePendingSlot(chunkIndex, performance.now()) < 0) {
+      this.backpressureDrops++;
+      return false;
+    }
     try {
       this.ws.send(bufferToSend);
       return true;
     } catch (_) {
       // The socket can close between readyState checking and send(). Do not
       // pass raw audio to the worklet; GO concealment will cover the gap.
-      this.pendingChunks.delete(chunkIndex);
+      const pendingSlot = this.findPendingSlot(chunkIndex);
+      this.deletePendingSlot(pendingSlot);
       return false;
     }
   }

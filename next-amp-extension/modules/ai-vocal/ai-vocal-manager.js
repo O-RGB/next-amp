@@ -542,7 +542,7 @@ export class AIVocalManager {
             // discard stale in-flight work, reset both DSP timelines, and
             // continue from this newest chunk instead of building latency.
             if (!this.goClient.canSendChunk()) {
-              const staleInFlight = this.goClient.pendingChunks.size;
+              const staleInFlight = this.goClient.getPendingCount();
               this.diagnostics.staleWorkDrops += staleInFlight;
               this.diagnostics.resyncs++;
               this.streamGeneration++;
@@ -1556,7 +1556,7 @@ export class AIVocalManager {
         resyncs: this.diagnostics.resyncs
       },
       goBridge: {
-        pending: this.goClient.pendingChunks.size,
+        pending: this.goClient.getPendingCount(),
         maxInFlight: this.goClient.maxInFlightChunks,
         backpressureDrops: this.goClient.backpressureDrops
       },

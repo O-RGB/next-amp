@@ -243,6 +243,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [x] ลด Map/key cleanup ที่วนทุก chunkเป็น fixed peak ring ขนาด 8 ตาม lookahead/resync window
 - [x] throttle GO status/UI callback เหลือประมาณ 2 Hz โดยไม่เปลี่ยน audio response และ latency telemetry
 - [x] เปลี่ยน GO adaptive latency window เป็น fixed typed-array ring และ in-place sort ไม่สร้าง array ต่อ response
+- [x] เปลี่ยน GO bridge in-flight ledger จาก `Map` เป็น fixed typed-array slots 2 ช่อง; คง backpressure/stale-response semantics เดิมโดยไม่ allocate ต่อ packet
 - [ ] ย้าย detailed telemetry aggregation ออกจาก realtime cadence
 
 ### 2C. GO server/UI

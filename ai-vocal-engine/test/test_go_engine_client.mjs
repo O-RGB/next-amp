@@ -30,11 +30,13 @@ client.onChunkProcessed = (...args) => outputs.push(args);
 const inputL = new Float32Array(8192).fill(0.1);
 const inputR = new Float32Array(8192).fill(-0.1);
 assert.equal(client.sendChunk(0, inputL, inputR, 'karaoke'), true);
+assert.equal(client.getPendingCount(), 1);
 const oldResponse = sent.at(-1).slice(0);
 assert.equal(new DataView(oldResponse).getUint16(6, true), 0);
 
 client.resetStream();
 assert.equal(client.streamToken, 1);
+assert.equal(client.getPendingCount(), 0, 'stream reset must clear the fixed in-flight ledger');
 client.handleBinaryBuffer(oldResponse);
 assert.equal(outputs.length, 0, 'old stream response must be rejected');
 
@@ -43,6 +45,13 @@ const currentResponse = sent.at(-1).slice(0);
 assert.equal(new DataView(currentResponse).getUint16(6, true), 1);
 client.handleBinaryBuffer(currentResponse);
 assert.equal(outputs.length, 1, 'current stream response must be delivered');
+assert.equal(client.getPendingCount(), 0, 'delivered response must release its fixed slot');
+
+assert.equal(client.sendChunk(1, inputL, inputR, 'karaoke'), true);
+assert.equal(client.sendChunk(2, inputL, inputR, 'karaoke'), true);
+assert.equal(client.sendChunk(3, inputL, inputR, 'karaoke'), false,
+  'fixed in-flight cap must preserve backpressure');
+assert.equal(client.getPendingCount(), 2);
 
 console.log(JSON.stringify({
   oldToken: 0,
