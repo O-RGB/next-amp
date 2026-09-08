@@ -1161,7 +1161,15 @@ export class AIVocalManager {
         // No fresh prediction exists during a skipped digital-silence chunk;
         // never carry a mask context across that boundary.
         this.overlapTailValid = false;
-        this.exp.stft_apply_mask_delayed(delayChunks, frames, 2, 0.0);
+        if (this.exp.stft_backward_masked) {
+          this.exp.stft_backward_masked(delayChunks, frames, 2, 0.0);
+        } else {
+          // Compatibility with an older cached WASM asset. Production builds
+          // export the fused entry point, but an old extension must still
+          // preserve the proven unfused audio path.
+          this.exp.stft_apply_mask_delayed(delayChunks, frames, 2, 0.0);
+          this.exp.stft_backward(frames);
+        }
       } else {
         // 4. Zero-GPU-Overhead Rolling Window & Ingestion
         const normalizationStart = diagnosticsEnabled ? performance.now() : 0;
@@ -1267,13 +1275,18 @@ export class AIVocalManager {
         this.mem.subarray(this.maskPtr1, this.maskPtr1 + channelMaskSize)
           .set(maskData.subarray(maskRightStart, maskRightStart + channelMaskSize));
 
-        // 8. Pure Mask Application via C/WASM
-        this.exp.stft_apply_mask_delayed(delayChunks, frames, modeCode, this.strength);
       }
 
-      // 9. Inverse STFT with SIMD128
+      // 9. Fused delayed-mask + inverse STFT with SIMD128. The DSP reads
+      // the delayed queue spectrum directly, avoiding an intermediate
+      // complex-spectrum write/read pass without changing the equation.
       synthesisStart = diagnosticsEnabled ? performance.now() : 0;
-      this.exp.stft_backward(frames);
+      if (this.exp.stft_backward_masked) {
+        this.exp.stft_backward_masked(delayChunks, frames, modeCode, this.strength);
+      } else {
+        this.exp.stft_apply_mask_delayed(delayChunks, frames, modeCode, this.strength);
+        this.exp.stft_backward(frames);
+      }
 
       // 10. Overlap-Add synthesis: add previous tail to first 1,536 samples
       const synthL = this.mem.subarray(this.outPtr0, this.outPtr0 + chunkSamples + TAIL);

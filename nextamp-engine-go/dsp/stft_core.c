@@ -517,6 +517,50 @@ void stft_apply_mask_delayed(int delay_chunks, int num_frames, int mode, float s
     }
 }
 
+static void prepare_full_spectrum(const float* source_real, const float* source_imag) {
+    memcpy(g_work_real, source_real, NUM_BINS * sizeof(float));
+    memcpy(g_work_imag, source_imag, NUM_BINS * sizeof(float));
+    g_work_real[NUM_BINS] = 0.0f;
+    g_work_imag[NUM_BINS] = 0.0f;
+
+    for (int k = 1; k < NUM_BINS; k++) {
+        g_work_real[FFT_SIZE - k] = source_real[k];
+        g_work_imag[FFT_SIZE - k] = -source_imag[k];
+    }
+}
+
+static void inverse_spectrum_to_channel(int channel, int offset) {
+    fft_radix2(g_work_real, g_work_imag, FFT_SIZE, 1);
+
+#if defined(USE_ARM_NEON)
+    for (int i = 0; i < FFT_SIZE; i += 4) {
+        float32x4_t ifft = vld1q_f32(&g_work_real[i]);
+        float32x4_t win = vld1q_f32(&g_window[i]);
+        float32x4_t out = vld1q_f32(&g_output_pcm[channel][offset + i]);
+        vst1q_f32(&g_output_pcm[channel][offset + i], vmlaq_f32(out, ifft, win));
+    }
+#elif defined(USE_X86_SSE)
+    for (int i = 0; i < FFT_SIZE; i += 4) {
+        __m128 ifft = _mm_loadu_ps(&g_work_real[i]);
+        __m128 win = _mm_loadu_ps(&g_window[i]);
+        __m128 out = _mm_loadu_ps(&g_output_pcm[channel][offset + i]);
+        _mm_storeu_ps(&g_output_pcm[channel][offset + i], _mm_add_ps(out, _mm_mul_ps(ifft, win)));
+    }
+#elif defined(USE_WASM_SIMD)
+    for (int i = 0; i < FFT_SIZE; i += 4) {
+        v128_t ifft = wasm_v128_load(&g_work_real[i]);
+        v128_t win = wasm_v128_load(&g_window[i]);
+        v128_t out = wasm_v128_load(&g_output_pcm[channel][offset + i]);
+        wasm_v128_store(&g_output_pcm[channel][offset + i],
+                        wasm_f32x4_add(out, wasm_f32x4_mul(ifft, win)));
+    }
+#else
+    for (int i = 0; i < FFT_SIZE; i++) {
+        g_output_pcm[channel][offset + i] += g_work_real[i] * g_window[i];
+    }
+#endif
+}
+
 void stft_backward(int num_frames) {
     if (num_frames <= 0 || num_frames > MAX_FRAMES) num_frames = DEFAULT_CHUNK_FRAMES;
 
@@ -529,51 +573,40 @@ void stft_backward(int num_frames) {
         for (int f = 0; f < num_frames; f++) {
             float* sr = g_spec_real[ch][f];
             float* si = g_spec_imag[ch][f];
+            prepare_full_spectrum(sr, si);
+            int offset = f * HOP_SIZE;
+            inverse_spectrum_to_channel(ch, offset);
+        }
+    }
+}
 
-            for (int k = 0; k < NUM_BINS; k++) {
-                g_work_real[k] = sr[k];
-                g_work_imag[k] = si[k];
-            }
+// Fused delayed mask + inverse STFT. Read the delayed queue spectrum directly
+// into the FFT work buffer so the intermediate g_spec write/read pass is gone;
+// the mask equation itself remains apply_mask_to_spectrum().
+void stft_backward_masked(int delay_chunks, int num_frames, int mode, float strength) {
+    if (num_frames <= 0 || num_frames > MAX_FRAMES) num_frames = DEFAULT_CHUNK_FRAMES;
+    if (strength < 0.0f) strength = 0.0f;
+    if (strength > 1.0f) strength = 1.0f;
+
+    int target_idx = (g_queue_head - 1 - delay_chunks + (QUEUE_CAPACITY * 4)) % QUEUE_CAPACITY;
+    int total_output_samples = (num_frames * HOP_SIZE) + (FFT_SIZE - HOP_SIZE);
+    for (int ch = 0; ch < 2; ch++) {
+        memset(g_output_pcm[ch], 0, total_output_samples * sizeof(float));
+    }
+
+    for (int ch = 0; ch < 2; ch++) {
+        for (int f = 0; f < num_frames; f++) {
+            const float* target_r = g_queue_real[ch][target_idx][f];
+            const float* target_i = g_queue_imag[ch][target_idx][f];
+            const float* m = &g_mask[ch][f * NUM_BINS];
+            apply_mask_to_spectrum(target_r, target_i, g_work_real, g_work_imag, m, mode, strength);
             g_work_real[NUM_BINS] = 0.0f;
             g_work_imag[NUM_BINS] = 0.0f;
-
             for (int k = 1; k < NUM_BINS; k++) {
-                g_work_real[FFT_SIZE - k] = sr[k];
-                g_work_imag[FFT_SIZE - k] = -si[k];
+                g_work_real[FFT_SIZE - k] = g_work_real[k];
+                g_work_imag[FFT_SIZE - k] = -g_work_imag[k];
             }
-
-            fft_radix2(g_work_real, g_work_imag, FFT_SIZE, 1);
-
-            int offset = f * HOP_SIZE;
-#if defined(USE_ARM_NEON)
-            for (int i = 0; i < FFT_SIZE; i += 4) {
-                float32x4_t ifft = vld1q_f32(&g_work_real[i]);
-                float32x4_t win  = vld1q_f32(&g_window[i]);
-                float32x4_t out  = vld1q_f32(&g_output_pcm[ch][offset + i]);
-                float32x4_t synth = vmlaq_f32(out, ifft, win); // 1-cycle multiply-accumulate
-                vst1q_f32(&g_output_pcm[ch][offset + i], synth);
-            }
-#elif defined(USE_X86_SSE)
-            for (int i = 0; i < FFT_SIZE; i += 4) {
-                __m128 ifft = _mm_loadu_ps(&g_work_real[i]);
-                __m128 win  = _mm_loadu_ps(&g_window[i]);
-                __m128 out  = _mm_loadu_ps(&g_output_pcm[ch][offset + i]);
-                __m128 synth = _mm_add_ps(out, _mm_mul_ps(ifft, win));
-                _mm_storeu_ps(&g_output_pcm[ch][offset + i], synth);
-            }
-#elif defined(USE_WASM_SIMD)
-            for (int i = 0; i < FFT_SIZE; i += 4) {
-                v128_t ifft = wasm_v128_load(&g_work_real[i]);
-                v128_t win = wasm_v128_load(&g_window[i]);
-                v128_t out = wasm_v128_load(&g_output_pcm[ch][offset + i]);
-                v128_t synth = wasm_f32x4_add(out, wasm_f32x4_mul(ifft, win));
-                wasm_v128_store(&g_output_pcm[ch][offset + i], synth);
-            }
-#else
-            for (int i = 0; i < FFT_SIZE; i++) {
-                g_output_pcm[ch][offset + i] += g_work_real[i] * g_window[i];
-            }
-#endif
+            inverse_spectrum_to_channel(ch, f * HOP_SIZE);
         }
     }
 }

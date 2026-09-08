@@ -209,14 +209,10 @@ func (e *Engine) stepBackward(rawOutput []float32, delayChunks int, mode int, st
 		cMode = 2
 		strength = 0.0
 	}
-	if delayChunks == 0 {
-		C.stft_apply_mask(C.int(ChunkFrames), C.int(cMode), C.float(strength))
-	} else {
-		C.stft_apply_mask_delayed(C.int(delayChunks), C.int(ChunkFrames), C.int(cMode), C.float(strength))
-	}
-
-	// Backward iSTFT
-	C.stft_backward(C.int(ChunkFrames))
+    // Fused delayed-mask + inverse STFT. This reads the queued target spectrum
+    // directly into the FFT work buffer and avoids an intermediate complex
+    // spectrum write/read pass while preserving the same mask equation.
+    C.stft_backward_masked(C.int(delayChunks), C.int(ChunkFrames), C.int(cMode), C.float(strength))
 
 	outPtr0 := (*[TotalOutput]float32)(unsafe.Pointer(C.stft_get_output_ptr(0)))
 	outPtr1 := (*[TotalOutput]float32)(unsafe.Pointer(C.stft_get_output_ptr(1)))

@@ -32,6 +32,7 @@ void stft_forward(int num_frames);
 void stft_apply_mask(int num_frames, int mode, float strength);
 void stft_apply_mask_delayed(int delay_chunks, int num_frames, int mode, float strength);
 void stft_backward(int num_frames);
+void stft_backward_masked(int delay_chunks, int num_frames, int mode, float strength);
 
 // Smart Energy Gating / Vocal Activity Detection (VAD)
 float stft_get_vocal_energy(int num_frames);

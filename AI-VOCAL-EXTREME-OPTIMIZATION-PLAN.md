@@ -338,7 +338,7 @@ ONNX Runtime WebGPU รองรับ graph capture สำหรับ static g
 - [ ] เปลี่ยน complex FFT เต็มเป็น real FFT/iRFFT หรือ split-radix ที่คำนวณเฉพาะ conjugate-unique bins
 - [x] ทำ SIMD butterfly แบบ conservative ใน contiguous final radix-2 stage พร้อม runtime dispatch บน WASM SIMD128, x86 SSE และ ARM NEON; stage ที่ twiddle stride ไม่ contiguous คง scalar เพื่อรักษาความถูกต้อง
 - [x] vectorize mask multiply/clamp ใน direct และ delayed DSP path บน WASM SIMD128, x86 SSE และ ARM NEON โดยคงสมการเดิม
-- [ ] fuse delayed-mask application กับการเตรียม iFFT เพื่อตัด `g_spec_*` copy/pass ที่ซ้ำ
+- [x] fuse delayed-mask application กับการเตรียม iFFT เพื่อตัด `g_spec_*` copy/pass ที่ซ้ำ; production Web และ GO ใช้ `stft_backward_masked` พร้อม fallback ไป API เดิมถ้าเจอ WASM asset เก่า
 - [ ] reuse target lookahead spectrum slot หลังหมดอายุอย่างปลอดภัย
 - [ ] vectorize normalization/magnitude/OLA ต่อจากจุดที่ profilerชี้ว่าคุ้ม
 - [ ] แยก build flags ต่อ architecture; อย่าให้ Windows binary จบที่ generic x64 ถ้า CPU รองรับ AVX2
