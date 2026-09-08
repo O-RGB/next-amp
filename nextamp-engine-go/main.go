@@ -62,7 +62,6 @@ type AIEngine struct {
 	inputTensor    *ort.Tensor[float32]
 	outputTensor   *ort.Tensor[float32]
 	dspEngine      *dsp.Engine
-	modelData      []byte
 	enabled        bool
 	deviceInfo     string
 	recoveryTried  bool
@@ -317,12 +316,18 @@ func initAIEngine(dev AccelerationOption) (*AIEngine, error) {
 		return nil, fmt.Errorf("ONNX warmup failed: %w", warmupErr)
 	}
 
+	// ORT has parsed the graph and owns the live session now. Do not keep a
+	// second decrypted copy of the model resident during playback. If a
+	// provider later fails, recoverWithCPU decrypts the embedded model again on
+	// that rare error path before rebuilding the session.
+	clearModelBytes(modelData)
+	debug.FreeOSMemory()
+
 	return &AIEngine{
 		session:      session,
 		inputTensor:  inputTensor,
 		outputTensor: outputTensor,
 		dspEngine:    dsp.NewEngine(),
-		modelData:    modelData,
 		enabled:      true,
 		deviceInfo:   deviceLabel,
 	}, nil
@@ -338,16 +343,21 @@ func (ai *AIEngine) recoverWithCPU() error {
 		return fmt.Errorf("CPU recovery already attempted")
 	}
 	ai.recoveryTried = true
-	if len(ai.modelData) == 0 {
-		return fmt.Errorf("decrypted model is no longer available for CPU recovery")
+
+	// The normal playback path intentionally releases decrypted model bytes.
+	// Reload only when a hardware/provider failure makes recovery necessary.
+	modelData, err := loadDecryptedModel()
+	if err != nil {
+		return fmt.Errorf("decrypted model reload failed: %w", err)
 	}
+	defer clearModelBytes(modelData)
 
 	cpuDev := AccelerationOption{
 		Type:        DeviceCPU,
 		Name:        "CPU",
 		DisplayName: "CPU (Eco SIMD 2 Cores)",
 	}
-	newSession, newInput, newOutput, deviceLabel, err := createORTSession(ai.modelData, cpuDev)
+	newSession, newInput, newOutput, deviceLabel, err := createORTSession(modelData, cpuDev)
 	if err != nil {
 		return fmt.Errorf("CPU session creation failed: %w", err)
 	}
@@ -365,7 +375,6 @@ func (ai *AIEngine) recoverWithCPU() error {
 	ai.inputTensor = newInput
 	ai.outputTensor = newOutput
 	ai.deviceInfo = deviceLabel
-	ai.modelData = nil
 
 	if oldSession != nil {
 		oldSession.Destroy()
@@ -380,6 +389,15 @@ func (ai *AIEngine) recoverWithCPU() error {
 
 	fmt.Printf("[✓] Recovered ONNX inference on %s after provider failure.\n", deviceLabel)
 	return nil
+}
+
+// clearModelBytes removes a decrypted model buffer before allowing the
+// runtime to reclaim it. The zeroing is deliberate: model bytes are sensitive
+// and can otherwise remain in the Go heap until the next collection.
+func clearModelBytes(modelData []byte) {
+	for i := range modelData {
+		modelData[i] = 0
+	}
 }
 
 func (ai *AIEngine) Close() {
@@ -400,10 +418,6 @@ func (ai *AIEngine) Close() {
 		ai.outputTensor.Destroy()
 		ai.outputTensor = nil
 	}
-	for i := range ai.modelData {
-		ai.modelData[i] = 0
-	}
-	ai.modelData = nil
 	ort.DestroyEnvironment()
 }
 

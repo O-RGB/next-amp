@@ -252,7 +252,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [x] ลด dashboard เหลือ 5 FPS เพื่อไม่แย่ง audio deadline และ cache `runtime.ReadMemStats` ที่ 1 Hz
 - [x] subsample meter/sparkline ของ dashboard ด้วย stride 16; เป็น telemetry-only และไม่แตะ PCM/audio deadline
 - [x] มี `--headless` สำหรับไม่ render dashboard ที่ไม่เห็น
-- [ ] ปล่อย decrypted model bytes หลัง session stable; ถ้าต้อง recovery ให้ decrypt embedded model ใหม่เฉพาะตอนเกิด error
+- [x] ปล่อย decrypted model bytes หลัง session stable; ถ้าต้อง recovery ให้ decrypt embedded model ใหม่เฉพาะตอนเกิด error และล้าง buffer ก่อนคืน heap
 - [ ] วัด GC pause/allocation bytes ต่อหนึ่งนาทีทั้งก่อนและหลัง
 
 เป้าหมาย Batch 2:
