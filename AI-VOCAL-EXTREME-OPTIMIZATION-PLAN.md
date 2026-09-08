@@ -234,6 +234,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [x] ลด WORKLET_STATUS เป็นประมาณ 2.7 Hz ตอนนิ่งและประมาณ 10.7 Hz ตอน buffering/recovering
 - [x] ไม่ spread/copy diagnostics object ใน audio thread ถ้า diagnostics ปิด; เปิด clone เฉพาะเมื่อ debug diagnostics ถูกเรียก
 - [x] ตรวจ code path ว่า `process()` steady state ไม่มี typed-array allocation หลัง warmup เมื่อ bounded pool ไม่ว่าง; fallback allocation ถูกจำกัดไว้เฉพาะ backlog/race ผิดปกติ
+- [x] recycle envelope ของ `PROCESS_CHUNK` และ `RETURN_OUTPUT_BUFFERS` ด้วย bounded message pool; ไม่สร้าง object ใหม่ต่อ chunk ใน Worklet
 
 ### 2B. Web manager
 
@@ -244,6 +245,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 - [x] throttle GO status/UI callback เหลือประมาณ 2 Hz โดยไม่เปลี่ยน audio response และ latency telemetry
 - [x] เปลี่ยน GO adaptive latency window เป็น fixed typed-array ring และ in-place sort ไม่สร้าง array ต่อ response
 - [x] เปลี่ยน GO bridge in-flight ledger จาก `Map` เป็น fixed typed-array slots 2 ช่อง; คง backpressure/stale-response semantics เดิมโดยไม่ allocate ต่อ packet
+- [x] recycle envelope ของ `RETURN_INPUT_BUFFERS` และ `CHUNK_PROCESSED`; output L/R ใช้ paired typed-array pools และ lease เดียวใน Web processing loop
 - [ ] ย้าย detailed telemetry aggregation ออกจาก realtime cadence
 
 ### 2C. GO server/UI

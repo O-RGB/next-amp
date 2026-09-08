@@ -49,6 +49,7 @@ const DIGITAL_SILENCE_PEAK = 3.25e-5;
 const WEBGPU_BACKEND_ASSET = "assets/libs/js/tf-backend-webgpu.min.js";
 const MAX_BROWSER_PENDING_CHUNKS = 2; // Keep at most ~348ms pending; drop stale work under interruption.
 const TRANSFER_BUFFER_POOL_CAPACITY = 3; // active + bounded pending work
+const MESSAGE_POOL_CAPACITY = 3; // active + bounded pending MessagePort envelopes
 const DIAGNOSTIC_SAMPLE_LIMIT = 120;
 const GO_STATUS_UPDATE_INTERVAL_MS = 500; // UI/IPC only; audio response cadence stays unchanged.
 const GO_LATENCY_SAMPLE_CAPACITY = 24;
@@ -114,16 +115,33 @@ export class AIVocalManager {
     // reused for the next prediction. Keep one bounded pool per profile
     // cadence. GO output is a view into a WebSocket packet and is not pooled.
     this.outputBufferPools = {
-      [VOCAL_PROFILES.balanced.chunkSamples]: [],
-      [VOCAL_PROFILES.ai_remove.chunkSamples]: []
+      [VOCAL_PROFILES.balanced.chunkSamples]: { outL: [], outR: [] },
+      [VOCAL_PROFILES.ai_remove.chunkSamples]: { outL: [], outR: [] }
     };
     for (const size of Object.keys(this.outputBufferPools)) {
       for (let i = 0; i < TRANSFER_BUFFER_POOL_CAPACITY; i++) {
-        this.outputBufferPools[size].push({
-          outL: new Float32Array(Number(size)),
-          outR: new Float32Array(Number(size))
-        });
+        this.outputBufferPools[size].outL.push(new Float32Array(Number(size)));
+        this.outputBufferPools[size].outR.push(new Float32Array(Number(size)));
       }
+    }
+    this.outputBufferLease = { outL: null, outR: null };
+    this.inputReturnMessages = new Array(MESSAGE_POOL_CAPACITY);
+    this.inputReturnMessagePos = 0;
+    this.processedMessages = new Array(MESSAGE_POOL_CAPACITY);
+    this.processedMessagePos = 0;
+    for (let i = 0; i < MESSAGE_POOL_CAPACITY; i++) {
+      this.inputReturnMessages[i] = {
+        type: "RETURN_INPUT_BUFFERS",
+        rawL: null,
+        rawR: null
+      };
+      this.processedMessages[i] = {
+        type: "CHUNK_PROCESSED",
+        chunkIndex: 0,
+        generation: 0,
+        outL: null,
+        outR: null
+      };
     }
 
     // Former DIFF=2 behavior is now fixed: one chunk of lookahead.
@@ -149,16 +167,13 @@ export class AIVocalManager {
       // wrong queue target.
       this.observeGoLatency(rttMs);
       if (this.workletNode) {
-        this.workletNode.port.postMessage(
-          {
-            type: "CHUNK_PROCESSED",
-            chunkIndex,
-            generation: this.streamGeneration,
-            outL: outL,
-            outR: outR
-          },
-          buf ? [buf] : [outL.buffer, outR.buffer]
-        );
+        const message = this.processedMessages[this.processedMessagePos];
+        this.processedMessagePos = (this.processedMessagePos + 1) % MESSAGE_POOL_CAPACITY;
+        message.chunkIndex = chunkIndex;
+        message.generation = this.streamGeneration;
+        message.outL = outL;
+        message.outR = outR;
+        this.workletNode.port.postMessage(message, buf ? [buf] : [outL.buffer, outR.buffer]);
       }
       this.lastInferMs = rttMs;
       if (this.currentMode !== "bypass") {
@@ -270,19 +285,23 @@ export class AIVocalManager {
         rawL.byteLength !== rawL.buffer.byteLength ||
         rawR.byteLength !== rawR.buffer.byteLength ||
         rawL.buffer === rawR.buffer) return;
-    this.workletNode.port.postMessage(
-      { type: "RETURN_INPUT_BUFFERS", rawL, rawR },
-      [rawL.buffer, rawR.buffer]
-    );
+    const message = this.inputReturnMessages[this.inputReturnMessagePos];
+    this.inputReturnMessagePos = (this.inputReturnMessagePos + 1) % MESSAGE_POOL_CAPACITY;
+    message.rawL = rawL;
+    message.rawR = rawR;
+    this.workletNode.port.postMessage(message, [rawL.buffer, rawR.buffer]);
   }
 
   acquireOutputBuffers(chunkSamples) {
     const pool = this.outputBufferPools[chunkSamples];
-    if (pool && pool.length > 0) return pool.pop();
-    return {
-      outL: new Float32Array(chunkSamples),
-      outR: new Float32Array(chunkSamples)
-    };
+    if (pool && pool.outL.length > 0 && pool.outR.length > 0) {
+      this.outputBufferLease.outL = pool.outL.pop();
+      this.outputBufferLease.outR = pool.outR.pop();
+      return this.outputBufferLease;
+    }
+    this.outputBufferLease.outL = new Float32Array(chunkSamples);
+    this.outputBufferLease.outR = new Float32Array(chunkSamples);
+    return this.outputBufferLease;
   }
 
   recycleOutputBuffers(outL, outR) {
@@ -292,8 +311,11 @@ export class AIVocalManager {
         outR.byteLength !== outR.buffer.byteLength ||
         outL.buffer === outR.buffer) return;
     const pool = this.outputBufferPools[outL.length];
-    if (!pool || outR.length !== outL.length || pool.length >= TRANSFER_BUFFER_POOL_CAPACITY) return;
-    pool.push({ outL, outR });
+    if (!pool || outR.length !== outL.length ||
+        pool.outL.length >= TRANSFER_BUFFER_POOL_CAPACITY ||
+        pool.outR.length >= TRANSFER_BUFFER_POOL_CAPACITY) return;
+    pool.outL.push(outL);
+    pool.outR.push(outR);
   }
 
   setStatus(status) {
@@ -1310,16 +1332,13 @@ export class AIVocalManager {
       }
 
       // Deliver real processed chunk to AudioWorklet
-      this.workletNode.port.postMessage(
-        {
-          type: "CHUNK_PROCESSED",
-          chunkIndex,
-          generation,
-          outL: outL,
-          outR: outR
-        },
-        [outL.buffer, outR.buffer]
-      );
+      const message = this.processedMessages[this.processedMessagePos];
+      this.processedMessagePos = (this.processedMessagePos + 1) % MESSAGE_POOL_CAPACITY;
+      message.chunkIndex = chunkIndex;
+      message.generation = generation;
+      message.outL = outL;
+      message.outR = outR;
+      this.workletNode.port.postMessage(message, [outL.buffer, outR.buffer]);
     } catch (err) {
       if (outputBuffers) this.recycleOutputBuffers(outputBuffers.outL, outputBuffers.outR);
       this.diagnostics.processErrors++;

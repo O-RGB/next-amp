@@ -48,13 +48,15 @@ let chunks = messagesOfType(processor, 'PROCESS_CHUNK');
 assert.equal(chunks.length, 1);
 assert.equal(chunks[0].rawL.length, 7680, 'browser cadence must be 15 hops');
 assert.equal(chunks[0].rawR.length, 7680);
-assert.equal(processor.inputBufferPools[7680].length, 2,
+assert.equal(processor.inputBufferPools[7680].rawL.length, 2,
   'one input pair should be leased from the bounded Worklet pool');
+assert.equal(processor.inputBufferPools[7680].rawR.length, 2);
 processor.port.onmessage({ data: {
   type: 'RETURN_INPUT_BUFFERS', rawL: chunks[0].rawL, rawR: chunks[0].rawR
 } });
-assert.equal(processor.inputBufferPools[7680].length, 3,
+assert.equal(processor.inputBufferPools[7680].rawL.length, 3,
   'manager-returned input pair should re-enter the bounded Worklet pool');
+assert.equal(processor.inputBufferPools[7680].rawR.length, 3);
 
 const processed = (chunkIndex, value, generation) => ({
   type: 'CHUNK_PROCESSED',
