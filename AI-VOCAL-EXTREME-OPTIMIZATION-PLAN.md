@@ -333,12 +333,13 @@ ONNX Runtime WebGPU รองรับ graph capture สำหรับ static g
 
 - [ ] profile ก่อนว่า STFT/iSTFT กินกี่เปอร์เซ็นต์ของ total; ไม่ optimize blind
 - [ ] เปลี่ยน complex FFT เต็มเป็น real FFT/iRFFT หรือ split-radix ที่คำนวณเฉพาะ conjugate-unique bins
-- [ ] ทำ SIMD butterfly/runtime dispatch: WASM SIMD128, x86 SSE2/AVX2 และ ARM NEON
+- [x] ทำ SIMD butterfly แบบ conservative ใน contiguous final radix-2 stage พร้อม runtime dispatch บน WASM SIMD128, x86 SSE และ ARM NEON; stage ที่ twiddle stride ไม่ contiguous คง scalar เพื่อรักษาความถูกต้อง
+- [x] vectorize mask multiply/clamp ใน direct และ delayed DSP path บน WASM SIMD128, x86 SSE และ ARM NEON โดยคงสมการเดิม
 - [ ] fuse delayed-mask application กับการเตรียม iFFT เพื่อตัด `g_spec_*` copy/pass ที่ซ้ำ
 - [ ] reuse target lookahead spectrum slot หลังหมดอายุอย่างปลอดภัย
 - [ ] vectorize normalization/magnitude/OLA ต่อจากจุดที่ profilerชี้ว่าคุ้ม
 - [ ] แยก build flags ต่อ architecture; อย่าให้ Windows binary จบที่ generic x64 ถ้า CPU รองรับ AVX2
-- [ ] เปรียบเทียบ spectrum/PCM กับ baseline และตั้ง reconstruction SNR gate สูงกว่า 120 dB
+- [x] เปรียบเทียบ spectrum/PCM ของ WASM SIMD กับ scalar reference และตั้ง reconstruction SNR gate สูงกว่า 120 dB; differential fixture ผ่านทุก mode ที่มากกว่า 319 dB PCM SNR
 - [ ] ตรวจ denormal/very-low-level audio; optimization ต้องไม่สร้าง CPU spike หรือ noise floor ใหม่
 
 คาดว่ากลุ่มนี้ลด CPU/DSP และพลังงานได้ แต่ model inference น่าจะยังเป็นต้นทุนหลัก จึงทำหลัง Batch 3/4 profiler

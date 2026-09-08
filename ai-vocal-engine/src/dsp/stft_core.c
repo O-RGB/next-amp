@@ -82,7 +82,27 @@ static void fft_radix2(float* real, float* imag, int n, int inverse) {
         float sign = inverse ? 1.0f : -1.0f;
 
         for (int i = 0; i < n; i += len) {
-            for (int j = 0; j < half_len; j++) {
+            int j = 0;
+#if USE_SIMD
+            // At the final radix-2 stage twiddles are contiguous, so process
+            // four independent butterflies at once. Earlier stages have
+            // strided twiddles; leave those scalar to avoid a gather/copy.
+            if (step == 1) for (; j + 3 < half_len; j += 4) {
+                v128_t wr = wasm_v128_load(&g_twiddle_cos[j * step]);
+                v128_t wi = wasm_f32x4_mul(wasm_v128_load(&g_twiddle_sin[j * step]), wasm_f32x4_splat(sign));
+                v128_t ur = wasm_v128_load(&real[i + j]);
+                v128_t ui = wasm_v128_load(&imag[i + j]);
+                v128_t vr0 = wasm_v128_load(&real[i + j + half_len]);
+                v128_t vi0 = wasm_v128_load(&imag[i + j + half_len]);
+                v128_t vr = wasm_f32x4_sub(wasm_f32x4_mul(vr0, wr), wasm_f32x4_mul(vi0, wi));
+                v128_t vi = wasm_f32x4_add(wasm_f32x4_mul(vr0, wi), wasm_f32x4_mul(vi0, wr));
+                wasm_v128_store(&real[i + j], wasm_f32x4_add(ur, vr));
+                wasm_v128_store(&imag[i + j], wasm_f32x4_add(ui, vi));
+                wasm_v128_store(&real[i + j + half_len], wasm_f32x4_sub(ur, vr));
+                wasm_v128_store(&imag[i + j + half_len], wasm_f32x4_sub(ui, vi));
+            }
+#endif
+            for (; j < half_len; j++) {
                 int twiddle_idx = j * step;
                 float wr = g_twiddle_cos[twiddle_idx];
                 float wi = sign * g_twiddle_sin[twiddle_idx];
@@ -299,6 +319,48 @@ void stft_prepare_norm_input(float inv_max) {
 #endif
 }
 
+// Apply the same mask equation in four-wide SIMD lanes. The helper is shared
+// by direct and delayed paths so only the spectrum source/destination changes;
+// mode, strength, window and timeline semantics stay untouched.
+static void apply_mask_to_spectrum(const float* source_real, const float* source_imag,
+                                   float* destination_real, float* destination_imag,
+                                   const float* mask, int mode, float strength) {
+    if (mode != 0 && mode != 1) {
+        if (source_real != destination_real) {
+            memcpy(destination_real, source_real, NUM_BINS * sizeof(float));
+            memcpy(destination_imag, source_imag, NUM_BINS * sizeof(float));
+        }
+        return;
+    }
+
+    int k = 0;
+#if USE_SIMD
+    v128_t vstrength = wasm_f32x4_splat(strength);
+    if (mode == 0) {
+        v128_t vone = wasm_f32x4_splat(1.0f);
+        v128_t vzero = wasm_f32x4_splat(0.0f);
+        for (; k + 3 < NUM_BINS; k += 4) {
+            v128_t gain = wasm_f32x4_sub(vone, wasm_f32x4_mul(wasm_v128_load(&mask[k]), vstrength));
+            gain = wasm_f32x4_max(gain, vzero);
+            wasm_v128_store(&destination_real[k], wasm_f32x4_mul(wasm_v128_load(&source_real[k]), gain));
+            wasm_v128_store(&destination_imag[k], wasm_f32x4_mul(wasm_v128_load(&source_imag[k]), gain));
+        }
+    } else {
+        for (; k + 3 < NUM_BINS; k += 4) {
+            v128_t gain = wasm_f32x4_mul(wasm_v128_load(&mask[k]), vstrength);
+            wasm_v128_store(&destination_real[k], wasm_f32x4_mul(wasm_v128_load(&source_real[k]), gain));
+            wasm_v128_store(&destination_imag[k], wasm_f32x4_mul(wasm_v128_load(&source_imag[k]), gain));
+        }
+    }
+#endif
+    for (; k < NUM_BINS; k++) {
+        float gain = mode == 0 ? 1.0f - (mask[k] * strength) : mask[k] * strength;
+        if (gain < 0.0f) gain = 0.0f;
+        destination_real[k] = source_real[k] * gain;
+        destination_imag[k] = source_imag[k] * gain;
+    }
+}
+
 void stft_apply_mask(int num_frames, int mode, float strength) {
     if (num_frames <= 0 || num_frames > MAX_FRAMES) num_frames = DEFAULT_CHUNK_FRAMES;
     if (strength < 0.0f) strength = 0.0f;
@@ -309,23 +371,7 @@ void stft_apply_mask(int num_frames, int mode, float strength) {
             float* m = &g_mask[ch][f * NUM_BINS];
             float* sr = g_spec_real[ch][f];
             float* si = g_spec_imag[ch][f];
-
-            for (int k = 0; k < NUM_BINS; k++) {
-                float mask_val = m[k];
-                float gain = 1.0f;
-
-                if (mode == 0) {
-                    gain = 1.0f - (mask_val * strength);
-                    if (gain < 0.0f) gain = 0.0f;
-                } else if (mode == 1) {
-                    gain = mask_val * strength;
-                } else {
-                    gain = 1.0f;
-                }
-
-                sr[k] *= gain;
-                si[k] *= gain;
-            }
+            apply_mask_to_spectrum(sr, si, sr, si, m, mode, strength);
         }
     }
 }
@@ -346,23 +392,7 @@ void stft_apply_mask_delayed(int delay_chunks, int num_frames, int mode, float s
             float* target_i = g_queue_imag[ch][target_idx][f];
             float* sr = g_spec_real[ch][f];
             float* si = g_spec_imag[ch][f];
-
-            for (int k = 0; k < NUM_BINS; k++) {
-                float mask_val = m[k];
-                float gain = 1.0f;
-
-                if (mode == 0) {
-                    gain = 1.0f - (mask_val * strength);
-                    if (gain < 0.0f) gain = 0.0f;
-                } else if (mode == 1) {
-                    gain = mask_val * strength;
-                } else {
-                    gain = 1.0f;
-                }
-
-                sr[k] = target_r[k] * gain;
-                si[k] = target_i[k] * gain;
-            }
+            apply_mask_to_spectrum(target_r, target_i, sr, si, m, mode, strength);
         }
     }
 }
