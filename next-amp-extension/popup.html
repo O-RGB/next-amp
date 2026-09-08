@@ -762,13 +762,13 @@
             <button id="btn-vocal-karaoke" class="win-btn h-4 px-1.5 text-[7px] font-bold text-black flex items-center justify-center gap-0.5" title="Remove Vocals (Karaoke)"><i class="ph-bold ph-microphone-slash text-[8px]"></i><span>KARA</span></button>
             <button id="btn-vocal-acapella" class="win-btn h-4 px-1.5 text-[7px] font-bold text-black flex items-center justify-center gap-0.5" title="Isolate Vocals (Acapella)"><i class="ph-bold ph-music-notes-simple text-[8px]"></i><span>SOLO</span></button>
           </div>
-          <div id="vocal-runtime-status" class="flex min-w-0 flex-col items-end justify-center leading-none text-right" title="Active AI hardware">
-            <span class="flex items-center gap-0.5 text-[6px] font-pixel font-bold text-emerald-400 whitespace-nowrap">
+          <div id="vocal-runtime-status" class="flex min-w-0 max-w-[230px] items-center justify-end gap-1 leading-none text-right overflow-hidden" title="Active AI hardware">
+            <span class="flex-none text-[6px] font-pixel font-bold text-emerald-400 whitespace-nowrap">
               <i id="vocal-runtime-dot" class="ph-fill ph-circle text-[4px]"></i>
               <span id="txt-vocal-runtime" title="AI Vocal operation">ORIGINAL</span>
             </span>
-            <span id="txt-vocal-device" class="mt-0.5 max-w-[126px] truncate text-[5px] font-pixel text-gray-500" title="Hardware Device">HW: Detecting GPU...</span>
-            <span id="txt-vocal-api" class="mt-0.5 max-w-[126px] truncate text-[5px] font-pixel text-gray-500" title="Active AI API">API: WEBGL</span>
+            <span id="txt-vocal-device" class="max-w-[105px] truncate text-[5px] font-pixel text-gray-500" title="Hardware Device">HW: Detecting GPU...</span>
+            <span id="txt-vocal-api" class="max-w-[72px] truncate text-[5px] font-pixel text-gray-500" title="Active AI API">API: WEBGL</span>
           </div>
         </div>
       </div>
