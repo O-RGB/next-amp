@@ -11,6 +11,8 @@ for (const result of [detail, smooth]) {
   assert.deepEqual(result.unsupportedOps, []);
   assert.ok(result.convolutionCount > 0);
   assert.ok(result.fullMacs > 0);
+  assert.ok(result.temporalFieldRows.length > 0);
+  assert.ok(result.temporalFieldSummary.maxReceptiveFieldFrames >= 64);
   assert.equal(result.statefulFeasibility.inputContextIsFull, true);
   assert.equal(result.statefulFeasibility.exactActivationReuse, false);
   assert.ok(result.statefulFeasibility.resizeGeometryBarriers.length > 0);
@@ -22,6 +24,7 @@ console.log(JSON.stringify({
     input: detail.inputRequirement,
     convolutionCount: detail.convolutionCount,
     theoreticalMacReduction: detail.theoreticalMacReduction,
+    temporalFieldSummary: detail.temporalFieldSummary,
     stateful: detail.statefulFeasibility,
     verdict: detail.verdict
   },
@@ -29,6 +32,7 @@ console.log(JSON.stringify({
     input: smooth.inputRequirement,
     convolutionCount: smooth.convolutionCount,
     theoreticalMacReduction: smooth.theoreticalMacReduction,
+    temporalFieldSummary: smooth.temporalFieldSummary,
     stateful: smooth.statefulFeasibility,
     verdict: smooth.verdict
   }

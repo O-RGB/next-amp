@@ -289,6 +289,94 @@ export function analyzeVocalModelRoi({ start = 32, frames = 32, optimized = true
     }
   }
 
+  // Forward temporal receptive-field summary. This is intentionally a
+  // report-only pass: it describes the exact graph geometry without changing
+  // any runtime tensor or attempting stateful activation reuse.
+  const temporalFields = new Map();
+  const temporalFieldStack = new Set();
+  const temporalField = name => {
+    const key = tensorName(name);
+    if (temporalFields.has(key)) return temporalFields.get(key);
+    if (temporalFieldStack.has(key)) return null;
+    const node = nodes.get(key);
+    if (!node || node.op === 'Const') return null;
+    if (node.op === 'Placeholder') {
+      const result = { jump: 1, receptiveField: 1 };
+      temporalFields.set(key, result);
+      return result;
+    }
+
+    temporalFieldStack.add(key);
+    const inputs = dataInputs(node);
+    const first = temporalField(inputs[0]);
+    let result = first;
+    if (first && ['Conv2D', '_FusedConv2D', 'DepthwiseConv2dNative'].includes(node.op)) {
+      const filter = specs.get(tensorName(node.input?.[1]))?.shape;
+      const strides = attrInts(node, 'strides') || [1, 1, 1, 1];
+      const dilations = attrInts(node, 'dilations') || [1, 1, 1, 1];
+      const kernel = Number(filter?.[1] || 1);
+      const stride = Math.max(1, Number(strides[TIME_AXIS] || 1));
+      const dilation = Math.max(1, Number(dilations[TIME_AXIS] || 1));
+      result = {
+        jump: first.jump * stride,
+        receptiveField: first.receptiveField + ((kernel - 1) * dilation) * first.jump
+      };
+    } else if (first && node.op === 'AvgPool') {
+      const ksize = attrInts(node, 'ksize') || [1, 1, 1, 1];
+      const strides = attrInts(node, 'strides') || [1, 1, 1, 1];
+      const kernel = Math.max(1, Number(ksize[TIME_AXIS] || 1));
+      const stride = Math.max(1, Number(strides[TIME_AXIS] || 1));
+      result = {
+        jump: first.jump * stride,
+        receptiveField: first.receptiveField + (kernel - 1) * first.jump
+      };
+    } else if (first && node.op === 'ResizeBilinear') {
+      const inputSize = shape(inputs[0])?.[TIME_AXIS];
+      const outputSize = shape(key)?.[TIME_AXIS];
+      const alignCorners = node.attr?.align_corners?.b === true;
+      const scale = inputSize > 1 && outputSize > 1
+        ? (alignCorners ? (inputSize - 1) / (outputSize - 1) : inputSize / outputSize)
+        : 1;
+      // Linear interpolation touches at most two adjacent source frames.
+      result = {
+        jump: first.jump * scale,
+        receptiveField: first.receptiveField + (inputSize > 1 && outputSize > 1 ? first.jump : 0)
+      };
+    } else if (first && node.op === 'StridedSlice') {
+      const strides = constant(node.input?.[3]);
+      result = {
+        jump: first.jump * Math.max(1, Math.abs(Number(strides?.[TIME_AXIS] || 1))),
+        receptiveField: first.receptiveField
+      };
+    } else if (inputs.length > 1 && node.op === 'ConcatV2') {
+      const fields = inputs.map(temporalField).filter(Boolean);
+      if (fields.length) {
+        result = {
+          jump: Math.max(...fields.map(field => field.jump)),
+          receptiveField: Math.max(...fields.map(field => field.receptiveField))
+        };
+      }
+    }
+    temporalFieldStack.delete(key);
+    if (result) temporalFields.set(key, result);
+    return result;
+  };
+
+  const temporalFieldRows = [];
+  for (const [name, node] of nodes) {
+    if (!['Conv2D', '_FusedConv2D', 'DepthwiseConv2dNative', 'AvgPool', 'ResizeBilinear'].includes(node.op)) continue;
+    const field = temporalField(name);
+    const output = shape(name);
+    if (!field || !output) continue;
+    temporalFieldRows.push({
+      name,
+      op: node.op,
+      outputFrames: output[TIME_AXIS],
+      jumpFrames: Number(field.jump.toFixed(6)),
+      receptiveFieldFrames: Number(field.receptiveField.toFixed(6))
+    });
+  }
+
   const convRows = [];
   let fullMacs = 0;
   let roiMacs = 0;
@@ -343,6 +431,12 @@ export function analyzeVocalModelRoi({ start = 32, frames = 32, optimized = true
     unsupportedOps: [...unsupported],
     visitedNodes: requirements.size,
     relationNotes,
+    temporalFieldRows,
+    temporalFieldSummary: {
+      layers: temporalFieldRows.length,
+      maxJumpFrames: temporalFieldRows.reduce((max, row) => Math.max(max, row.jumpFrames), 0),
+      maxReceptiveFieldFrames: temporalFieldRows.reduce((max, row) => Math.max(max, row.receptiveFieldFrames), 0)
+    },
     convolutionCount: convRows.length,
     convolutionRows: convRows,
     fullMacs,

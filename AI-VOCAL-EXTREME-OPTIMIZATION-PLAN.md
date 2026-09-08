@@ -285,7 +285,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 
 - [x] เพิ่ม narrow exact ROI candidate ที่ final 3x3 decoder layer + final 1x1 projection ของ Web: ใช้ halo `[31..63]` แล้วเลือกผล `[32..63]`; เปิดเฉพาะ Web พร้อม fallback, GO ยังปิดจนผ่าน provider/GPU listening gate
 - [x] เขียน static shape/dependency analyzer ย้อนจาก target output frames
-- [ ] สำหรับ Conv/Depthwise/Pool/Resize/Concat/Pad คำนวณ input halo ที่จำเป็นแบบ exact (รองรับครบใน folded graph แล้ว; ยังไม่เปิดรับ raw SpaceToBatch/Pad graph โดยตรง)
+- [x] สำหรับ Conv/Depthwise/Pool/Resize/Concat/Pad คำนวณ input halo ที่จำเป็นแบบ exact ใน folded production graph และเพิ่ม forward receptive-field report ต่อ layer; raw SpaceToBatch/Pad graph ยังไม่รับโดยตรงเพราะไม่ใช่ graph ที่ใช้ runtime
 - [ ] Crop feature maps ใน decoder เฉพาะ ROI + receptive-field halo แทนคำนวณ time dimension เต็ม 64 ทุกชั้น
 - [x] ยืนยันว่า decoder ชั้นถัดไปมี ResizeBilinear ที่ต้องคง full input geometry; จึงหยุด ROI ก่อน resize และ crop เฉพาะชั้นที่ dependency อนุญาต ไม่เดา
 - [ ] สร้าง variant 15-hop และ 16-hop จาก generator เดียวกัน
@@ -299,7 +299,7 @@ GO รุ่นที่ผู้ใช้ยืนยันว่าใช้�
 ### 3C. Incremental/stateful exact inference feasibility
 
 - [x] วิเคราะห์ว่า activation ของ 48–49 overlapping frames ใด reuse ได้โดยไม่เปลี่ยน boundary context — analyzer พบว่า target ROI ยังชน full 64-frame context และ align-corners resize geometry
-- [ ] คำนวณ receptive field ต่อ layer; cache เฉพาะ interior ที่ผลไม่ขึ้นกับ padding/window boundary ใหม่
+- [x] คำนวณ receptive field ต่อ layer; รายงานยืนยันว่า decoder path มี layer ที่ receptive field ครอบคลุมอย่างน้อย 64 frames จึงไม่เปิด cache เฉพาะ interior แบบเดา
 - [ ] prototype state tensor ต่อ layerและ compare selected logits กับ full-window model
 - [x] ถ้า exact caching เป็นไปไม่ได้เพราะ receptive field ครอบคลุมทั้ง 64 frames ให้หยุด track นี้ ไม่ฝืนใช้ approximation
 - [ ] ถ้าผ่าน ให้ประมวลผล sub-chunk 8 hops พร้อมคง lookahead 16 frames เพื่อลด packetization latencyโดยไม่เพิ่ม compute เท่าตัว
