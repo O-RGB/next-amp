@@ -39,6 +39,7 @@ let currentVocalProfile = "balanced";
 let currentVocalDevice = "";
 let currentVocalDeviceRaw = "";
 let currentVocalApi = "WEBGL";
+let currentVocalStatus = "ORIGINAL";
 
 let isNormalizeOn = false;
 let currentEqValues = [...PRESETS.flat];
@@ -677,6 +678,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (currentTabId && msg.tabId === currentTabId)
       drawVisualizer(msg.data, msg.mode);
   } else if (msg.type === "AI_VOCAL_STATUS") {
+    updateVocalRuntimeStatus(msg.status);
     updateVocalRuntimeUI(
       msg.engine,
       msg.hardwareDevice || msg.device,
@@ -724,10 +726,13 @@ function updateVocalUI(mode) {
 
   if (currentVocalMode === "karaoke") {
     btnKaraoke.classList.add("pressed");
+    updateVocalRuntimeStatus("KARAOKE");
   } else if (currentVocalMode === "acapella") {
     btnAcapella.classList.add("pressed");
+    updateVocalRuntimeStatus("ACAPELLA");
   } else {
     btnBypass.classList.add("pressed");
+    updateVocalRuntimeStatus("ORIGINAL");
   }
 
   updateVocalMasterUI();
@@ -777,6 +782,17 @@ function updateVocalProfileUI(profile) {
   });
 }
 
+function updateVocalRuntimeStatus(status) {
+  const runtimeText = $("#txt-vocal-runtime");
+  if (status !== undefined && status !== null && String(status).trim()) {
+    currentVocalStatus = String(status).trim();
+  }
+  if (runtimeText) {
+    runtimeText.textContent = currentVocalStatus || "ORIGINAL";
+    runtimeText.title = `AI Vocal operation: ${currentVocalStatus || "ORIGINAL"}`;
+  }
+}
+
 function updateVocalRuntimeUI(engine = aiEngineType, device, api, rawDevice) {
   const runtimeText = $("#txt-vocal-runtime");
   const runtimeDot = $("#vocal-runtime-dot");
@@ -811,7 +827,10 @@ function updateVocalRuntimeUI(engine = aiEngineType, device, api, rawDevice) {
   const fullHardware = currentVocalDeviceRaw || deviceLabel;
   const isCpu = /cpu|swiftshader|software|loopback/i.test(deviceLabel);
   const isOffline = /offline|unavailable|lost|error/i.test(deviceLabel);
-  if (runtimeText) runtimeText.textContent = "GPU STATUS";
+  if (runtimeText) {
+    runtimeText.textContent = currentVocalStatus || "ORIGINAL";
+    runtimeText.title = `AI Vocal operation: ${currentVocalStatus || "ORIGINAL"}`;
+  }
   if (runtimeDot) {
     runtimeDot.className = `ph-fill ph-circle text-[4px] ${isOffline ? "text-red-500" : (isCpu ? "text-amber-400" : "text-emerald-400")}`;
   }
@@ -1711,6 +1730,7 @@ function loadAudioState(state) {
   } else {
     updateVocalRuntimeUI(aiEngineType);
   }
+  updateVocalRuntimeStatus(state.vocalStatus || currentVocalStatus);
 
   if (state.eq && state.eq.length > 0) {
     currentEqValues = state.eq;
