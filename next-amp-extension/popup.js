@@ -1263,9 +1263,6 @@ function setupListeners() {
   });
 
   $("#btn-reset").addEventListener("click", handleReset);
-  $("#btn-ai-diagnostics")?.addEventListener("click", () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
-  });
 
   $("#btn-close").addEventListener("click", async () => {
     if (currentTabId) {

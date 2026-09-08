@@ -6,6 +6,7 @@
 
 import { GoEngineClient } from "./go-engine-client.js";
 import { createVocalModelLoader } from "./model-optimizer.mjs";
+import { createProtectedModelSource, loadProtectedAsset } from "./web-protected-assets.mjs";
 
 const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
@@ -855,16 +856,14 @@ export class AIVocalManager {
       let instance;
       try {
         const simdUrl = chrome.runtime.getURL("modules/ai-vocal/stft_simd.wasm");
-        const wasmRes = await fetch(simdUrl);
-        const wasmBuf = await wasmRes.arrayBuffer();
+        const wasmBuf = await loadProtectedAsset(simdUrl);
         const instantiated = await WebAssembly.instantiate(wasmBuf, { env: {} });
         instance = instantiated.instance;
         console.log("[NextAmp AI] Loaded SIMD STFT WASM");
       } catch (simdErr) {
         console.warn("[NextAmp AI] SIMD WASM failed, falling back to scalar:", simdErr);
         const scalarUrl = chrome.runtime.getURL("modules/ai-vocal/stft_scalar.wasm");
-        const wasmRes = await fetch(scalarUrl);
-        const wasmBuf = await wasmRes.arrayBuffer();
+        const wasmBuf = await loadProtectedAsset(scalarUrl);
         const instantiated = await WebAssembly.instantiate(wasmBuf, { env: {} });
         instance = instantiated.instance;
         console.log("[NextAmp AI] Loaded Scalar STFT WASM fallback");
@@ -986,9 +985,7 @@ export class AIVocalManager {
       this.setStatus("Loading Model (15MB)...");
 
       const modelUrl = chrome.runtime.getURL("model/model.json");
-      const ioHandler = (tf.io && tf.io.browserHTTPRequest)
-        ? tf.io.browserHTTPRequest(modelUrl)
-        : modelUrl;
+      const ioHandler = createProtectedModelSource(tf, modelUrl);
       const modelLoader = createVocalModelLoader(tf, ioHandler, {
         optimizeGraph: EXACT_MODEL_GRAPH_OPTIMIZATION,
         // Smooth (15 frames, start 34) and Detail (16 frames, start 32) use

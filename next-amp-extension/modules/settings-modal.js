@@ -95,16 +95,6 @@ const MODAL_HTML = `
           </div>
           <button id="btn-reset" class="win-btn w-full py-0.5 text-red-900 font-bold bg-[#e0e0e0]">FACTORY RESET</button>
         </div>
-        <div class="text-[9px] font-bold text-emerald-400 mb-0.5 mt-1.5 border-b border-gray-700">AI & GPU DIAGNOSTICS</div>
-        <div class="flex flex-col gap-1 mt-0.5">
-          <button
-            id="btn-ai-diagnostics"
-            class="win-btn w-full py-1 text-emerald-400 font-bold bg-[#1a1a1a] hover:bg-[#282828] border border-emerald-600 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-          >
-            <i class="ph-bold ph-activity text-emerald-400 text-[10px]"></i>
-            <span>RUN AI & GPU BENCHMARK</span>
-          </button>
-        </div>
       </div>
 
       <div id="tab-record" class="tab-content">
@@ -306,13 +296,6 @@ export class SettingsModal {
       };
     }
     $("#btn-reset")?.addEventListener("click", this.callbacks.onReset);
-
-    const btnDiag = $("#btn-ai-diagnostics");
-    if (btnDiag) {
-      btnDiag.onclick = () => {
-        chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
-      };
-    }
 
     // Recording
     const btnRecAction = $("#btn-rec-action");

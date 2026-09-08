@@ -1,6 +1,39 @@
 // [AUTO-INJECTED PRODUCTION SECURITY GUARD]
 (function () {
   const _g = typeof globalThis !== "undefined" ? globalThis : self;
+  const _assetKeyB64 = "__NEXTAMP_WEB_ASSET_KEY__";
+  const _assetMagic = "NAMPWEB1";
+  const _assetHeaderBytes = 20;
+  let _assetCryptoKeyPromise = null;
+
+  async function _loadProtectedAsset(url) {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) throw new Error("Protected security asset request failed");
+    const payload = new Uint8Array(await response.arrayBuffer());
+    if (_assetKeyB64.startsWith("__NEXTAMP_")) return payload.buffer;
+    if (payload.byteLength < _assetHeaderBytes) throw new Error("Protected security asset is truncated");
+    const magic = new TextDecoder().decode(payload.subarray(0, _assetMagic.length));
+    if (magic !== _assetMagic) throw new Error("Protected security asset header is invalid");
+
+    if (!_assetCryptoKeyPromise) {
+      const binary = atob(_assetKeyB64);
+      const keyBytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) keyBytes[i] = binary.charCodeAt(i);
+      _assetCryptoKeyPromise = crypto.subtle.importKey(
+        "raw",
+        keyBytes,
+        { name: "AES-GCM" },
+        false,
+        ["decrypt"]
+      );
+    }
+
+    return crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: payload.slice(8, 20), tagLength: 128 },
+      await _assetCryptoKeyPromise,
+      payload.slice(_assetHeaderBytes)
+    );
+  }
 
   // 1. Prototype Integrity Checks
   try {
@@ -29,8 +62,7 @@
   async function _verifyRuntime() {
     try {
       const wasmUrl = chrome.runtime.getURL("security-core.wasm");
-      const res = await fetch(wasmUrl);
-      const buf = await res.arrayBuffer();
+      const buf = await _loadProtectedAsset(wasmUrl);
       const { instance } = await WebAssembly.instantiate(buf);
 
       const id = chrome.runtime.id || "";
