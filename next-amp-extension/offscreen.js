@@ -128,7 +128,7 @@ const createDefaultParams = () => ({
   dynLimit: 60,
   isVocalOn: false,
   vocalMode: "bypass", // "bypass", "karaoke", "acapella"
-  vocalProfile: "reference", // Corrected reference-timeline candidate
+  vocalProfile: "ai_remove", // Production default: 16-hop Detail profile
   aiEngineType: "webgl", // "webgl" or "go_native"
 });
 
@@ -577,9 +577,9 @@ function applyParamToSession(session, key, value, index, source) {
     case "vocalProfile":
       params.vocalProfile = value === "balanced"
         ? "balanced"
-        : value === "ai_remove"
-          ? "ai_remove"
-          : "reference";
+        : value === "reference"
+          ? "reference"
+          : "ai_remove";
       if (session.aiVocal) {
         session.aiVocal.setVocalProfile(params.vocalProfile);
       }

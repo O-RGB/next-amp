@@ -11,7 +11,7 @@
 
 const GO_CHUNK_SIZE = 8192; // 16 frames * 512 hop (GO wire protocol)
 const BROWSER_CHUNK_SIZE = 7680; // 15 hops * 512 (~174.1ms), Smooth rollback profile
-const DEFAULT_BROWSER_CHUNK_SIZE = BROWSER_CHUNK_SIZE; // Reference timeline cadence
+const DEFAULT_BROWSER_CHUNK_SIZE = GO_CHUNK_SIZE; // 16 hops, Detail production profile
 const MAX_CHUNK_SIZE = GO_CHUNK_SIZE;
 const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
 const FADE_IN_SPEED = 1.0 / 1024;  // ~23ms smooth fade-in
@@ -37,7 +37,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.mode = "bypass"; // "bypass", "karaoke", "acapella"
     this.targetMode = "bypass";
     this.engineType = "webgl";
-    this.vocalProfile = "reference";
+    this.vocalProfile = "ai_remove";
     this.chunkSize = DEFAULT_BROWSER_CHUNK_SIZE;
     this.readyThreshold = READY_QUEUE_THRESHOLD;
     this.maxQueueThreshold = MAX_QUEUE_THRESHOLD;
@@ -196,9 +196,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
       } else if (data.type === "SET_PROFILE") {
         const nextProfile = data.profile === "balanced"
           ? "balanced"
-          : data.profile === "ai_remove"
-            ? "ai_remove"
-            : "reference";
+          : data.profile === "reference"
+            ? "reference"
+            : "ai_remove";
         const nextGeneration = Number.isInteger(data.generation)
           ? data.generation : this.streamGeneration + 1;
         const generationChanged = nextGeneration !== this.streamGeneration;

@@ -12,9 +12,10 @@ const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
 const MAX_INPUT_HISTORY = 2048;
 const MAX_BROWSER_FRAMES = 18;
-// The corrected reference timeline is the active candidate. The proven
-// Detail timeline remains available as an immediate rollback profile.
-const DEFAULT_VOCAL_PROFILE = "reference";
+// Detail is the listening-tested production baseline. The reference timeline
+// remains available only as an internal candidate because exact DSP parity
+// did not make it compatible with the model weights used by NextAmp.
+const DEFAULT_VOCAL_PROFILE = "ai_remove";
 // Keep numerical model/audio candidates on the quality baseline until each
 // one has passed a real WebGPU/WebGL listening gate. Exact graph folding is
 // enabled independently: it preserves weights and model equations while

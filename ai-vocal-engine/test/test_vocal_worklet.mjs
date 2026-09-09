@@ -46,19 +46,19 @@ processor.port.onmessage({ data: { type: 'SET_MODE', mode: 'karaoke', engineType
 processBlocks(processor, 64);
 let chunks = messagesOfType(processor, 'PROCESS_CHUNK');
 assert.equal(chunks.length, 1);
-assert.equal(chunks[0].rawL.length, 7680, 'default browser cadence must be 15 hops');
-assert.equal(chunks[0].rawR.length, 7680);
-assert.equal(processor.inputBufferPools[7680].rawL.length, 2,
+assert.equal(chunks[0].rawL.length, 8192, 'default browser cadence must be 16-hop Detail');
+assert.equal(chunks[0].rawR.length, 8192);
+assert.equal(processor.inputBufferPools[8192].rawL.length, 2,
   'one input pair should be leased from the bounded Worklet pool');
-assert.equal(processor.inputBufferPools[7680].rawR.length, 2);
+assert.equal(processor.inputBufferPools[8192].rawR.length, 2);
 processor.port.onmessage({ data: {
   type: 'RETURN_INPUT_BUFFERS', rawL: chunks[0].rawL, rawR: chunks[0].rawR
 } });
-assert.equal(processor.inputBufferPools[7680].rawL.length, 3,
+assert.equal(processor.inputBufferPools[8192].rawL.length, 3,
   'manager-returned input pair should re-enter the bounded Worklet pool');
-assert.equal(processor.inputBufferPools[7680].rawR.length, 3);
+assert.equal(processor.inputBufferPools[8192].rawR.length, 3);
 
-const processed = (chunkIndex, value, generation, size = 7680) => ({
+const processed = (chunkIndex, value, generation, size = 8192) => ({
   type: 'CHUNK_PROCESSED',
   chunkIndex,
   outL: new Float32Array(size).fill(value),
@@ -71,7 +71,7 @@ profileProcessor.port.onmessage({ data: {
   type: 'SET_MODE', mode: 'karaoke', engineType: 'webgl', generation: 40
 } });
 processBlocks(profileProcessor, 64);
-assert.equal(messagesOfType(profileProcessor, 'PROCESS_CHUNK').at(-1).rawL.length, 7680);
+assert.equal(messagesOfType(profileProcessor, 'PROCESS_CHUNK').at(-1).rawL.length, 8192);
 profileProcessor.port.onmessage({ data: {
   type: 'SET_PROFILE', profile: 'ai_remove', browserChunkSize: 8192, generation: 41
 } });
@@ -153,12 +153,12 @@ const goChunks = messagesOfType(processor, 'PROCESS_CHUNK');
 assert.equal(goChunks.at(-1).rawL.length, 8192, 'GO cadence must remain 16 hops');
 
 processor.port.onmessage({ data: { type: 'SET_ENGINE', engineType: 'webgl' } });
-processBlocks(processor, 59);
+processBlocks(processor, 63);
 const beforeBrowserBoundary = messagesOfType(processor, 'PROCESS_CHUNK').length;
 processBlocks(processor, 1);
 const afterBrowserBoundary = messagesOfType(processor, 'PROCESS_CHUNK');
 assert.equal(afterBrowserBoundary.length, beforeBrowserBoundary + 1);
-assert.equal(afterBrowserBoundary.at(-1).rawL.length, 7680);
+assert.equal(afterBrowserBoundary.at(-1).rawL.length, 8192);
 
 // A response from an older stream generation must never enter the new queue,
 // even if its chunk index is numerically valid again after a mode switch.

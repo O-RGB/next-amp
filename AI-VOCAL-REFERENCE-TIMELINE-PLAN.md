@@ -1,6 +1,6 @@
 # AI Vocal Reference Timeline & Quality Recovery Plan
 
-สถานะ: **R1 candidate reworked — แก้ reference magnitude layout/window แล้ว รอฟังจริงรอบสอง**
+สถานะ: **R1 rejected — DSP ตรงกับ oracle แล้ว แต่ timeline ไม่เข้ากับ NextAmp model weights; คืน Detail เป็น production**
 
 เป้าหมายของแผนนี้คือทำให้ Karaoke ตัดเสียงร้องได้เนียนและนิ่งขึ้น ลดเสียงร้องแบบหุ่นยนต์ ลดอาการดนตรีวูบวาบ และรักษารายละเอียดเครื่องดนตรี โดยยังใช้โมเดลขนาดเดิมและรักษาความลื่นบน Apple Silicon, GTX 1050 Ti และ GPU รุ่นเก่าให้มากที่สุด
 
@@ -60,6 +60,8 @@ Reference Timeline จะเรียกโมเดลมากกว่า Det
 Batch นี้ไม่เปลี่ยน production audio
 
 - [x] สร้าง black-box harness สำหรับ `ai remove/stft.wasm`
+- [x] ยืนยัน mask semantics ด้วย all-zero/all-one mask ทั้งสองโหมด
+- [x] เทียบ delayed spectrum + arbitrary mask ถึง PCM output แบบหลาย chunk/stereo
 - [ ] ป้อน impulse ในทุกตำแหน่งรอบ chunk boundary เพื่อหา mapping ของ input, spectrum, mask และ output อย่างแน่นอน
 - [ ] ทดสอบ sine, logarithmic sweep, deterministic noise, stereo phase และ digital silence
 - [x] ยืนยันจำนวน analysis frames, spectrum frames, crop offset และ sample delay จริง
@@ -117,10 +119,23 @@ Gate R1:
 เสียงแต๊บ และเสียงวาบจากการจัดแนว mask/spectrum ที่ยังไม่ถูกต้อง จึงปิด candidate
 จาก production ชั่วคราวเพื่อวิเคราะห์เพิ่ม
 
-การแก้รอบสอง: ปรับ magnitude layout ให้ตรงกับ reference byte-offset view
-(`+2048 bytes`), ใช้ reference analysis/synthesis window เฉพาะ candidate และคง
-mask/spectrum queue 18 frames ไว้เหมือนเดิม ขณะนี้ automated gate ผ่านแล้ว แต่ยัง
-ไม่สรุปคุณภาพจนกว่าจะฟังจริงบนเครื่องผู้ใช้
+ผลฟังจริง Checkpoint B ของ candidate รอบสอง: **ไม่ผ่าน** — ยังสลับระหว่างเสียงร้อง
+ปกติกับเสียงตัดร้องอย่างรวดเร็วและเกิด pumping ชัดเจนจนใช้งาน Karaoke จริงไม่ได้
+
+ผลตรวจหลัง Checkpoint B:
+
+- normalized model input 64 frames ตรงกับ reference ระดับประมาณ `10^-7`
+- analysis spectrum และ rolling max ตรงกับ reference ภายใน floating-point tolerance
+- inverse STFT/window/crop ตรงกับ reference (`max PCM error ≈ 1.19e-7`)
+- delayed spectrum + mask ที่เปลี่ยนทุก chunk/frame/bin/channel ตรงกับ reference
+  (`max PCM error ≈ 8.94e-8`, correlation ≈ `1.0`)
+- mask layout จาก model output ใช้ transpose/reshape/sigmoid ลำดับเดียวกับ reference
+
+ดังนั้นความผิดพลาดไม่ได้อยู่ที่ FFT, queue, crop หรือ mask layout อีกแล้ว แต่เกิดจาก
+สมมติฐานว่า reference timeline สามารถใช้กับ model weights ของ NextAmp ได้ ทั้งที่
+artifact อ้างอิงไม่มี weights ให้ยืนยันว่าเป็นโมเดลเดียวกัน Candidate นี้จึงถูกปิดจาก
+production และคืน 16-hop Detail ซึ่งผ่านการฟังจริงเป็นค่าเริ่มต้น โดยเก็บโค้ด reference
+ไว้เฉพาะงานวิจัย/feature flag เท่านั้น
 
 ## 7. Batch R2 — Recover Performance โดยห้ามเปลี่ยนเสียง
 
