@@ -163,8 +163,9 @@ IIR smoothing จาก B2 ที่ดีต่อ harmonic มักทำใ�
 
 **ไฟล์:** `next-amp-extension/modules/ai-vocal/ai-vocal-manager.js`
 
-- [ ] เพิ่ม internal flag `CANDIDATE_WEBGL_F16 = false` ไว้ข้าง WEB_OVERLAP_CONSENSUS_CANDIDATE
-- [ ] เมื่อ flag เปิด: `tf.env().set("WEBGL_FORCE_F16_TEXTURES", true)` ใน configureWebGL()
+- [x] เพิ่ม internal flag `CANDIDATE_WEBGL_F16` ไว้ข้าง candidate flags
+- [x] เมื่อ flag เปิด: `tf.env().set("WEBGL_FORCE_F16_TEXTURES", true)` ใน configureWebGL()
+- [x] เปิด B4 เป็น candidate แยกเดี่ยว โดยปิด B1/B2/B3 ระหว่างการฟัง
 - [ ] บันทึก baseline inference time บน Apple Metal (FP32) ก่อน เก็บเป็น reference
 - [ ] เปิด flag แล้วบันทึกอีกครั้ง เปรียบเทียบ inference time และฟัง blind A/B
 - [ ] reject ถ้า SDR หรือ vocal suppression ลดลงได้ยินจากการฟัง

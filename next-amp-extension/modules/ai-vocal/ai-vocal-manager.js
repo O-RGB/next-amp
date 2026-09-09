@@ -32,13 +32,15 @@ const EXACT_MODEL_OUTPUT_HEAD = false;
 // changing this single flag back to false; the floor never affects Acapella.
 const ENABLE_ATTENUATION_FLOOR_CANDIDATE = false;
 const ATTENUATION_FLOOR = 0.035;
-// Phase B2+B3 listening candidate. These are isolated from B1 so listening
-// can identify the effect of mask smoothing/transient preservation alone.
-const ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE = true;
-const ENABLE_TRANSIENT_GATE_CANDIDATE = true;
+// Phase B2+B3 candidate flags remain available for rollback/A-B. They are
+// disabled while the isolated B4 texture candidate is being evaluated.
+const ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE = false;
+const ENABLE_TRANSIENT_GATE_CANDIDATE = false;
 const SMOOTHING_FAST_ALPHA = 0.1;
 const SMOOTHING_SLOW_ALPHA = 0.5;
 const TRANSIENT_THRESHOLD = 0.35;
+// Phase B4 listening candidate. Set false to restore the FP32 WebGL path.
+const CANDIDATE_WEBGL_F16 = true;
 const VOCAL_PROFILES = Object.freeze({
   // Retained as a rollback candidate. This shorter cadence still runs the
   // full 64-frame model and therefore invokes inference more often.
@@ -990,6 +992,9 @@ export class AIVocalManager {
           tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
           tf.env().set("WEBGL_PACK_NORMALIZATION", true);
           tf.env().set("WEBGL_PACK_DEPTHWISE_CONV", true);
+          if (CANDIDATE_WEBGL_F16) {
+            tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
+          }
           tf.env().set("WEBGL_CPU_FORWARD", false);
           tf.env().set("WEBGL_LAZILY_UNPACK", true);
           // Keep textures pooled: deleting/recreating them every chunk is
