@@ -185,6 +185,33 @@
         transform: translateY(-5px);
       }
 
+      .ai-feature-card {
+        background:
+          radial-gradient(circle at 85% 20%, rgba(0, 240, 255, 0.14), transparent 34%),
+          linear-gradient(145deg, rgba(0, 40, 50, 0.45), rgba(0, 0, 0, 0.9));
+        border: 1px solid rgba(0, 240, 255, 0.28);
+        box-shadow: 0 0 28px rgba(0, 240, 255, 0.06);
+      }
+      .ai-feature-card:hover {
+        border-color: rgba(0, 240, 255, 0.6);
+        box-shadow: 0 0 34px rgba(0, 240, 255, 0.14);
+      }
+
+      .ai-modal-backdrop {
+        background: rgba(0, 0, 0, 0.82);
+        backdrop-filter: blur(8px);
+      }
+      .ai-modal-window {
+        width: min(1100px, calc(100vw - 1rem));
+        height: min(900px, calc(100vh - 1rem));
+      }
+      .ai-modal-frame {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #080a0f;
+      }
+
       .content-article h3 {
         font-family: "Chakra Petch", sans-serif;
         font-weight: 600;
@@ -290,6 +317,72 @@
     <div class="container mx-auto px-4">
       <div class="ad-container w-full"></div>
     </div>
+
+    <section id="ai-vocal" class="container mx-auto px-4 mb-12">
+      <div
+        class="ai-feature-card rounded-2xl p-6 md:p-8 transition duration-300"
+      >
+        <div
+          class="flex flex-col md:flex-row md:items-center md:justify-between gap-6"
+        >
+          <div class="flex items-start gap-4">
+            <div
+              class="w-12 h-12 shrink-0 rounded-xl border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 flex items-center justify-center"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="w-7 h-7"
+                fill="currentColor"
+                viewBox="0 0 256 256"
+                aria-hidden="true"
+              >
+                <path
+                  d="M128 24a72.08 72.08 0 0 0-72 72v32a72 72 0 0 0 144 0V96a72.08 72.08 0 0 0-72-72Zm56 104a56 56 0 0 1-112 0V96a56 56 0 0 1 112 0Zm-64 104h16a8 8 0 0 0 0-16h-8v-16a72.08 72.08 0 0 0 64-71.61V112a8 8 0 0 0-16 0v16a56 56 0 0 1-112 0v-16a8 8 0 0 0-16 0v16.39A72.08 72.08 0 0 0 120 200v16h-8a8 8 0 0 0 0 16h8Z"
+                ></path>
+              </svg>
+            </div>
+            <div>
+              <div
+                class="text-[10px] text-cyan-300 font-bold tracking-[0.2em] font-display mb-1"
+              >
+                OPTIONAL AI FEATURE
+              </div>
+              <h2 class="text-2xl md:text-3xl font-display font-bold text-white">
+                AI VOCAL / KARAOKE
+              </h2>
+              <p class="text-sm text-gray-400 mt-2 max-w-2xl leading-relaxed">
+                ตัดเสียงร้องหรือแยกเสียงร้องด้วย AI แบบ real-time
+                ทำงานในเบราว์เซอร์ของคุณ
+                <span class="text-cyan-300">โมเดลจะเริ่มโหลดเมื่อกดเปิดเท่านั้น</span>
+                ไม่โหลดเตรียมไว้และไม่กินเน็ตตั้งแต่หน้าแรก
+              </p>
+            </div>
+          </div>
+
+          <button
+            id="btn-open-ai-vocal"
+            type="button"
+            class="shrink-0 px-6 py-3 rounded-lg border border-cyan-400/60 bg-cyan-400/10 hover:bg-cyan-300 hover:text-black text-cyan-300 font-display font-bold transition flex items-center justify-center gap-2"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="w-5 h-5"
+              fill="currentColor"
+              viewBox="0 0 256 256"
+              aria-hidden="true"
+            >
+              <path
+                d="M128 24a104 104 0 1 0 104 104A104.11 104.11 0 0 0 128 24Zm36 112h-28v28a8 8 0 0 1-16 0v-28H92a8 8 0 0 1 0-16h28V92a8 8 0 0 1 16 0v28h28a8 8 0 0 1 0 16Z"
+              ></path>
+            </svg>
+            เปิด AI VOCAL
+          </button>
+        </div>
+        <div class="mt-5 pt-4 border-t border-cyan-400/10 text-[11px] text-gray-500 font-mono">
+          ON DEMAND • LOCAL PROCESSING • CLOSE TO UNLOAD AI ENGINE
+        </div>
+      </div>
+    </section>
 
     <main
       class="container mx-auto px-4 py-12 grid grid-cols-1 lg:grid-cols-3 gap-12"
@@ -576,6 +669,44 @@
       </div>
     </footer>
 
+    <div
+      id="ai-vocal-modal"
+      class="ai-modal-backdrop fixed inset-0 z-[100] hidden items-center justify-center p-2"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ai-vocal-modal-title"
+    >
+      <div
+        class="ai-modal-window bg-[#080a0f] border border-cyan-400/40 rounded-xl overflow-hidden shadow-[0_0_45px_rgba(0,240,255,0.18)] flex flex-col"
+      >
+        <div
+          class="h-9 shrink-0 px-3 flex items-center justify-between border-b border-cyan-400/20 bg-black/70"
+        >
+          <span
+            id="ai-vocal-modal-title"
+            class="text-[11px] text-cyan-300 font-display font-bold tracking-wider"
+          >
+            NEXTAMP AI VOCAL
+          </span>
+          <button
+            id="btn-close-ai-vocal"
+            type="button"
+            class="w-7 h-6 rounded border border-gray-600 text-gray-400 hover:text-white hover:border-cyan-300 transition"
+            aria-label="ปิด AI Vocal"
+          >
+            ×
+          </button>
+        </div>
+        <iframe
+          id="ai-vocal-frame"
+          class="ai-modal-frame"
+          title="Nextamp AI Vocal Player"
+          loading="lazy"
+          allow="autoplay"
+        ></iframe>
+      </div>
+    </div>
+
     <script>
       async function enterApp() {
         const btn = document.querySelector(".btn-glow");
@@ -636,6 +767,48 @@
           btn.disabled = false;
         }
       }
+    </script>
+    <script>
+      const aiVocalModal = document.getElementById("ai-vocal-modal");
+      const aiVocalFrame = document.getElementById("ai-vocal-frame");
+      const openAiVocalButton = document.getElementById("btn-open-ai-vocal");
+      const closeAiVocalButton = document.getElementById("btn-close-ai-vocal");
+
+      function openAIVocal() {
+        if (!aiVocalModal || !aiVocalFrame) return;
+
+        aiVocalModal.classList.remove("hidden");
+        aiVocalModal.classList.add("flex");
+        document.body.classList.add("overflow-hidden");
+
+        // Intentionally assign src only after the user's click. This keeps
+        // TensorFlow, the worker, WASM, and model completely off the initial
+        // landing-page network path.
+        aiVocalFrame.src = "ai-vocal-engine/demo/index.html";
+      }
+
+      function closeAIVocal() {
+        if (!aiVocalModal || !aiVocalFrame) return;
+
+        // Navigating the iframe to an empty document unloads its Worker and
+        // releases the AI model when the user closes the feature.
+        aiVocalFrame.src = "about:blank";
+        aiVocalModal.classList.add("hidden");
+        aiVocalModal.classList.remove("flex");
+        document.body.classList.remove("overflow-hidden");
+        openAiVocalButton?.focus();
+      }
+
+      openAiVocalButton?.addEventListener("click", openAIVocal);
+      closeAiVocalButton?.addEventListener("click", closeAIVocal);
+      aiVocalModal?.addEventListener("click", (event) => {
+        if (event.target === aiVocalModal) closeAIVocal();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !aiVocalModal?.classList.contains("hidden")) {
+          closeAIVocal();
+        }
+      });
     </script>
     <script>
       if ("serviceWorker" in navigator) {
