@@ -33,8 +33,8 @@ let isEqOn = true;
 let isVocalOn = false;
 let currentVocalMode = "bypass";
 let aiEngineType = "webgl"; // "webgl" or "go_native"
-// The reference timeline is the internal production candidate. Keep the
-// legacy profiles readable for rollback, but do not expose a profile selector.
+// The corrected reference timeline is the internal candidate. Keep Detail
+// readable for rollback, but do not expose a profile selector.
 let currentVocalProfile = "reference";
 let currentVocalDevice = "";
 let currentVocalDeviceRaw = "";
@@ -769,8 +769,8 @@ function updateVocalMasterUI() {
 }
 
 function updateVocalProfileUI(profile) {
-  // Profile controls are intentionally hidden. The reference timeline is the
-  // current internal candidate; legacy profiles remain rollback-only.
+  // Profile controls are intentionally hidden. Reference is the current
+  // internal candidate; Detail remains rollback-only.
   const selected = "reference";
   currentVocalProfile = selected;
   $$(".btn-vocal-profile").forEach((btn) => {

@@ -16,6 +16,8 @@ extern "C" {
 #define REFERENCE_MAG_START_FRAME 2
 #define REFERENCE_ROLLING_ADVANCE 15
 #define REFERENCE_CHUNK_SAMPLES (REFERENCE_ROLLING_ADVANCE * HOP_SIZE) // 15 * 512 = 7680 samples
+#define REFERENCE_INPUT_HISTORY_SAMPLES 512
+#define REFERENCE_OUTPUT_OFFSET_SAMPLES 384
 #define QUEUE_CAPACITY 4
 
 // Initialization
@@ -25,6 +27,7 @@ void stft_init(void);
 float* stft_get_input_ptr(int channel);
 float* stft_get_output_ptr(int channel);
 float* stft_get_magnitudes_ptr(int channel);
+float* stft_get_reference_magnitudes_ptr(int channel);
 float* stft_get_mask_ptr(int channel);
 float* stft_get_spec_real_ptr(int channel);
 float* stft_get_interleaved_mags_ptr(void);

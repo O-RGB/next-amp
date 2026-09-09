@@ -29,6 +29,8 @@ async function check(name) {
   const inputR = exp.stft_get_input_ptr(1) / 4;
   const magL = exp.stft_get_magnitudes_ptr(0) / 4;
   const magR = exp.stft_get_magnitudes_ptr(1) / 4;
+  const referenceMagL = exp.stft_get_reference_magnitudes_ptr() / 4;
+  const referenceMagR = exp.stft_get_reference_magnitudes_ptr(1) / 4;
   const normalized = exp.stft_get_norm_input_ptr() / 4;
 
   const rolling = new Float32Array(BINS * CONTEXT_FRAMES * 2);
@@ -70,8 +72,8 @@ async function check(name) {
         base
       );
       for (let f = 0; f < NEW_FRAMES; f++) {
-        nextRolling[base + (CONTEXT_FRAMES - NEW_FRAMES + f) * 2] = memory[magL + f * BINS + k];
-        nextRolling[base + (CONTEXT_FRAMES - NEW_FRAMES + f) * 2 + 1] = memory[magR + f * BINS + k];
+        nextRolling[base + (CONTEXT_FRAMES - NEW_FRAMES + f) * 2] = memory[referenceMagL + f * BINS + k];
+        nextRolling[base + (CONTEXT_FRAMES - NEW_FRAMES + f) * 2 + 1] = memory[referenceMagR + f * BINS + k];
       }
     }
     rolling.set(nextRolling);

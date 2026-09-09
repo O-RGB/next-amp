@@ -1,6 +1,6 @@
 # AI Vocal Reference Timeline & Quality Recovery Plan
 
-สถานะ: **R0/R1 implementation in progress — ยังรอฟังจริงบน Apple + Windows ก่อนเปิดเป็น release baseline**
+สถานะ: **R1 candidate reworked — แก้ reference magnitude layout/window แล้ว รอฟังจริงรอบสอง**
 
 เป้าหมายของแผนนี้คือทำให้ Karaoke ตัดเสียงร้องได้เนียนและนิ่งขึ้น ลดเสียงร้องแบบหุ่นยนต์ ลดอาการดนตรีวูบวาบ และรักษารายละเอียดเครื่องดนตรี โดยยังใช้โมเดลขนาดเดิมและรักษาความลื่นบน Apple Silicon, GTX 1050 Ti และ GPU รุ่นเก่าให้มากที่สุด
 
@@ -112,6 +112,15 @@ Gate R1:
 - [ ] ไม่มี discontinuity/click/level jump ที่ chunk boundary (ต้องฟังจริง)
 - [x] silence และ song transition state ถูก reset และ old generation ถูก drop ใน automated tests
 - [x] Karaoke/Acapella/Bypass lifecycle และ Worklet/GO transitions ผ่าน automated tests
+
+ผลฟังจริง Checkpoint A ของ candidate แรก: **ไม่ผ่าน** — reference candidate มีเสียงร้องกลับมาเป็นช่วง ๆ,
+เสียงแต๊บ และเสียงวาบจากการจัดแนว mask/spectrum ที่ยังไม่ถูกต้อง จึงปิด candidate
+จาก production ชั่วคราวเพื่อวิเคราะห์เพิ่ม
+
+การแก้รอบสอง: ปรับ magnitude layout ให้ตรงกับ reference byte-offset view
+(`+2048 bytes`), ใช้ reference analysis/synthesis window เฉพาะ candidate และคง
+mask/spectrum queue 18 frames ไว้เหมือนเดิม ขณะนี้ automated gate ผ่านแล้ว แต่ยัง
+ไม่สรุปคุณภาพจนกว่าจะฟังจริงบนเครื่องผู้ใช้
 
 ## 7. Batch R2 — Recover Performance โดยห้ามเปลี่ยนเสียง
 

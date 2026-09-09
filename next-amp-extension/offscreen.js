@@ -128,7 +128,7 @@ const createDefaultParams = () => ({
   dynLimit: 60,
   isVocalOn: false,
   vocalMode: "bypass", // "bypass", "karaoke", "acapella"
-  vocalProfile: "reference", // Internal reference-timeline candidate
+  vocalProfile: "reference", // Corrected reference-timeline candidate
   aiEngineType: "webgl", // "webgl" or "go_native"
 });
 

@@ -16,6 +16,7 @@
 
 // Precomputed tables
 static float g_window[FFT_SIZE];
+static float g_reference_window[FFT_SIZE];
 static unsigned short g_bit_reverse[FFT_SIZE];
 static float g_twiddle_cos[FFT_SIZE / 2];
 static float g_twiddle_sin[FFT_SIZE / 2];
@@ -29,6 +30,10 @@ static float g_output_pcm[2][BUFFER_CAPACITY];
 
 // Frame Magnitudes: [2 channels][MAX_FRAMES][NUM_BINS]
 static float g_magnitudes[2][MAX_FRAMES * NUM_BINS];
+// The reference bundle exposes its magnitude view at +2,048 bytes. Preserve
+// that exact 512-float byte offset in a compact, allocation-free buffer so
+// the model sees the same boundary layout as the oracle.
+static float g_reference_magnitudes[2][REFERENCE_MAG_FRAMES * NUM_BINS];
 
 // Mask from Neural Network: [2 channels][MAX_FRAMES][NUM_BINS]
 static float g_mask[2][MAX_FRAMES * NUM_BINS];
@@ -52,6 +57,7 @@ static float g_chunk_peak = 1e-5f;
 static float g_rolling_mags[NUM_BINS][MAX_FRAMES][2];
 static float g_norm_input[NUM_BINS][MAX_FRAMES][2];
 static int g_rolling_start = 0;
+static int g_reference_timeline_active = 0;
 
 // Working buffer for in-place FFT
 static float g_work_real[FFT_SIZE];
@@ -175,6 +181,25 @@ void stft_init(void) {
         }
     }
 
+    // AI Remove's reference WASM receives its analysis/synthesis window from
+    // JS. Reproduce its even/odd denominator and COLA normalization only on
+    // the isolated reference timeline; the proven app/GO window is unchanged.
+    for (int i = 0; i < FFT_SIZE; i++) {
+        int denominator = FFT_SIZE + (1 - (i & 1)) - 1;
+        double angle = 2.0 * M_PI * (double)i / (double)denominator;
+        g_reference_window[i] = 0.5f * (1.0f - (float)cos(angle));
+    }
+    for (int s = 0; s < HOP_SIZE; s++) {
+        float r = 0.0f;
+        for (int a = s; a < FFT_SIZE; a += HOP_SIZE) {
+            r += g_reference_window[a] * g_reference_window[a];
+        }
+        float norm = 1.0f / sqrtf(r);
+        for (int a = s; a < FFT_SIZE; a += HOP_SIZE) {
+            g_reference_window[a] *= norm;
+        }
+    }
+
     stft_reset();
     g_initialized = 1;
 }
@@ -183,6 +208,7 @@ void stft_reset(void) {
     memset(g_input_pcm, 0, sizeof(g_input_pcm));
     memset(g_output_pcm, 0, sizeof(g_output_pcm));
     memset(g_magnitudes, 0, sizeof(g_magnitudes));
+    memset(g_reference_magnitudes, 0, sizeof(g_reference_magnitudes));
     memset(g_mask, 0, sizeof(g_mask));
     memset(g_spec_real, 0, sizeof(g_spec_real));
     memset(g_spec_imag, 0, sizeof(g_spec_imag));
@@ -194,6 +220,7 @@ void stft_reset(void) {
     g_chunk_peak = 1e-5f;
     g_queue_head = 0;
     g_rolling_start = 0;
+    g_reference_timeline_active = 0;
 }
 
 float* stft_get_input_ptr(int ch) {
@@ -209,6 +236,11 @@ float* stft_get_output_ptr(int ch) {
 float* stft_get_magnitudes_ptr(int ch) {
     if (ch < 0 || ch > 1) return NULL;
     return g_magnitudes[ch];
+}
+
+float* stft_get_reference_magnitudes_ptr(int ch) {
+    if (ch < 0 || ch > 1) return NULL;
+    return g_reference_magnitudes[ch];
 }
 
 float* stft_get_mask_ptr(int ch) {
@@ -235,7 +267,8 @@ float stft_get_chunk_peak(void) {
 }
 
 static void stft_forward_internal(int spectrum_frames, int mag_start_frame,
-                                   int mag_frames, int rolling_advance) {
+                                   int mag_frames, int rolling_advance,
+                                   int reference_magnitudes) {
     if (spectrum_frames <= 0 || spectrum_frames > MAX_FRAMES ||
         spectrum_frames > REFERENCE_SPECTRUM_FRAMES ||
         mag_start_frame < 0 || mag_frames <= 0 ||
@@ -247,6 +280,7 @@ static void stft_forward_internal(int spectrum_frames, int mag_start_frame,
         rolling_advance = DEFAULT_CHUNK_FRAMES;
     }
 
+    const float* analysis_window = reference_magnitudes ? g_reference_window : g_window;
     for (int ch = 0; ch < 2; ch++) {
         for (int f = 0; f < spectrum_frames; f++) {
             int offset = f * HOP_SIZE;
@@ -255,13 +289,13 @@ static void stft_forward_internal(int spectrum_frames, int mag_start_frame,
 #if USE_SIMD
             for (int i = 0; i < FFT_SIZE; i += 4) {
                 v128_t pcm = wasm_v128_load(&g_input_pcm[ch][offset + i]);
-                v128_t win = wasm_v128_load(&g_window[i]);
+                v128_t win = wasm_v128_load(&analysis_window[i]);
                 wasm_v128_store(&g_work_real[i], wasm_f32x4_mul(pcm, win));
                 wasm_v128_store(&g_work_imag[i], wasm_f32x4_splat(0.0f));
             }
 #else
             for (int i = 0; i < FFT_SIZE; i++) {
-                g_work_real[i] = g_input_pcm[ch][offset + i] * g_window[i];
+                g_work_real[i] = g_input_pcm[ch][offset + i] * analysis_window[i];
                 g_work_imag[i] = 0.0f;
             }
 #endif
@@ -304,6 +338,21 @@ static void stft_forward_internal(int spectrum_frames, int mag_start_frame,
         }
     }
 
+    if (reference_magnitudes) {
+        // The reference wrapper creates a Float32Array at the magnitude
+        // pointer + 2,048 bytes. That view begins halfway through frame 0,
+        // continues through frames 1..15, and ends halfway into frame 16.
+        // Frame 16/17 are boundary storage and are explicitly zeroed here so
+        // no previous stream can enter the model context.
+        for (int ch = 0; ch < 2; ch++) {
+            memset(&g_magnitudes[ch][REFERENCE_MAG_FRAMES * NUM_BINS], 0,
+                   (MAX_FRAMES - REFERENCE_MAG_FRAMES) * NUM_BINS * sizeof(float));
+            for (int i = 0; i < REFERENCE_MAG_FRAMES * NUM_BINS; i++) {
+                g_reference_magnitudes[ch][i] = g_magnitudes[ch][(NUM_BINS / 2) + i];
+            }
+        }
+    }
+
     // Advance circular queue
     g_queue_head = (g_queue_head + 1) % QUEUE_CAPACITY;
 
@@ -312,14 +361,16 @@ static void stft_forward_internal(int spectrum_frames, int mag_start_frame,
     float peak = 1e-5f;
     int new_start = (g_rolling_start + rolling_advance) % MAX_FRAMES;
     int append_start = (new_start + MAX_FRAMES - mag_frames) % MAX_FRAMES;
+    const float* source0 = reference_magnitudes ? g_reference_magnitudes[0] : g_magnitudes[0];
+    const float* source1 = reference_magnitudes ? g_reference_magnitudes[1] : g_magnitudes[1];
     int p = 0;
     for (int k = 0; k < NUM_BINS; k++) {
         // Append at the end of the next logical window. For the reference
         // cadence, the window advances 15 frames while 16 new magnitudes are
         // supplied, matching old[15:63] + new[16].
         for (int f = 0; f < mag_frames; f++) {
-            float v0 = g_magnitudes[0][f * NUM_BINS + k];
-            float v1 = g_magnitudes[1][f * NUM_BINS + k];
+            float v0 = source0[f * NUM_BINS + k];
+            float v1 = source1[f * NUM_BINS + k];
             int slot = (append_start + f) % MAX_FRAMES;
             g_rolling_mags[k][slot][0] = v0;
             g_rolling_mags[k][slot][1] = v1;
@@ -331,22 +382,25 @@ static void stft_forward_internal(int spectrum_frames, int mag_start_frame,
     }
     g_rolling_start = new_start;
     g_chunk_peak = peak;
+    g_reference_timeline_active = reference_magnitudes;
 }
 
 void stft_forward(int num_frames) {
     if (num_frames <= 0 || num_frames > MAX_FRAMES) num_frames = DEFAULT_CHUNK_FRAMES;
-    stft_forward_internal(num_frames, 0, num_frames, num_frames);
+    stft_forward_internal(num_frames, 0, num_frames, num_frames, 0);
 }
 
 // Reference-compatible cadence: compute 18 boundary-aware spectra, expose
-// spectrum frames 2..17 as 16 magnitude frames, and advance the model window
-// by 15 hops. The manager consumes the 18-frame delayed spectrum separately.
+// the same byte-offset magnitude view used by AI Remove, and advance the
+// model window by 15 hops. The manager consumes the 18-frame delayed spectrum
+// separately.
 void stft_forward_reference(void) {
     stft_forward_internal(
         REFERENCE_SPECTRUM_FRAMES,
-        REFERENCE_MAG_START_FRAME,
+        0,
         REFERENCE_MAG_FRAMES,
-        REFERENCE_ROLLING_ADVANCE
+        REFERENCE_ROLLING_ADVANCE,
+        1
     );
 }
 
@@ -505,18 +559,20 @@ static void prepare_full_spectrum(const float* source_real, const float* source_
 
 static void inverse_spectrum_to_channel(int channel, int offset) {
     fft_radix2(g_work_real, g_work_imag, FFT_SIZE, 1);
+    const float* synthesis_window = g_reference_timeline_active
+        ? g_reference_window : g_window;
 
 #if USE_SIMD
     for (int i = 0; i < FFT_SIZE; i += 4) {
         v128_t ifft = wasm_v128_load(&g_work_real[i]);
-        v128_t win = wasm_v128_load(&g_window[i]);
+        v128_t win = wasm_v128_load(&synthesis_window[i]);
         v128_t out = wasm_v128_load(&g_output_pcm[channel][offset + i]);
         wasm_v128_store(&g_output_pcm[channel][offset + i],
                         wasm_f32x4_add(out, wasm_f32x4_mul(ifft, win)));
     }
 #else
     for (int i = 0; i < FFT_SIZE; i++) {
-        g_output_pcm[channel][offset + i] += g_work_real[i] * g_window[i];
+        g_output_pcm[channel][offset + i] += g_work_real[i] * synthesis_window[i];
     }
 #endif
 }

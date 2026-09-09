@@ -12,6 +12,8 @@ const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
 const MAX_INPUT_HISTORY = 2048;
 const MAX_BROWSER_FRAMES = 18;
+// The corrected reference timeline is the active candidate. The proven
+// Detail timeline remains available as an immediate rollback profile.
 const DEFAULT_VOCAL_PROFILE = "reference";
 // Keep numerical model/audio candidates on the quality baseline until each
 // one has passed a real WebGPU/WebGL listening gate. Exact graph folding is
