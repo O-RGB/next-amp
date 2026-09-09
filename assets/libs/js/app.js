@@ -191,11 +191,21 @@ async function createAIVocalManager() {
     protectedAssets: false,
     persistStatus: false
   });
-  manager.onStatusChange = (status) => updateAIVocalUI(status);
+  manager.onStatusChange = (status) => {
+    // Do not spend main-thread time updating the hidden Web player. The AI
+    // manager keeps processing audio; refresh the label when the page returns.
+    if (!document.hidden) updateAIVocalUI(status);
+  };
   const node = await manager.init();
   if (!node) throw new Error(manager.lastError || "AI AudioWorklet unavailable");
   return { manager, node };
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && aiVocalManager) {
+    updateAIVocalUI(aiVocalManager.getStatus());
+  }
+});
 
 function getAIVocalOutputTarget() {
   return aiVocalNode || eqNodes[0] || analyser;

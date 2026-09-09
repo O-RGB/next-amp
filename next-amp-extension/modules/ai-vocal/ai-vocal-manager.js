@@ -80,6 +80,7 @@ const MESSAGE_POOL_CAPACITY = 3; // active + bounded pending MessagePort envelop
 const DIAGNOSTIC_SAMPLE_LIMIT = 120;
 const DIAGNOSTIC_SUMMARY_CACHE_MS = 250;
 const GO_STATUS_UPDATE_INTERVAL_MS = 500; // UI/IPC only; audio response cadence stays unchanged.
+const WEB_STATUS_UPDATE_INTERVAL_MS = 500; // UI only; never throttle audio processing.
 const GO_LATENCY_SAMPLE_CAPACITY = 24;
 let webGpuBackendPromise = null;
 
@@ -341,6 +342,7 @@ export class AIVocalManager {
     this.goLatencySamplePos = 0;
     this.goBufferTarget = null;
     this.lastGoStatusAt = 0;
+    this.lastWebStatusAt = 0;
     this.diagnostics = {
       startedAt: Date.now(),
       enabled: false,
@@ -504,6 +506,16 @@ export class AIVocalManager {
     }
 
     if (this.onStatusChange) {
+      // Worklet status messages are already sparse, but a busy main thread can
+      // still deliver several of them close together. Keep Web UI updates out
+      // of the inference deadline while preserving the internal status value.
+      // GO keeps its existing bridge cadence and is deliberately untouched.
+      if (this.engineType === "webgl") {
+        const now = performance.now();
+        if (this.lastWebStatusAt !== 0 &&
+            now - this.lastWebStatusAt < WEB_STATUS_UPDATE_INTERVAL_MS) return;
+        this.lastWebStatusAt = now;
+      }
       this.onStatusChange(status);
     }
   }
@@ -946,6 +958,8 @@ export class AIVocalManager {
         try {
           tf.env().set("WEBGL_PACK", true);
           tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
+          tf.env().set("WEBGL_PACK_NORMALIZATION", true);
+          tf.env().set("WEBGL_PACK_DEPTHWISE_CONV", true);
           tf.env().set("WEBGL_CPU_FORWARD", false);
           tf.env().set("WEBGL_LAZILY_UNPACK", true);
           // Keep textures pooled: deleting/recreating them every chunk is
@@ -979,6 +993,7 @@ export class AIVocalManager {
           // Keep the model's small post-processing ops on the same device;
           // CPU handoffs introduce synchronization and extra power draw.
           tf.env().set("WEBGPU_CPU_FORWARD", false);
+          tf.env().set("WEBGPU_DEFERRED_SUBMIT_BATCH_SIZE", 0);
           const selected = await tf.setBackend("webgpu");
           if (selected && tf.getBackend() === "webgpu") {
             await tf.ready();
