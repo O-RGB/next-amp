@@ -11,7 +11,7 @@ import { createProtectedModelSource, loadProtectedAsset } from "./web-protected-
 const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
 const MAX_BROWSER_FRAMES = 16;
-const DEFAULT_VOCAL_PROFILE = "balanced";
+const DEFAULT_VOCAL_PROFILE = "ai_remove";
 // Keep numerical model/audio candidates on the quality baseline until each
 // one has passed a real WebGPU/WebGL listening gate. Exact graph folding is
 // enabled independently: it preserves weights and model equations while
@@ -24,18 +24,19 @@ const EXACT_MODEL_GRAPH_OPTIMIZATION = true;
 // gates confirm that backend-specific slicing does not add vocal artifacts.
 const EXACT_MODEL_OUTPUT_HEAD = false;
 const VOCAL_PROFILES = Object.freeze({
-  // Current production candidate: the cadence that was tested as the
-  // smoothest on Apple and Windows GTX 1050 Ti.
+  // Retained as a rollback candidate. This shorter cadence still runs the
+  // full 64-frame model and therefore invokes inference more often.
   balanced: Object.freeze({
     frames: 15,
     chunkSamples: 7680,
     sliceStart: 34,
     delayChunks: 1
   }),
-  // Closest safe full-processing profile available in this app. It restores
-  // the original 16-hop app cadence and alignment while keeping the proven
-  // optimized graph. The external AI Remove bundle uses a different WASM
-  // timeline and cannot be reproduced exactly without its source artifacts.
+  // Production default: the original 16-hop app cadence and alignment. Four
+  // chunk peaks cover the complete 64-frame model context, and the longer
+  // cadence invokes the same model less often than the 15-hop candidate.
+  // The external AI Remove bundle still uses a different WASM timeline and
+  // cannot be reproduced exactly without its source artifacts.
   ai_remove: Object.freeze({
     frames: 16,
     chunkSamples: 8192,
@@ -565,7 +566,7 @@ export class AIVocalManager {
   }
 
   setVocalProfile(profile) {
-    const nextProfile = profile === "ai_remove" ? "ai_remove" : DEFAULT_VOCAL_PROFILE;
+    const nextProfile = profile === "balanced" ? "balanced" : DEFAULT_VOCAL_PROFILE;
     if (nextProfile === this.vocalProfile) return;
 
     this.vocalProfile = nextProfile;

@@ -8,6 +8,7 @@ const source = fs.readFileSync(
 )
   .replace('import { GoEngineClient } from "./go-engine-client.js";\n', '')
   .replace('import { createVocalModelLoader } from "./model-optimizer.mjs";\n', '')
+  .replace('import { createProtectedModelSource, loadProtectedAsset } from "./web-protected-assets.mjs";\n', '')
   .replace('import { applyOverlapConsensusToMask } from "./overlap-consensus.mjs";\n', '')
   .replace('export class AIVocalManager', 'const applyOverlapConsensusToMask = () => false;\n\nclass AIVocalManager') +
   '\nthis.AIVocalManager = AIVocalManager;';
@@ -20,6 +21,10 @@ class StubGoEngineClient {
 
   resetStream() {
     this.resetCalls++;
+  }
+
+  getPendingCount() {
+    return this.pendingChunks.size;
   }
 }
 
@@ -52,18 +57,18 @@ manager.workletNode = {
   }
 };
 
-manager.setVocalProfile('ai_remove');
+manager.setVocalProfile('balanced');
 assert.equal(manager.goClient.resetCalls, 1,
   'GO profile switch must reset native STFT/lookahead state');
 assert.equal(manager.workletNode.port.messages.at(-1).type, 'SET_PROFILE');
-assert.equal(manager.workletNode.port.messages.at(-1).profile, 'ai_remove');
-
-manager.setVocalProfile('balanced');
-assert.equal(manager.goClient.resetCalls, 2,
-  'switching back must reset the native stream again');
 assert.equal(manager.workletNode.port.messages.at(-1).profile, 'balanced');
 
-manager.setVocalProfile('balanced');
+manager.setVocalProfile('ai_remove');
+assert.equal(manager.goClient.resetCalls, 2,
+  'switching back to the production default must reset the native stream again');
+assert.equal(manager.workletNode.port.messages.at(-1).profile, 'ai_remove');
+
+manager.setVocalProfile('ai_remove');
 assert.equal(manager.goClient.resetCalls, 2,
   'reselecting the active profile must not reset an active stream');
 

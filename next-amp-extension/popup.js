@@ -33,9 +33,9 @@ let isEqOn = true;
 let isVocalOn = false;
 let currentVocalMode = "bypass";
 let aiEngineType = "webgl"; // "webgl" or "go_native"
-// Smooth/balanced is the single production profile. Keep the old profile
-// value readable for state compatibility, but do not expose or restore Detail.
-let currentVocalProfile = "balanced";
+// Detail is the single production profile. Keep Smooth readable internally
+// for rollback compatibility, but do not expose a profile selector.
+let currentVocalProfile = "ai_remove";
 let currentVocalDevice = "";
 let currentVocalDeviceRaw = "";
 let currentVocalApi = "WEBGL";
@@ -256,7 +256,7 @@ async function finalizeInitialization() {
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
   if (savedToggles.isVocalOn !== undefined) isVocalOn = savedToggles.isVocalOn;
   if (savedToggles.aiEngineType !== undefined) aiEngineType = savedToggles.aiEngineType;
-  currentVocalProfile = "balanced";
+  currentVocalProfile = "ai_remove";
   await sessionManager.setSetting({ vocalProfile: currentVocalProfile });
   updateVocalProfileUI(currentVocalProfile);
   updateAiEngineUI();
@@ -334,7 +334,7 @@ async function finalizeInitialization() {
       } else {
         updateVocalMasterUI();
       }
-      if (sharedParams.vocalProfile) updateVocalProfileUI("balanced");
+      if (sharedParams.vocalProfile) updateVocalProfileUI("ai_remove");
 
       if (sharedParams.reverbTime)
         $("#adv-rev-time").value = sharedParams.reverbTime;
@@ -769,9 +769,9 @@ function updateVocalMasterUI() {
 }
 
 function updateVocalProfileUI(profile) {
-  // Profile controls are intentionally hidden. Smooth/balanced is the only
-  // production profile exposed by the popup.
-  const selected = "balanced";
+  // Profile controls are intentionally hidden. Detail is the only production
+  // profile selected by the popup.
+  const selected = "ai_remove";
   currentVocalProfile = selected;
   $$(".btn-vocal-profile").forEach((btn) => {
     if (btn.dataset.profile === selected) {
@@ -1713,9 +1713,9 @@ function loadAudioState(state) {
   } else {
     updateVocalMasterUI();
   }
-  updateVocalProfileUI("balanced");
-  if (state.vocalProfile !== "balanced") {
-    sendParam("vocalProfile", "balanced");
+  updateVocalProfileUI("ai_remove");
+  if (state.vocalProfile !== "ai_remove") {
+    sendParam("vocalProfile", "ai_remove");
   }
   if (state.aiVocalDiagnostics) {
     updateVocalRuntimeUI(
