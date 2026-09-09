@@ -160,14 +160,17 @@ Gate R2:
 
 ## 8. Batch R3 — Controlled Quality Candidates ถ้ายังมีเสียงหุ่นยนต์
 
-ทำทีละ candidate หลัง Reference Timeline เท่านั้น ห้ามรวมหลายเทคนิคใน build เดียว
+ทำทีละ candidate บน Detail production baseline เท่านั้น ห้ามรวมหลายเทคนิคใน build เดียว
 
 ### Candidate A: Overlap consensus แบบ conservative
 
-- [ ] ใช้ prediction ที่โมเดลคำนวณอยู่แล้วจาก context ซ้อนกัน ห้ามเรียกโมเดลรอบที่สอง
-- [ ] เปลี่ยน mask เฉพาะ bin ที่สอง context เห็นตรงกันว่าเป็น vocal leakage
-- [ ] ห้ามยก mask ขึ้นจนเสียงร้องกลับมา
-- [ ] จำกัด cache หนึ่ง cadenceและ reset ทุก boundary
+- [x] ใช้ prediction ที่โมเดลคำนวณอยู่แล้วจาก context ซ้อนกัน ห้ามเรียกโมเดลรอบที่สอง
+- [x] แยก candidate ให้ใช้ full Detail graph เดิม โดยไม่เปิด compact output-head ที่เคยมี artifact
+- [x] เปลี่ยน mask เฉพาะ bin ที่สอง context เห็นตรงกันว่าเป็น vocal leakage
+- [x] ห้ามยก mask ขึ้นจนเสียงร้องกลับมา
+- [x] จำกัด cache หนึ่ง cadenceและ reset ทุก boundary
+- [x] เปิดเฉพาะ Web; ไม่เปลี่ยน GO model/DSP/protocol
+- [ ] ฟัง candidate ที่แยกแล้วบน Apple และ Windows GTX 1050 Ti
 - [ ] reject หากเครื่องดนตรีกลางเวทีหรือ transient ลดลง
 
 ### Candidate B: Asymmetric mask stability

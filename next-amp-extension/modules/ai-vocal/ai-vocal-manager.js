@@ -6,6 +6,7 @@
 
 import { GoEngineClient } from "./go-engine-client.js";
 import { createVocalModelLoader } from "./model-optimizer.mjs";
+import { applyOverlapConsensusToMask } from "./overlap-consensus.mjs";
 import { createProtectedModelSource, loadProtectedAsset } from "./web-protected-assets.mjs";
 
 const _ = 1024;     // 1024 frequency bins
@@ -16,12 +17,12 @@ const MAX_BROWSER_FRAMES = 18;
 // remains available only as an internal candidate because exact DSP parity
 // did not make it compatible with the model weights used by NextAmp.
 const DEFAULT_VOCAL_PROFILE = "ai_remove";
-// Keep numerical model/audio candidates on the quality baseline until each
-// one has passed a real WebGPU/WebGL listening gate. Exact graph folding is
-// enabled independently: it preserves weights and model equations while
-// removing export-only data-reordering/padding nodes, matching the proven
-// main-branch graph path.
-const EXPERIMENTAL_MODEL_AUDIO_CANDIDATES = false;
+// Isolated Web listening candidate: compare two predictions of the same
+// absolute frames from the existing full model output. This does not enable
+// the rejected compact output head, alter the Detail timeline, or touch GO.
+const WEB_OVERLAP_CONSENSUS_CANDIDATE = true;
+// Exact graph folding is enabled independently: it preserves weights and
+// model equations while removing export-only data-reordering/padding nodes.
 const EXACT_MODEL_GRAPH_OPTIMIZATION = true;
 // Keep the output-head/ROI candidate available for isolated provider tests,
 // but leave it off in production until CoreML and DirectML audio listening
@@ -281,11 +282,10 @@ export class AIVocalManager {
     this.mem = null;
     this.model = null;
     this.modelOutputHead = null;
-    // The optimized Web head exposes the active profile plus its next-window
-    // tail. This reuses an already-computed prediction; it never adds a model
-    // execute. Web and GO use the same bounded consensus rule; GO applies it
-    // in its existing full-output C extractor.
-    this.overlapConsensusEnabled = EXPERIMENTAL_MODEL_AUDIO_CANDIDATES;
+    // Reuse the full Web model's next-window tail without another execute.
+    // This candidate is intentionally isolated from GO and the compact-head
+    // experiment so a listening result has only one possible cause.
+    this.overlapConsensusEnabled = WEB_OVERLAP_CONSENSUS_CANDIDATE;
     this.overlapTail = new Float32Array(2 * MAX_BROWSER_FRAMES * _);
     this.overlapTailValid = false;
     this.rollingMags = null;
@@ -518,13 +518,14 @@ export class AIVocalManager {
 
   extractModelMask(outTensor, processing, includeOverlapWindow = false) {
     const frames = processing.maskFrames || processing.frames;
+    const outputFrames = includeOverlapWindow ? frames * 2 : frames;
     return tf.tidy(() => {
       if (this.modelOutputHead) {
         const localStart = processing.sliceStart - this.modelOutputHead.start;
-        if (localStart < 0 || localStart + frames > this.modelOutputHead.frames) {
+        if (localStart < 0 || localStart + outputFrames > this.modelOutputHead.frames) {
           throw new Error("Optimized model output head does not cover the active profile");
         }
-        if (includeOverlapWindow && this.modelOutputHead.frames >= localStart + (frames * 2)) {
+        if (includeOverlapWindow) {
           return outTensor;
         }
         // The exact output head already crops, transposes, reshapes and applies
@@ -533,8 +534,14 @@ export class AIVocalManager {
         return outTensor.slice([0, localStart, 0], [2, frames, _]);
       }
 
-      const sliced = outTensor.slice([0, 0, processing.sliceStart, 0], [1, _, frames, 2]);
-      return sliced.transpose([0, 3, 2, 1]).reshape([2, frames, _]).sigmoid();
+      if (processing.sliceStart + outputFrames > 64) {
+        throw new Error("Full model output does not cover the overlap window");
+      }
+      const sliced = outTensor.slice(
+        [0, 0, processing.sliceStart, 0],
+        [1, _, outputFrames, 2]
+      );
+      return sliced.transpose([0, 3, 2, 1]).reshape([2, outputFrames, _]).sigmoid();
     });
   }
 
@@ -1397,9 +1404,13 @@ export class AIVocalManager {
         // it for overlap consensus without another model execution. The
         // original graph remains the automatic fallback for incompatible
         // drivers and keeps its baseline readback shape.
+        const modelHeadCoversOverlap = this.modelOutputHead &&
+          this.modelOutputHead.frames >=
+            (processing.sliceStart - this.modelOutputHead.start) + (maskFrames * 2);
+        const fullOutputCoversOverlap = !this.modelOutputHead &&
+          processing.sliceStart + (maskFrames * 2) <= 64;
         const includeOverlapWindow = this.overlapConsensusEnabled &&
-          this.modelOutputHead &&
-          this.modelOutputHead.frames >= maskFrames * 2;
+          (modelHeadCoversOverlap || fullOutputCoversOverlap);
         const maskTensor = this.extractModelMask(outTensor, processing, includeOverlapWindow);
         // The optimized overlap path returns the model output itself to avoid
         // a second GPU slice. Dispose it exactly once after readback.
@@ -1421,10 +1432,15 @@ export class AIVocalManager {
         }
 
         if (includeOverlapWindow) {
-          const localStart = processing.sliceStart - this.modelOutputHead.start;
+          const overlapHeadFrames = this.modelOutputHead
+            ? this.modelOutputHead.frames
+            : maskFrames * 2;
+          const localStart = this.modelOutputHead
+            ? processing.sliceStart - this.modelOutputHead.start
+            : 0;
           applyOverlapConsensusToMask(
             maskData,
-            this.modelOutputHead.frames,
+            overlapHeadFrames,
             localStart,
             maskFrames,
             this.overlapTail,
@@ -1441,13 +1457,15 @@ export class AIVocalManager {
         // readback contains [2, headFrames, bins], while the DSP still takes
         // the compact [2, activeFrames, bins] profile window.
         const maskStart = includeOverlapWindow
-          ? (processing.sliceStart - this.modelOutputHead.start) * _
+          ? (this.modelOutputHead
+              ? processing.sliceStart - this.modelOutputHead.start
+              : 0) * _
           : 0;
         const channelMaskSize = maskFrames * _;
         this.mem.subarray(this.maskPtr0, this.maskPtr0 + channelMaskSize)
           .set(maskData.subarray(maskStart, maskStart + channelMaskSize));
         const maskRightStart = includeOverlapWindow
-          ? this.modelOutputHead.frames * _ + maskStart
+          ? (this.modelOutputHead ? this.modelOutputHead.frames : maskFrames * 2) * _ + maskStart
           : channelMaskSize;
         this.mem.subarray(this.maskPtr1, this.maskPtr1 + channelMaskSize)
           .set(maskData.subarray(maskRightStart, maskRightStart + channelMaskSize));
