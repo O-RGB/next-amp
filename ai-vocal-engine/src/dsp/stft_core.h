@@ -20,6 +20,13 @@ extern "C" {
 #define REFERENCE_OUTPUT_OFFSET_SAMPLES 384
 #define QUEUE_CAPACITY 4
 
+// B1 candidate: keep the implementation compiled in, but leave it disabled
+// until the runtime explicitly supplies a positive floor through the setter.
+// This makes the candidate rollback-safe and preserves the current baseline.
+#ifndef ENABLE_ATTENUATION_FLOOR
+#define ENABLE_ATTENUATION_FLOOR 0
+#endif
+
 // Initialization
 void stft_init(void);
 
@@ -43,6 +50,7 @@ void stft_apply_mask(int num_frames, int mode, float strength);
 void stft_apply_mask_delayed(int delay_chunks, int num_frames, int mode, float strength);
 void stft_backward(int num_frames);
 void stft_backward_masked(int delay_chunks, int num_frames, int mode, float strength);
+void stft_set_attenuation_floor(float epsilon);
 
 // Smart Energy Gating / Vocal Activity Detection (VAD)
 float stft_get_vocal_energy(int num_frames);

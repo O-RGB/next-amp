@@ -85,9 +85,10 @@ WebGPU ตามปกติจะ batch GPU commands แล้วส่งเ�
 
 **ไฟล์:** `ai-vocal-engine/src/dsp/stft_core.c` ฟังก์ชัน `apply_mask_to_spectrum()` บรรทัด ~484–510
 
-- [ ] เพิ่ม feature flag `ENABLE_ATTENUATION_FLOOR` ใน stft_core.h
-- [ ] ใน karaoke path (mode == 0): clamp `gain = max(gain, ATTENUATION_FLOOR)` โดย `ATTENUATION_FLOOR ≈ 0.035` (≈ −29 dB)
-- [ ] expose flag จาก JS ผ่าน `stft_set_attenuation_floor(float epsilon)`
+- [x] เพิ่ม feature flag `ENABLE_ATTENUATION_FLOOR` ใน stft_core.h
+- [x] ใน karaoke path: clamp `gain = max(gain, ATTENUATION_FLOOR)` โดย `ATTENUATION_FLOOR ≈ 0.035` (≈ −29 dB)
+- [x] expose flag จาก JS ผ่าน `stft_set_attenuation_floor(float epsilon)`
+- [x] เปิดเป็น listening candidate ผ่าน `ENABLE_ATTENUATION_FLOOR_CANDIDATE` โดย rollback ได้ทันที
 - [ ] ฟังจริงบน Apple + Windows ก่อน commit เป็น default
 
 **ทำไมดี:**

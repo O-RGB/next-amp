@@ -28,6 +28,10 @@ const EXACT_MODEL_GRAPH_OPTIMIZATION = true;
 // but leave it off in production until CoreML and DirectML audio listening
 // gates confirm that backend-specific slicing does not add vocal artifacts.
 const EXACT_MODEL_OUTPUT_HEAD = false;
+// Phase B1 listening candidate. Keep the current baseline available by
+// changing this single flag back to false; the floor never affects Acapella.
+const ENABLE_ATTENUATION_FLOOR_CANDIDATE = true;
+const ATTENUATION_FLOOR = 0.035;
 const VOCAL_PROFILES = Object.freeze({
   // Retained as a rollback candidate. This shorter cadence still runs the
   // full 64-frame model and therefore invokes inference more often.
@@ -947,6 +951,14 @@ export class AIVocalManager {
       this.maskPtr1 = this.exp.stft_get_mask_ptr(1) / 4;
       this.interleavedPtr = this.exp.stft_get_interleaved_mags_ptr ? (this.exp.stft_get_interleaved_mags_ptr() / 4) : 0;
       this.normInputPtr = this.exp.stft_get_norm_input_ptr ? (this.exp.stft_get_norm_input_ptr() / 4) : 0;
+
+      // B1 is a runtime candidate in the DSP layer. A zero value explicitly
+      // disables it, so old behavior remains one-line rollback away.
+      if (this.exp.stft_set_attenuation_floor) {
+        this.exp.stft_set_attenuation_floor(
+          ENABLE_ATTENUATION_FLOOR_CANDIDATE ? ATTENUATION_FLOOR : 0
+        );
+      }
 
       this.setStatus("Starting GPU...");
 

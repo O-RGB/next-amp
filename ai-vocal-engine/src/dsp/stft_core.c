@@ -58,6 +58,8 @@ static float g_rolling_mags[NUM_BINS][MAX_FRAMES][2];
 static float g_norm_input[NUM_BINS][MAX_FRAMES][2];
 static int g_rolling_start = 0;
 static int g_reference_timeline_active = 0;
+static int g_attenuation_floor_enabled = ENABLE_ATTENUATION_FLOOR;
+static float g_attenuation_floor = 0.035f;
 
 // Working buffer for in-place FFT
 static float g_work_real[FFT_SIZE];
@@ -408,6 +410,16 @@ float* stft_get_norm_input_ptr(void) {
     return (float*)g_norm_input;
 }
 
+void stft_set_attenuation_floor(float epsilon) {
+    if (!isfinite(epsilon) || epsilon <= 0.0f) {
+        g_attenuation_floor_enabled = 0;
+        return;
+    }
+    if (epsilon > 1.0f) epsilon = 1.0f;
+    g_attenuation_floor = epsilon;
+    g_attenuation_floor_enabled = 1;
+}
+
 float stft_get_rolling_max(void) {
     float max_value = 1e-4f;
     for (int k = 0; k < NUM_BINS; k++) {
@@ -496,6 +508,12 @@ static void apply_mask_to_spectrum(const float* source_real, const float* source
     } else {
         for (; k + 3 < NUM_BINS; k += 4) {
             v128_t gain = wasm_f32x4_mul(wasm_v128_load(&mask[k]), vstrength);
+            // The manager maps mode 1 to Karaoke (instrumental mask). Keep a
+            // small residual floor there to avoid hollow/robotic decay while
+            // leaving Acapella (mode 0) untouched.
+            if (g_attenuation_floor_enabled) {
+                gain = wasm_f32x4_max(gain, wasm_f32x4_splat(g_attenuation_floor));
+            }
             wasm_v128_store(&destination_real[k], wasm_f32x4_mul(wasm_v128_load(&source_real[k]), gain));
             wasm_v128_store(&destination_imag[k], wasm_f32x4_mul(wasm_v128_load(&source_imag[k]), gain));
         }
@@ -504,6 +522,9 @@ static void apply_mask_to_spectrum(const float* source_real, const float* source
     for (; k < NUM_BINS; k++) {
         float gain = mode == 0 ? 1.0f - (mask[k] * strength) : mask[k] * strength;
         if (gain < 0.0f) gain = 0.0f;
+        if (mode == 1 && g_attenuation_floor_enabled && gain < g_attenuation_floor) {
+            gain = g_attenuation_floor;
+        }
         destination_real[k] = source_real[k] * gain;
         destination_imag[k] = source_imag[k] * gain;
     }
