@@ -869,6 +869,70 @@
         </div>
 
         <div
+          class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-10 shadow-lg"
+        >
+          <div
+            class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold"
+          >
+            <div class="flex items-center gap-1">
+              <i class="ph-bold ph-microphone-slash"></i>
+              <span>AI VOCAL / KARAOKE</span>
+            </div>
+            <span id="ai-vocal-status" class="text-[8px] text-gray-400"
+              >OFF • NOT LOADED</span
+            >
+          </div>
+          <div class="p-2 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <span
+                id="ai-vocal-hardware"
+                class="font-pixel text-[8px] text-gray-500 truncate"
+                >AI engine is optional</span
+              >
+              <div class="flex gap-1 shrink-0">
+                <button
+                  id="btn-ai-open"
+                  class="win-btn h-5 px-2 text-[9px] font-bold gap-1"
+                  title="Load AI Vocal only when enabled"
+                >
+                  <i class="ph-bold ph-power"></i> OPEN AI
+                </button>
+                <button
+                  id="btn-ai-close"
+                  class="win-btn h-5 px-2 text-[9px] font-bold gap-1 hidden"
+                  title="Unload AI model and free GPU memory"
+                >
+                  <i class="ph-bold ph-x"></i> CLOSE
+                </button>
+              </div>
+            </div>
+            <div id="ai-vocal-controls" class="grid grid-cols-3 gap-1 hidden">
+              <button
+                id="btn-ai-original"
+                class="retro-txt-btn h-5 text-[8px] active"
+                type="button"
+              >
+                ORIGINAL
+              </button>
+              <button
+                id="btn-ai-karaoke"
+                class="retro-txt-btn h-5 text-[8px]"
+                type="button"
+              >
+                <i class="ph-bold ph-microphone-slash mr-0.5"></i>KARAOKE
+              </button>
+              <button
+                id="btn-ai-acapella"
+                class="retro-txt-btn h-5 text-[8px]"
+                type="button"
+              >
+                <i class="ph-bold ph-microphone mr-0.5"></i>VOCAL
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
           class="w-full h-40 bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-0 shadow-lg flex-1 min-h-0 flex flex-col mt-2"
         >
           <div
