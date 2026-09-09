@@ -38,8 +38,8 @@ static float g_spec_real[2][MAX_FRAMES][NUM_BINS];
 static float g_spec_imag[2][MAX_FRAMES][NUM_BINS];
 
 // Zero-Copy Internal Lookahead Ring Buffer for Complex Spectra
-static float g_queue_real[2][QUEUE_CAPACITY][DEFAULT_CHUNK_FRAMES][NUM_BINS];
-static float g_queue_imag[2][QUEUE_CAPACITY][DEFAULT_CHUNK_FRAMES][NUM_BINS];
+static float g_queue_real[2][QUEUE_CAPACITY][REFERENCE_SPECTRUM_FRAMES][NUM_BINS];
+static float g_queue_imag[2][QUEUE_CAPACITY][REFERENCE_SPECTRUM_FRAMES][NUM_BINS];
 static int g_queue_head = 0;
 
 // Direct Interleaved Magnitudes: [NUM_BINS][DEFAULT_CHUNK_FRAMES][2]
@@ -234,11 +234,21 @@ float stft_get_chunk_peak(void) {
     return g_chunk_peak;
 }
 
-void stft_forward(int num_frames) {
-    if (num_frames <= 0 || num_frames > MAX_FRAMES) num_frames = DEFAULT_CHUNK_FRAMES;
+static void stft_forward_internal(int spectrum_frames, int mag_start_frame,
+                                   int mag_frames, int rolling_advance) {
+    if (spectrum_frames <= 0 || spectrum_frames > MAX_FRAMES ||
+        spectrum_frames > REFERENCE_SPECTRUM_FRAMES ||
+        mag_start_frame < 0 || mag_frames <= 0 ||
+        mag_start_frame + mag_frames > spectrum_frames ||
+        rolling_advance <= 0 || rolling_advance > MAX_FRAMES) {
+        spectrum_frames = DEFAULT_CHUNK_FRAMES;
+        mag_start_frame = 0;
+        mag_frames = DEFAULT_CHUNK_FRAMES;
+        rolling_advance = DEFAULT_CHUNK_FRAMES;
+    }
 
     for (int ch = 0; ch < 2; ch++) {
-        for (int f = 0; f < num_frames; f++) {
+        for (int f = 0; f < spectrum_frames; f++) {
             int offset = f * HOP_SIZE;
 
             // Apply analysis window
@@ -259,8 +269,13 @@ void stft_forward(int num_frames) {
             // Run forward FFT
             fft_radix2(g_work_real, g_work_imag, FFT_SIZE, 0);
 
-            // Store complex spectrum in internal queue and compute magnitudes
-            float* mag_out = &g_magnitudes[ch][f * NUM_BINS];
+            // Store the full spectrum in the queue. Only the selected
+            // magnitude range is exposed to the model; the reference path
+            // keeps two boundary spectra outside that range.
+            float* mag_out = (f >= mag_start_frame &&
+                              f < mag_start_frame + mag_frames)
+                ? &g_magnitudes[ch][(f - mag_start_frame) * NUM_BINS]
+                : NULL;
             int k = 0;
 #if USE_SIMD
             const v128_t vepsilon = wasm_f32x4_splat(1e-9f);
@@ -274,7 +289,7 @@ void stft_forward(int num_frames) {
                 v128_t magnitude = wasm_f32x4_sqrt(wasm_f32x4_add(
                     wasm_f32x4_mul(real, real),
                     wasm_f32x4_add(wasm_f32x4_mul(imag, imag), vepsilon)));
-                wasm_v128_store(&mag_out[k], magnitude);
+                if (mag_out) wasm_v128_store(&mag_out[k], magnitude);
             }
 #endif
             for (; k < NUM_BINS; k++) {
@@ -284,7 +299,7 @@ void stft_forward(int num_frames) {
                 g_spec_imag[ch][f][k] = im;
                 g_queue_real[ch][g_queue_head][f][k] = r;
                 g_queue_imag[ch][g_queue_head][f][k] = im;
-                mag_out[k] = sqrtf(r * r + im * im + 1e-9f);
+                if (mag_out) mag_out[k] = sqrtf(r * r + im * im + 1e-9f);
             }
         }
     }
@@ -295,15 +310,17 @@ void stft_forward(int num_frames) {
     // Direct C-level 64-Frame Rolling Window & Peak Tracking: [NUM_BINS][64][2]
     // Replaces all JavaScript tensor slice, concat, mul, and memory thrashing with 0.02ms C loop!
     float peak = 1e-5f;
+    int new_start = (g_rolling_start + rolling_advance) % MAX_FRAMES;
+    int append_start = (new_start + MAX_FRAMES - mag_frames) % MAX_FRAMES;
     int p = 0;
     for (int k = 0; k < NUM_BINS; k++) {
-        // Write the new chunk into the slots that just expired from the
-        // logical window. The frame ring removes the 48-frame memmove that
-        // previously ran once per bin on every chunk.
-        for (int f = 0; f < num_frames; f++) {
+        // Append at the end of the next logical window. For the reference
+        // cadence, the window advances 15 frames while 16 new magnitudes are
+        // supplied, matching old[15:63] + new[16].
+        for (int f = 0; f < mag_frames; f++) {
             float v0 = g_magnitudes[0][f * NUM_BINS + k];
             float v1 = g_magnitudes[1][f * NUM_BINS + k];
-            int slot = (g_rolling_start + f) % MAX_FRAMES;
+            int slot = (append_start + f) % MAX_FRAMES;
             g_rolling_mags[k][slot][0] = v0;
             g_rolling_mags[k][slot][1] = v1;
             g_interleaved_mags[p++] = v0;
@@ -312,12 +329,43 @@ void stft_forward(int num_frames) {
             if (v1 > peak) peak = v1;
         }
     }
-    g_rolling_start = (g_rolling_start + num_frames) % MAX_FRAMES;
+    g_rolling_start = new_start;
     g_chunk_peak = peak;
+}
+
+void stft_forward(int num_frames) {
+    if (num_frames <= 0 || num_frames > MAX_FRAMES) num_frames = DEFAULT_CHUNK_FRAMES;
+    stft_forward_internal(num_frames, 0, num_frames, num_frames);
+}
+
+// Reference-compatible cadence: compute 18 boundary-aware spectra, expose
+// spectrum frames 2..17 as 16 magnitude frames, and advance the model window
+// by 15 hops. The manager consumes the 18-frame delayed spectrum separately.
+void stft_forward_reference(void) {
+    stft_forward_internal(
+        REFERENCE_SPECTRUM_FRAMES,
+        REFERENCE_MAG_START_FRAME,
+        REFERENCE_MAG_FRAMES,
+        REFERENCE_ROLLING_ADVANCE
+    );
 }
 
 float* stft_get_norm_input_ptr(void) {
     return (float*)g_norm_input;
+}
+
+float stft_get_rolling_max(void) {
+    float max_value = 1e-4f;
+    for (int k = 0; k < NUM_BINS; k++) {
+        for (int f = 0; f < MAX_FRAMES; f++) {
+            int slot = (g_rolling_start + f) % MAX_FRAMES;
+            float v0 = g_rolling_mags[k][slot][0];
+            float v1 = g_rolling_mags[k][slot][1];
+            if (v0 > max_value) max_value = v0;
+            if (v1 > max_value) max_value = v1;
+        }
+    }
+    return max_value;
 }
 
 void stft_prepare_norm_input(float inv_max) {

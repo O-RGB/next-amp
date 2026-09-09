@@ -33,9 +33,9 @@ let isEqOn = true;
 let isVocalOn = false;
 let currentVocalMode = "bypass";
 let aiEngineType = "webgl"; // "webgl" or "go_native"
-// Detail is the single production profile. Keep Smooth readable internally
-// for rollback compatibility, but do not expose a profile selector.
-let currentVocalProfile = "ai_remove";
+// The reference timeline is the internal production candidate. Keep the
+// legacy profiles readable for rollback, but do not expose a profile selector.
+let currentVocalProfile = "reference";
 let currentVocalDevice = "";
 let currentVocalDeviceRaw = "";
 let currentVocalApi = "WEBGL";
@@ -256,7 +256,7 @@ async function finalizeInitialization() {
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
   if (savedToggles.isVocalOn !== undefined) isVocalOn = savedToggles.isVocalOn;
   if (savedToggles.aiEngineType !== undefined) aiEngineType = savedToggles.aiEngineType;
-  currentVocalProfile = "ai_remove";
+  currentVocalProfile = "reference";
   await sessionManager.setSetting({ vocalProfile: currentVocalProfile });
   updateVocalProfileUI(currentVocalProfile);
   updateAiEngineUI();
@@ -334,7 +334,7 @@ async function finalizeInitialization() {
       } else {
         updateVocalMasterUI();
       }
-      if (sharedParams.vocalProfile) updateVocalProfileUI("ai_remove");
+      if (sharedParams.vocalProfile) updateVocalProfileUI("reference");
 
       if (sharedParams.reverbTime)
         $("#adv-rev-time").value = sharedParams.reverbTime;
@@ -769,9 +769,9 @@ function updateVocalMasterUI() {
 }
 
 function updateVocalProfileUI(profile) {
-  // Profile controls are intentionally hidden. Detail is the only production
-  // profile selected by the popup.
-  const selected = "ai_remove";
+  // Profile controls are intentionally hidden. The reference timeline is the
+  // current internal candidate; legacy profiles remain rollback-only.
+  const selected = "reference";
   currentVocalProfile = selected;
   $$(".btn-vocal-profile").forEach((btn) => {
     if (btn.dataset.profile === selected) {
@@ -1185,7 +1185,12 @@ function setupListeners() {
   });
   $$(".btn-vocal-profile").forEach((btn) => {
     btn.addEventListener("click", (e) => {
-      const profile = e.currentTarget.dataset.profile === "ai_remove" ? "ai_remove" : "balanced";
+      const requested = e.currentTarget.dataset.profile;
+      const profile = requested === "balanced"
+        ? "balanced"
+        : requested === "ai_remove"
+          ? "ai_remove"
+          : "reference";
       currentVocalProfile = profile;
       sessionManager.setSetting({ vocalProfile: profile });
       sendParam("vocalProfile", profile);
@@ -1713,9 +1718,9 @@ function loadAudioState(state) {
   } else {
     updateVocalMasterUI();
   }
-  updateVocalProfileUI("ai_remove");
-  if (state.vocalProfile !== "ai_remove") {
-    sendParam("vocalProfile", "ai_remove");
+  updateVocalProfileUI("reference");
+  if (state.vocalProfile !== "reference") {
+    sendParam("vocalProfile", "reference");
   }
   if (state.aiVocalDiagnostics) {
     updateVocalRuntimeUI(

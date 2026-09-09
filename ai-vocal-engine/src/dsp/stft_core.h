@@ -11,6 +11,11 @@ extern "C" {
 #define MAX_FRAMES 64
 #define DEFAULT_CHUNK_FRAMES 16
 #define CHUNK_SAMPLES (DEFAULT_CHUNK_FRAMES * HOP_SIZE) // 16 * 512 = 8192 samples
+#define REFERENCE_SPECTRUM_FRAMES 18
+#define REFERENCE_MAG_FRAMES 16
+#define REFERENCE_MAG_START_FRAME 2
+#define REFERENCE_ROLLING_ADVANCE 15
+#define REFERENCE_CHUNK_SAMPLES (REFERENCE_ROLLING_ADVANCE * HOP_SIZE) // 15 * 512 = 7680 samples
 #define QUEUE_CAPACITY 4
 
 // Initialization
@@ -25,10 +30,12 @@ float* stft_get_spec_real_ptr(int channel);
 float* stft_get_interleaved_mags_ptr(void);
 float stft_get_chunk_peak(void);
 float* stft_get_norm_input_ptr(void);
+float stft_get_rolling_max(void);
 void stft_prepare_norm_input(float inv_max);
 
 // Processing steps
 void stft_forward(int num_frames);
+void stft_forward_reference(void);
 void stft_apply_mask(int num_frames, int mode, float strength);
 void stft_apply_mask_delayed(int delay_chunks, int num_frames, int mode, float strength);
 void stft_backward(int num_frames);

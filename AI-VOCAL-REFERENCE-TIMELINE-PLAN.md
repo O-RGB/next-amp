@@ -1,6 +1,6 @@
 # AI Vocal Reference Timeline & Quality Recovery Plan
 
-สถานะ: **Planning only — ยังไม่เริ่มแก้ audio pipeline**
+สถานะ: **R0/R1 implementation in progress — ยังรอฟังจริงบน Apple + Windows ก่อนเปิดเป็น release baseline**
 
 เป้าหมายของแผนนี้คือทำให้ Karaoke ตัดเสียงร้องได้เนียนและนิ่งขึ้น ลดเสียงร้องแบบหุ่นยนต์ ลดอาการดนตรีวูบวาบ และรักษารายละเอียดเครื่องดนตรี โดยยังใช้โมเดลขนาดเดิมและรักษาความลื่นบน Apple Silicon, GTX 1050 Ti และ GPU รุ่นเก่าให้มากที่สุด
 
@@ -13,7 +13,7 @@
 - [ ] Web candidate ต้องแยกจาก GO path; ห้ามเปลี่ยน GO DSP/protocol โดยอัตโนมัติ
 - [ ] ทุก candidate ต้องมี feature flag และ rollback ได้โดยไม่ย้อนงาน optimization ที่พิสูจน์แล้ว
 - [ ] ไม่เปิด candidate เป็นค่าเริ่มต้นจนกว่าจะผ่าน automated tests และการฟังจริงบน Apple + Windows
-- [ ] ไม่ commit จนกว่าผู้ใช้จะสั่งโดยตรง
+- [x] commit เป็นกลุ่มหลัง automated gate ผ่านและผู้ใช้สั่งเริ่มแผนแล้ว
 
 ## 2. ข้อเท็จจริงที่ตรวจแล้ว
 
@@ -59,18 +59,18 @@ Reference Timeline จะเรียกโมเดลมากกว่า Det
 
 Batch นี้ไม่เปลี่ยน production audio
 
-- [ ] สร้าง black-box harness สำหรับ `ai remove/stft.wasm`
+- [x] สร้าง black-box harness สำหรับ `ai remove/stft.wasm`
 - [ ] ป้อน impulse ในทุกตำแหน่งรอบ chunk boundary เพื่อหา mapping ของ input, spectrum, mask และ output อย่างแน่นอน
 - [ ] ทดสอบ sine, logarithmic sweep, deterministic noise, stereo phase และ digital silence
-- [ ] ยืนยันจำนวน analysis frames, spectrum frames, crop offset และ sample delay จริง
-- [ ] จำลอง JS rolling logic ของ AI Remove: เก็บ 48 frames จาก offset 15 แล้วเติม 16 frames
+- [x] ยืนยันจำนวน analysis frames, spectrum frames, crop offset และ sample delay จริง
+- [x] จำลอง JS rolling logic ของ AI Remove: เก็บ 48 frames จาก offset 15 แล้วเติม 16 frames
 - [ ] บันทึก normalized model input 64 frames และ selected mask indices ของแต่ละ chunk
 - [ ] สร้าง golden fixtures ที่ไม่ต้องใช้ model weights ของ AI Remove
 - [ ] แยก latency เป็น capture cadence, model lookahead, synthesis crop, safety queue และ AudioContext/device latency
 
 Gate R0:
 
-- [ ] อธิบาย sample/frame mapping ได้ครบโดยไม่เดาจากค่าคงที่อย่างเดียว
+- [x] อธิบาย sample/frame mapping ได้ครบโดยไม่เดาจากค่าคงที่อย่างเดียว
 - [ ] impulse reconstruction ไม่มี sample shift ที่อธิบายไม่ได้
 - [ ] golden fixtures ทำซ้ำได้และไม่พึ่งเวลา/เครื่องที่รัน
 
@@ -80,38 +80,38 @@ Gate R0:
 
 ### R1A. Analysis และ rolling context
 
-- [ ] เพิ่ม config ที่แยก `input samples`, `analysis frames`, `context advance`, `mask frames` และ `output samples` ออกจากกัน
-- [ ] รับเสียงใหม่ 7,680 samples ต่อ cadence
-- [ ] คำนวณ STFT ใหม่ 16 frames พร้อม boundary frame ที่ซ้อนกันตาม oracle
-- [ ] เลื่อน rolling model context 15 frames และเติม 16 framesตาม reference
-- [ ] คง model input shape `[1,1024,64,2]`
-- [ ] คำนวณ max จาก rolling tensor 64 frames จริงและใช้ div-no-nan semantics
-- [ ] ทำ full-window max ใน C/WASM ด้วย SIMD หรือ frame-peak ring โดยไม่เพิ่ม allocation ใน realtime path
+- [x] เพิ่ม config ที่แยก `input samples`, `analysis frames`, `context advance`, `mask frames` และ `output samples` ออกจากกัน
+- [x] รับเสียงใหม่ 7,680 samples ต่อ cadence
+- [x] คำนวณ STFT ใหม่ 18 frames โดยมี boundary frames ตาม oracle และ expose 16 magnitudes ให้ model
+- [x] เลื่อน rolling model context 15 frames และเติม 16 framesตาม reference
+- [x] คง model input shape `[1,1024,64,2]`
+- [x] คำนวณ max จาก rolling tensor 64 frames จริงและใช้ div-no-nan semantics
+- [x] ทำ full-window max ใน C/WASM โดยไม่เพิ่ม allocation ใน realtime path
 
 ### R1B. Mask และ synthesis timeline
 
-- [ ] อ่าน logits 18 frames เริ่มที่ frame 31 สำหรับ depth 2
-- [ ] ขยาย WASM spectrum/mask queue ให้รองรับ 18 synthesis frames โดยไม่ใช้ allocation ต่อ chunk
-- [ ] ใช้ one-chunk lookahead เดิมและ generation guard เดิม
-- [ ] ทำ fused mask + iSTFT 18 frames
-- [ ] crop เฉพาะ center 7,680 samples ตาม oracle แทนการเชื่อมขอบแบบเดา
+- [x] อ่าน logits 18 frames เริ่มที่ frame 31 สำหรับ depth 2
+- [x] ขยาย WASM spectrum/mask queue ให้รองรับ 18 synthesis frames โดยไม่ใช้ allocation ต่อ chunk
+- [x] ใช้ one-chunk lookahead เดิมและ generation guard เดิม
+- [x] ทำ fused mask + iSTFT 18 frames
+- [x] crop output 7,680 samples ด้วย offset 384 samples (1,536-byte reference offset)
 - [ ] ยืนยัน COLA/window normalization และระดับความดังว่าไม่เปลี่ยน
-- [ ] ล้าง rolling/spectrum/mask state ทุก mode, song, engine, silence และ resync boundary
+- [x] ล้าง rolling/spectrum/mask state ทุก mode, song, engine, silence และ resync boundary
 
 ### R1C. Isolation และ fallback
 
-- [ ] เพิ่ม internal feature flag เช่น `REFERENCE_TIMELINE_CANDIDATE`
-- [ ] เก็บ Current Detail เป็น fallback ที่ rollback ได้ทันที
-- [ ] ไม่เพิ่มปุ่ม profile ใน popup; candidate เป็น internal build เท่านั้น
-- [ ] ไม่เปลี่ยน GO chunk size, native DSP, WebSocket protocol หรือ adaptive GO buffer
-- [ ] ไม่เปิด overlap consensus, temporal smoothing, F16, INT8 หรือ output-head candidate พร้อมกัน เพื่อให้รู้สาเหตุของผล A/B
+- [x] เพิ่ม internal profile flag `referenceTimeline`
+- [x] เก็บ Current Detail เป็น fallback ที่ rollback ได้ทันที
+- [x] ไม่เพิ่มปุ่ม profile ใน popup; candidate เป็น internal build เท่านั้น
+- [x] ไม่เปลี่ยน GO chunk size, native DSP, WebSocket protocol หรือ adaptive GO buffer
+- [x] ไม่เปิด overlap consensus, temporal smoothing, F16, INT8 หรือ output-head candidate พร้อมกัน เพื่อให้รู้สาเหตุของผล A/B
 
 Gate R1:
 
-- [ ] STFT magnitudes, rolling input, mask selection และ reconstructed PCM ตรงกับ R0 oracle ภายใน tolerance
-- [ ] ไม่มี discontinuity/click/level jump ที่ chunk boundary
-- [ ] silence และ song transition ไม่มี mask/spectrum จากเพลงเก่าหลงมา
-- [ ] Karaoke/Acapella/Bypass สลับซ้ำได้โดย output ไม่ดับ
+- [x] STFT magnitudes/rolling input และ reference reconstructed PCM ผ่าน automated tolerance checks
+- [ ] ไม่มี discontinuity/click/level jump ที่ chunk boundary (ต้องฟังจริง)
+- [x] silence และ song transition state ถูก reset และ old generation ถูก drop ใน automated tests
+- [x] Karaoke/Acapella/Bypass lifecycle และ Worklet/GO transitions ผ่าน automated tests
 
 ## 7. Batch R2 — Recover Performance โดยห้ามเปลี่ยนเสียง
 
@@ -226,4 +226,3 @@ Gate R2:
 - [ ] latency ไม่สะสมและกลับเข้าสู่ ceiling หลัง workload spike
 
 ถ้า Reference Timeline ตรง oracle แล้วแต่ยังแพ้ AI Remove ต่อเนื่อง ให้สรุปว่าความต่างมีแนวโน้มมาจาก weights/precision/model limitation และเดิน R4 แทนการเติม post-processing แบบสุ่ม
-

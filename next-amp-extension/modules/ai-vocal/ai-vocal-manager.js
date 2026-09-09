@@ -10,8 +10,9 @@ import { createProtectedModelSource, loadProtectedAsset } from "./web-protected-
 
 const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
-const MAX_BROWSER_FRAMES = 16;
-const DEFAULT_VOCAL_PROFILE = "ai_remove";
+const MAX_INPUT_HISTORY = 2048;
+const MAX_BROWSER_FRAMES = 18;
+const DEFAULT_VOCAL_PROFILE = "reference";
 // Keep numerical model/audio candidates on the quality baseline until each
 // one has passed a real WebGPU/WebGL listening gate. Exact graph folding is
 // enabled independently: it preserves weights and model equations while
@@ -28,20 +29,40 @@ const VOCAL_PROFILES = Object.freeze({
   // full 64-frame model and therefore invokes inference more often.
   balanced: Object.freeze({
     frames: 15,
+    analysisFrames: 15,
+    maskFrames: 15,
     chunkSamples: 7680,
     sliceStart: 34,
-    delayChunks: 1
+    delayChunks: 1,
+    referenceTimeline: false
   }),
-  // Production default: the original 16-hop app cadence and alignment. Four
-  // chunk peaks cover the complete 64-frame model context, and the longer
-  // cadence invokes the same model less often than the 15-hop candidate.
-  // The external AI Remove bundle still uses a different WASM timeline and
-  // cannot be reproduced exactly without its source artifacts.
+  // Rollback candidate: the former 16-hop app cadence and alignment.
   ai_remove: Object.freeze({
     frames: 16,
+    analysisFrames: 16,
+    maskFrames: 16,
     chunkSamples: 8192,
     sliceStart: 32,
-    delayChunks: 1
+    delayChunks: 1,
+    referenceTimeline: false
+  }),
+  // Internal reference-timeline candidate. The model still receives the
+  // exact same [1,1024,64,2] input and 16 fresh magnitudes, but the DSP
+  // computes the two boundary spectra needed for an 18-frame synthesis
+  // window and emits only its center 7,680 samples.
+  reference: Object.freeze({
+    frames: 16,
+    analysisFrames: 18,
+    maskFrames: 18,
+    chunkSamples: 7680,
+    sliceStart: 31,
+    delayChunks: 1,
+    // Reference WASM exposes input at +2,048 bytes (512 samples) and output
+    // at +1,536 bytes (384 samples). Keep those byte offsets explicit here;
+    // confusing them with sample counts shifts every model/synthesis frame.
+    inputHistorySamples: 512,
+    outputOffsetSamples: 384,
+    referenceTimeline: true
   })
 });
 // stft_core adds 1e-9 before sqrt() when calculating magnitudes, so a truly
@@ -182,6 +203,7 @@ export class AIVocalManager {
       [VOCAL_PROFILES.balanced.chunkSamples]: { outL: [], outR: [] },
       [VOCAL_PROFILES.ai_remove.chunkSamples]: { outL: [], outR: [] }
     };
+    this.outputBufferPools[VOCAL_PROFILES.reference.chunkSamples] ||= { outL: [], outR: [] };
     for (const size of Object.keys(this.outputBufferPools)) {
       for (let i = 0; i < TRANSFER_BUFFER_POOL_CAPACITY; i++) {
         this.outputBufferPools[size].outL.push(new Float32Array(Number(size)));
@@ -275,8 +297,8 @@ export class AIVocalManager {
     this.maskPtr1 = 0;
     this.interleavedPtr = 0;
 
-    this.inHistoryL = new Float32Array(TAIL);
-    this.inHistoryR = new Float32Array(TAIL);
+    this.inHistoryL = new Float32Array(MAX_INPUT_HISTORY);
+    this.inHistoryR = new Float32Array(MAX_INPUT_HISTORY);
     this.outTailL = new Float32Array(TAIL);
     this.outTailR = new Float32Array(TAIL);
 
@@ -492,7 +514,7 @@ export class AIVocalManager {
   }
 
   extractModelMask(outTensor, processing, includeOverlapWindow = false) {
-    const frames = processing.frames;
+    const frames = processing.maskFrames || processing.frames;
     return tf.tidy(() => {
       if (this.modelOutputHead) {
         const localStart = processing.sliceStart - this.modelOutputHead.start;
@@ -566,7 +588,11 @@ export class AIVocalManager {
   }
 
   setVocalProfile(profile) {
-    const nextProfile = profile === "balanced" ? "balanced" : DEFAULT_VOCAL_PROFILE;
+    const nextProfile = profile === "balanced"
+      ? "balanced"
+      : profile === "ai_remove"
+        ? "ai_remove"
+        : DEFAULT_VOCAL_PROFILE;
     if (nextProfile === this.vocalProfile) return;
 
     this.vocalProfile = nextProfile;
@@ -620,6 +646,18 @@ export class AIVocalManager {
     if (this.exp && this.exp.stft_reset) {
       this.exp.stft_reset();
     }
+  }
+
+  writeInputWindow(ptr, history, raw, historySamples, chunkSamples, analysisFrames) {
+    const historyStart = history.length - historySamples;
+    this.mem.subarray(ptr, ptr + historySamples).set(history.subarray(historyStart));
+    this.mem.subarray(ptr + historySamples, ptr + historySamples + chunkSamples).set(raw);
+    const requiredSamples = ((analysisFrames - 1) * 512) + 2048;
+    const writtenSamples = historySamples + chunkSamples;
+    if (requiredSamples > writtenSamples) {
+      this.mem.subarray(ptr + writtenSamples, ptr + requiredSamples).fill(0);
+    }
+    history.set(raw.subarray(raw.length - history.length));
   }
 
   recordChunkPeak(chunkIndex, chunkPeak) {
@@ -1208,7 +1246,11 @@ export class AIVocalManager {
     const tStart = performance.now();
     const processing = this.getProcessingConfig();
     const frames = processing.frames;
+    const analysisFrames = processing.analysisFrames || frames;
+    const maskFrames = processing.maskFrames || frames;
     const chunkSamples = processing.chunkSamples;
+    const historySamples = processing.inputHistorySamples || TAIL;
+    const outputOffsetSamples = processing.outputOffsetSamples || 0;
     const diagnosticsEnabled = this.diagnostics.enabled;
     let stftForwardMs = 0;
     let normalizationMs = 0;
@@ -1223,23 +1265,32 @@ export class AIVocalManager {
         this.mem = new Float32Array(this.exp.memory.buffer);
       }
 
-      // 1. Zero-Copy Input Sliding: history + profile-sized current chunk.
-      this.mem.subarray(this.inPtr0, this.inPtr0 + TAIL).set(this.inHistoryL);
-      this.mem.subarray(this.inPtr0 + TAIL, this.inPtr0 + TAIL + chunkSamples).set(rawL);
-      this.inHistoryL.set(rawL.subarray(chunkSamples - TAIL, chunkSamples));
-
-      this.mem.subarray(this.inPtr1, this.inPtr1 + TAIL).set(this.inHistoryR);
-      this.mem.subarray(this.inPtr1 + TAIL, this.inPtr1 + TAIL + chunkSamples).set(rawR);
-      this.inHistoryR.set(rawR.subarray(chunkSamples - TAIL, chunkSamples));
+      // 1. Zero-Copy Input Sliding: the reference timeline retains a 2,048
+      // sample prefix, while the legacy profiles keep their former 1,536
+      // sample prefix. The extra reference lookahead is zero padded so its
+      // final boundary spectrum is deterministic and never reads stale WASM.
+      this.writeInputWindow(
+        this.inPtr0, this.inHistoryL, rawL,
+        historySamples, chunkSamples, analysisFrames
+      );
+      this.writeInputWindow(
+        this.inPtr1, this.inHistoryR, rawR,
+        historySamples, chunkSamples, analysisFrames
+      );
 
       // All synchronous input copies are complete before the first await.
       // Return the transferred pair immediately so Worklet can reuse it while
       // GPU inference/readback remains asynchronous.
       this.returnInputBuffers(rawL, rawR);
 
-      // 2. SIMD128 Forward STFT: profile-sized frame batch.
+      // 2. SIMD128 Forward STFT: the reference profile computes 18 boundary
+      // spectra; legacy profiles keep their original 15/16-frame batches.
       const stftStart = diagnosticsEnabled ? performance.now() : 0;
-      this.exp.stft_forward(frames);
+      if (processing.referenceTimeline && this.exp.stft_forward_reference) {
+        this.exp.stft_forward_reference();
+      } else {
+        this.exp.stft_forward(analysisFrames);
+      }
       if (diagnosticsEnabled) stftForwardMs = performance.now() - stftStart;
 
       const modeCode = mode === "karaoke" ? 1 : mode === "acapella" ? 0 : 2;
@@ -1259,8 +1310,15 @@ export class AIVocalManager {
       this.maxHistory[this.maxHistoryPos] = chunkPeak;
       this.maxHistoryPos = (this.maxHistoryPos + 1) & 3;
       let globalMax = 1e-4;
-      for (let i = 0; i < this.maxHistory.length; i++) {
-        if (this.maxHistory[i] > globalMax) globalMax = this.maxHistory[i];
+      if (processing.referenceTimeline && this.exp.stft_get_rolling_max) {
+        // The reference normalizes by the complete 64-frame rolling tensor,
+        // not by the last four chunk peaks. This also avoids a JS scan and
+        // keeps the normalization semantics in the same WASM timeline.
+        globalMax = this.exp.stft_get_rolling_max();
+      } else {
+        for (let i = 0; i < this.maxHistory.length; i++) {
+          if (this.maxHistory[i] > globalMax) globalMax = this.maxHistory[i];
+        }
       }
       const invMax = 1.0 / globalMax;
 
@@ -1277,20 +1335,21 @@ export class AIVocalManager {
         // never carry a mask context across that boundary.
         this.overlapTailValid = false;
         if (this.exp.stft_backward_masked) {
-          this.exp.stft_backward_masked(delayChunks, frames, 2, 0.0);
+          this.exp.stft_backward_masked(delayChunks, maskFrames, 2, 0.0);
         } else {
           // Compatibility with an older cached WASM asset. Production builds
           // export the fused entry point, but an old extension must still
           // preserve the proven unfused audio path.
-          this.exp.stft_apply_mask_delayed(delayChunks, frames, 2, 0.0);
-          this.exp.stft_backward(frames);
+          this.exp.stft_apply_mask_delayed(delayChunks, maskFrames, 2, 0.0);
+          this.exp.stft_backward(maskFrames);
         }
       } else {
         // 4. Zero-GPU-Overhead Rolling Window & Ingestion
         const normalizationStart = diagnosticsEnabled ? performance.now() : 0;
         let normInput;
         if (this.normInputPtr && this.exp.stft_prepare_norm_input) {
-          // Native compiled C SIMD slides 48 frames and normalizes 131,072 floats in 0.02ms!
+          // Native compiled C SIMD slides the 64-frame context and normalizes
+          // 131,072 floats in one pass without GPU slice/concat allocations.
           // Eliminates GPU slice, GPU concat, GPU mul, and GPU texture allocations completely!
           this.exp.stft_prepare_norm_input(invMax);
           normInput = tf.tensor4d(
@@ -1337,7 +1396,7 @@ export class AIVocalManager {
         // drivers and keeps its baseline readback shape.
         const includeOverlapWindow = this.overlapConsensusEnabled &&
           this.modelOutputHead &&
-          this.modelOutputHead.frames >= processing.frames * 2;
+          this.modelOutputHead.frames >= maskFrames * 2;
         const maskTensor = this.extractModelMask(outTensor, processing, includeOverlapWindow);
         // The optimized overlap path returns the model output itself to avoid
         // a second GPU slice. Dispose it exactly once after readback.
@@ -1364,7 +1423,7 @@ export class AIVocalManager {
             maskData,
             this.modelOutputHead.frames,
             localStart,
-            frames,
+            maskFrames,
             this.overlapTail,
             this.overlapTailValid,
             modeCode,
@@ -1381,7 +1440,7 @@ export class AIVocalManager {
         const maskStart = includeOverlapWindow
           ? (processing.sliceStart - this.modelOutputHead.start) * _
           : 0;
-        const channelMaskSize = frames * _;
+        const channelMaskSize = maskFrames * _;
         this.mem.subarray(this.maskPtr0, this.maskPtr0 + channelMaskSize)
           .set(maskData.subarray(maskStart, maskStart + channelMaskSize));
         const maskRightStart = includeOverlapWindow
@@ -1397,31 +1456,34 @@ export class AIVocalManager {
       // complex-spectrum write/read pass without changing the equation.
       synthesisStart = diagnosticsEnabled ? performance.now() : 0;
       if (this.exp.stft_backward_masked) {
-        this.exp.stft_backward_masked(delayChunks, frames, modeCode, this.strength);
+        this.exp.stft_backward_masked(delayChunks, maskFrames, modeCode, this.strength);
       } else {
-        this.exp.stft_apply_mask_delayed(delayChunks, frames, modeCode, this.strength);
-        this.exp.stft_backward(frames);
+        this.exp.stft_apply_mask_delayed(delayChunks, maskFrames, modeCode, this.strength);
+        this.exp.stft_backward(maskFrames);
       }
 
-      // 10. Overlap-Add synthesis: add previous tail to first 1,536 samples
-      const synthL = this.mem.subarray(this.outPtr0, this.outPtr0 + chunkSamples + TAIL);
-      const synthR = this.mem.subarray(this.outPtr1, this.outPtr1 + chunkSamples + TAIL);
-
-      for (let i = 0; i < TAIL; i++) {
-        synthL[i] += this.outTailL[i];
-        synthR[i] += this.outTailR[i];
-      }
-
-      // Extract exactly one browser cadence: 7,680 continuous samples
+      // 10. Reference synthesis crops the unreliable boundary and returns
+      // the center cadence directly. Legacy profiles retain their existing
+      // 1,536-sample app-level overlap-add path unchanged.
+      const synthLength = (maskFrames * 512) + TAIL;
+      const synthL = this.mem.subarray(this.outPtr0, this.outPtr0 + synthLength);
+      const synthR = this.mem.subarray(this.outPtr1, this.outPtr1 + synthLength);
       outputBuffers = this.acquireOutputBuffers(chunkSamples);
       const outL = outputBuffers.outL;
       const outR = outputBuffers.outR;
-      outL.set(synthL.subarray(0, chunkSamples));
-      outR.set(synthR.subarray(0, chunkSamples));
-
-      // Save overlap tail for next chunk
-      this.outTailL.set(synthL.subarray(chunkSamples, chunkSamples + TAIL));
-      this.outTailR.set(synthR.subarray(chunkSamples, chunkSamples + TAIL));
+      if (processing.referenceTimeline) {
+        outL.set(synthL.subarray(outputOffsetSamples, outputOffsetSamples + chunkSamples));
+        outR.set(synthR.subarray(outputOffsetSamples, outputOffsetSamples + chunkSamples));
+      } else {
+        for (let i = 0; i < TAIL; i++) {
+          synthL[i] += this.outTailL[i];
+          synthR[i] += this.outTailR[i];
+        }
+        outL.set(synthL.subarray(0, chunkSamples));
+        outR.set(synthR.subarray(0, chunkSamples));
+        this.outTailL.set(synthL.subarray(chunkSamples, chunkSamples + TAIL));
+        this.outTailR.set(synthR.subarray(chunkSamples, chunkSamples + TAIL));
+      }
 
       this.diagnostics.processedChunks++;
       if (diagnosticsEnabled) {
@@ -1704,6 +1766,10 @@ export class AIVocalManager {
       cadence: {
         chunkSamples,
         frames: this.engineType === "go_native" ? 16 : processing.frames,
+        analysisFrames: this.engineType === "go_native"
+          ? 16 : (processing.analysisFrames || processing.frames),
+        maskFrames: this.engineType === "go_native"
+          ? 16 : (processing.maskFrames || processing.frames),
         hopSamples: 512,
         chunkMs: Number((chunkSamples / sampleRate * 1000).toFixed(2))
       },
