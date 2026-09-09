@@ -3,7 +3,8 @@
  * 
  * Clean Mute-Until-Ready Architecture:
  * - When switching to Karaoke / Acapella, output mutes immediately (smooth ~5.8ms micro-fade).
- * - Remains completely silent while AI model primes and buffers 2 real chunks (~0.35s in browser mode).
+ * - Remains completely silent while AI model primes and buffers a bounded
+ *   adaptive number of real chunks in browser mode.
  * - Smoothly fades in directly to isolated Karaoke music once buffer is ready.
  * - Resets stream state at genuine song boundaries so old audio cannot leak
  *   into the next song.
@@ -15,7 +16,7 @@ const DEFAULT_BROWSER_CHUNK_SIZE = GO_CHUNK_SIZE; // 16 hops, Detail production 
 const MAX_CHUNK_SIZE = GO_CHUNK_SIZE;
 const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
 const FADE_IN_SPEED = 1.0 / 1024;  // ~23ms smooth fade-in
-const READY_QUEUE_THRESHOLD = 2;   // 2 browser chunks (~348ms) cushion against latency spikes
+const READY_QUEUE_THRESHOLD = 2;   // Proven browser startup cushion
 const MAX_QUEUE_THRESHOLD = 5;     // 5 browser chunks (~871ms) latency ceiling prevents delay accumulation
 const GO_READY_QUEUE_THRESHOLD = 3; // Native GO cushion without the old ~1s startup delay
 const GO_MAX_QUEUE_THRESHOLD = 4;   // ~743ms ceiling before stale native output is discarded
@@ -51,7 +52,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.inSilenceBoundary = false;
     this.missingInputBlocks = 0;
 
-    // One active chunk plus the two bounded pending chunks can be in flight.
+    // One active chunk plus a bounded number of pending chunks can be in flight.
     // Returned buffers are transferred back from the manager after it copies
     // the input into WASM. The fallback is only for an abnormal backlog race.
     this.inputBufferPools = {
@@ -259,17 +260,23 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         this.silentChunks = 0;
         this.inSilenceBoundary = false;
       } else if (data.type === "SET_QUEUE_TARGET") {
-        if (data.engineType !== "go_native" || this.engineType !== "go_native") return;
+        const targetEngine = data.engineType === "go_native" || data.engineType === "webgl"
+          ? data.engineType : null;
+        if (!targetEngine || targetEngine !== this.engineType) return;
         const ready = Number(data.readyThreshold);
         const max = Number(data.maxQueueThreshold);
         if (!Number.isFinite(ready) || !Number.isFinite(max)) return;
+        const maxReady = targetEngine === "go_native"
+          ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD - 1;
+        const maxMax = targetEngine === "go_native"
+          ? GO_MAX_QUEUE_THRESHOLD + 1 : MAX_QUEUE_THRESHOLD;
         this.readyThreshold = Math.max(
           1,
-          Math.min(GO_MAX_QUEUE_THRESHOLD, Math.floor(ready))
+          Math.min(maxReady, Math.floor(ready))
         );
         this.maxQueueThreshold = Math.max(
           this.readyThreshold + 1,
-          Math.min(GO_MAX_QUEUE_THRESHOLD + 1, Math.floor(max))
+          Math.min(maxMax, Math.floor(max))
         );
       } else if (data.type === "SET_DIAGNOSTICS") {
         this.diagnosticsEnabled = data.enabled === true;
@@ -580,6 +587,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         generation: this.streamGeneration,
         isAiReady: this.isAiReady,
         readyThreshold: this.readyThreshold,
+        underrunBlocks: this.diagnostics.underrunBlocks,
         aiGain: this.aiGain,
         bufferedSec: bufferedSec,
         queueLen: this.outQueueSize,

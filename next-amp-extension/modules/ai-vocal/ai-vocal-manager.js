@@ -39,8 +39,13 @@ const ENABLE_TRANSIENT_GATE_CANDIDATE = false;
 const SMOOTHING_FAST_ALPHA = 0.1;
 const SMOOTHING_SLOW_ALPHA = 0.5;
 const TRANSIENT_THRESHOLD = 0.35;
-// Phase B4 listening candidate. Set false to restore the FP32 WebGL path.
-const CANDIDATE_WEBGL_F16 = true;
+// Phase B4 listening candidate. Keep isolated from Phase C queue work so a
+// timing result cannot be confused with reduced-precision texture behavior.
+const CANDIDATE_WEBGL_F16 = false;
+// Phase C1 listening candidate. The browser scheduler adapts its bounded
+// pending-work cushion from measured processing time and Worklet underruns.
+// GO keeps its existing queue controller and is never routed through this.
+const ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE = true;
 const VOCAL_PROFILES = Object.freeze({
   // Retained as a rollback candidate. This shorter cadence still runs the
   // full 64-frame model and therefore invokes inference more often.
@@ -87,7 +92,12 @@ const VOCAL_PROFILES = Object.freeze({
 // quiet but audible material still follows the original model path.
 const DIGITAL_SILENCE_PEAK = 3.25e-5;
 const WEBGPU_BACKEND_ASSET = "assets/libs/js/tf-backend-webgpu.min.js";
-const MAX_BROWSER_PENDING_CHUNKS = 2; // Keep at most ~348ms pending; drop stale work under interruption.
+const MAX_BROWSER_PENDING_CHUNKS = 4; // Hard cap (~697ms); adaptive target stays below this ceiling.
+const DEFAULT_BROWSER_PENDING_LIMIT = 2; // Preserve the proven pre-C1 startup behavior.
+const MIN_BROWSER_QUEUE_TARGET = 1;
+const MAX_BROWSER_QUEUE_TARGET = MAX_BROWSER_PENDING_CHUNKS;
+const BROWSER_LATENCY_SAMPLE_CAPACITY = 16;
+const BROWSER_QUEUE_STABLE_WINDOW_MS = 30_000;
 const TRANSFER_BUFFER_POOL_CAPACITY = 3; // active + bounded pending work
 const MESSAGE_POOL_CAPACITY = 3; // active + bounded pending MessagePort envelopes
 const DIAGNOSTIC_SAMPLE_LIMIT = 120;
@@ -326,6 +336,14 @@ export class AIVocalManager {
     this.isBusy = false;
     this.chunkQueue = new Array(MAX_BROWSER_PENDING_CHUNKS).fill(null);
     this.chunkQueueSize = 0;
+    this.browserPendingLimit = DEFAULT_BROWSER_PENDING_LIMIT;
+    this.browserQueueTarget = DEFAULT_BROWSER_PENDING_LIMIT;
+    this.browserLatencySamples = new Float64Array(BROWSER_LATENCY_SAMPLE_CAPACITY);
+    this.browserLatencySortBuffer = new Float64Array(BROWSER_LATENCY_SAMPLE_CAPACITY);
+    this.browserLatencySampleCount = 0;
+    this.browserLatencySamplePos = 0;
+    this.browserQueueStableSince = 0;
+    this.browserLastUnderrunBlocks = null;
     this.queueNeedsResync = false;
     this.resyncChunkIndex = null;
     this.streamGeneration = 0;
@@ -622,6 +640,143 @@ export class AIVocalManager {
     });
   }
 
+  resetBrowserQueueTuning() {
+    this.browserPendingLimit = DEFAULT_BROWSER_PENDING_LIMIT;
+    this.browserQueueTarget = DEFAULT_BROWSER_PENDING_LIMIT;
+    this.browserLatencySamples.fill(0);
+    this.browserLatencySortBuffer.fill(0);
+    this.browserLatencySampleCount = 0;
+    this.browserLatencySamplePos = 0;
+    this.browserQueueStableSince = 0;
+    this.browserLastUnderrunBlocks = null;
+  }
+
+  getSortedBrowserLatencyCount() {
+    const count = this.browserLatencySampleCount;
+    for (let i = 0; i < count; i++) {
+      this.browserLatencySortBuffer[i] = this.browserLatencySamples[i];
+    }
+    // The window is capped at 16 samples, so insertion sort stays cheaper
+    // than allocating a copied array on every completed inference.
+    for (let i = 1; i < count; i++) {
+      const value = this.browserLatencySortBuffer[i];
+      let j = i - 1;
+      while (j >= 0 && this.browserLatencySortBuffer[j] > value) {
+        this.browserLatencySortBuffer[j + 1] = this.browserLatencySortBuffer[j];
+        j--;
+      }
+      this.browserLatencySortBuffer[j + 1] = value;
+    }
+    return count;
+  }
+
+  sendBrowserQueueTarget() {
+    if (!ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE ||
+        this.engineType !== "webgl" || !this.workletNode) return;
+    const readyThreshold = Math.max(
+      MIN_BROWSER_QUEUE_TARGET,
+      Math.min(MAX_BROWSER_QUEUE_TARGET, Math.floor(this.browserQueueTarget))
+    );
+    // Keep one extra output chunk as a small recovery margin while the
+    // manager's pending-work limit remains the actual latency control.
+    const maxQueueThreshold = Math.min(MAX_BROWSER_QUEUE_TARGET + 1, readyThreshold + 1);
+    this.workletNode.port.postMessage({
+      type: "SET_QUEUE_TARGET",
+      engineType: "webgl",
+      readyThreshold,
+      maxQueueThreshold
+    });
+  }
+
+  setBrowserQueueTarget(target) {
+    if (!Number.isFinite(target)) return;
+    const nextTarget = Math.max(
+      MIN_BROWSER_QUEUE_TARGET,
+      Math.min(MAX_BROWSER_QUEUE_TARGET, Math.floor(target))
+    );
+    if (nextTarget === this.browserQueueTarget &&
+        this.browserPendingLimit === nextTarget) return;
+    this.browserQueueTarget = nextTarget;
+    this.browserPendingLimit = nextTarget;
+    this.sendBrowserQueueTarget();
+  }
+
+  raiseBrowserQueueTarget() {
+    if (!ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE || this.engineType !== "webgl") return;
+    this.browserQueueStableSince = performance.now();
+    if (this.browserQueueTarget < MAX_BROWSER_QUEUE_TARGET) {
+      this.setBrowserQueueTarget(this.browserQueueTarget + 1);
+    }
+  }
+
+  observeBrowserUnderrun(underrunBlocks) {
+    if (!ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE || this.engineType !== "webgl") return;
+    const count = Number(underrunBlocks);
+    if (!Number.isFinite(count) || count < 0) return;
+    if (this.browserLastUnderrunBlocks === null) {
+      // Establish a baseline after an engine/Worklet recreation; the Worklet
+      // counter is cumulative and may include a previous audio stream.
+      this.browserLastUnderrunBlocks = count;
+      return;
+    }
+    if (count < this.browserLastUnderrunBlocks) {
+      // A newly-created Worklet can legitimately restart its counter.
+      this.browserLastUnderrunBlocks = count;
+      return;
+    }
+    if (count > this.browserLastUnderrunBlocks) {
+      this.browserLastUnderrunBlocks = count;
+      this.raiseBrowserQueueTarget();
+    }
+  }
+
+  observeBrowserLatency(elapsedMs) {
+    if (!ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE ||
+        this.engineType !== "webgl" || !this.workletNode ||
+        !Number.isFinite(elapsedMs) || elapsedMs <= 0) return;
+
+    this.browserLatencySamples[this.browserLatencySamplePos] = elapsedMs;
+    this.browserLatencySamplePos =
+      (this.browserLatencySamplePos + 1) % BROWSER_LATENCY_SAMPLE_CAPACITY;
+    if (this.browserLatencySampleCount < BROWSER_LATENCY_SAMPLE_CAPACITY) {
+      this.browserLatencySampleCount++;
+    }
+    if (this.browserLatencySampleCount < 4) return;
+
+    const sampleCount = this.getSortedBrowserLatencyCount();
+    const p95 = this.browserLatencySortBuffer[
+      Math.min(sampleCount - 1, Math.ceil(sampleCount * 0.95) - 1)
+    ];
+    const processing = this.getProcessingConfig();
+    const sampleRate = this.audioCtx?.sampleRate || 44100;
+    const chunkMs = (processing.chunkSamples / sampleRate) * 1000;
+    if (!Number.isFinite(chunkMs) || chunkMs <= 0) return;
+
+    const now = performance.now();
+    if (this.browserQueueStableSince === 0) this.browserQueueStableSince = now;
+
+    // Keep the formula explicit: one chunk covers the active deadline and
+    // the extra chunk is the minimum safety margin from the plan.
+    const desiredTarget = Math.max(
+      MIN_BROWSER_QUEUE_TARGET,
+      Math.min(MAX_BROWSER_QUEUE_TARGET, Math.ceil(p95 / chunkMs) + 1)
+    );
+    const deadlineMiss = elapsedMs >= chunkMs;
+    if (deadlineMiss || desiredTarget > this.browserQueueTarget) {
+      this.browserQueueStableSince = now;
+      this.setBrowserQueueTarget(Math.max(this.browserQueueTarget, desiredTarget));
+      return;
+    }
+
+    // Never shrink in response to a single fast sample. A slow spike resets
+    // the stable clock; only a full 30-second quiet window may lower one step.
+    if (desiredTarget < this.browserQueueTarget &&
+        now - this.browserQueueStableSince >= BROWSER_QUEUE_STABLE_WINDOW_MS) {
+      this.browserQueueStableSince = now;
+      this.setBrowserQueueTarget(this.browserQueueTarget - 1);
+    }
+  }
+
   setVocalProfile(profile) {
     const nextProfile = profile === "balanced"
       ? "balanced"
@@ -652,6 +807,7 @@ export class AIVocalManager {
         engineType: this.engineType,
         generation: this.streamGeneration
       });
+      this.sendBrowserQueueTarget();
     }
     if (this.currentMode !== "bypass") this.setStatus("Buffering...");
   }
@@ -727,7 +883,7 @@ export class AIVocalManager {
   }
 
   enqueueChunk(chunk) {
-    if (this.chunkQueueSize >= MAX_BROWSER_PENDING_CHUNKS) return false;
+    if (this.chunkQueueSize >= this.browserPendingLimit) return false;
     this.chunkQueue[this.chunkQueueSize++] = chunk;
     return true;
   }
@@ -807,7 +963,7 @@ export class AIVocalManager {
                 this.diagnostics.staleWorkDrops += this.chunkQueueSize;
                 this.replaceChunkQueue(data);
                 this.resyncChunkIndex = data.chunkIndex;
-              } else if (this.chunkQueueSize >= MAX_BROWSER_PENDING_CHUNKS) {
+              } else if (this.chunkQueueSize >= this.browserPendingLimit) {
                 this.diagnostics.staleWorkDrops += this.chunkQueueSize;
                 this.replaceChunkQueue(data);
                 this.queueNeedsResync = true;
@@ -837,8 +993,10 @@ export class AIVocalManager {
             sampleRate: data.sampleRate,
             inputFrame: data.inputFrame,
             playbackFrame: data.playbackFrame,
+            underrunBlocks: data.underrunBlocks,
             diagnostics: data.diagnostics || null
           };
+          this.observeBrowserUnderrun(data.underrunBlocks);
           this.handleWorkletStatus(data);
         } else if (data.type === "RETURN_OUTPUT_BUFFERS") {
           this.recycleOutputBuffers(data.outL, data.outR);
@@ -860,6 +1018,8 @@ export class AIVocalManager {
           }
         }
       };
+
+      this.sendBrowserQueueTarget();
 
       this.setStatus("ORIGINAL");
 
@@ -1579,6 +1739,11 @@ export class AIVocalManager {
       }
 
       this.lastInferMs = Math.round(performance.now() - tStart);
+      if (!targetIsDigitalSilence &&
+          generation === this.streamGeneration &&
+          this.currentMode !== "bypass" && mode === this.currentMode) {
+        this.observeBrowserLatency(this.lastInferMs);
+      }
 
       if (generation !== this.streamGeneration || this.currentMode === "bypass" || mode !== this.currentMode) {
         this.recycleOutputBuffers(outL, outR);
@@ -1685,6 +1850,7 @@ export class AIVocalManager {
     if (this.engineType !== valid) {
       this.streamGeneration++;
       this.resetState();
+      if (valid === "webgl") this.resetBrowserQueueTuning();
     }
     this.engineType = valid;
     this.resetGoBufferTuning();
@@ -1697,6 +1863,7 @@ export class AIVocalManager {
         browserChunkSize: this.getProcessingConfig().chunkSamples,
         generation: this.streamGeneration
       });
+      this.sendBrowserQueueTarget();
     }
 
     if (this.engineType === "go_native") {
@@ -1770,6 +1937,7 @@ export class AIVocalManager {
         browserChunkSize: this.getProcessingConfig().chunkSamples,
         generation: this.streamGeneration
       });
+      this.sendBrowserQueueTarget();
     }
   }
 
@@ -1820,6 +1988,15 @@ export class AIVocalManager {
       );
       goAdaptiveP95Ms = Number(this.goLatencySortBuffer[p95Index].toFixed(1));
     }
+    let browserAdaptiveP95Ms = null;
+    if (this.browserLatencySampleCount > 0) {
+      const sampleCount = this.getSortedBrowserLatencyCount();
+      const p95Index = Math.min(
+        sampleCount - 1,
+        Math.ceil(sampleCount * 0.95) - 1
+      );
+      browserAdaptiveP95Ms = Number(this.browserLatencySortBuffer[p95Index].toFixed(1));
+    }
     return {
       version: 1,
       enabled: this.diagnostics.enabled,
@@ -1859,6 +2036,15 @@ export class AIVocalManager {
         samples: this.goLatencySampleCount,
         p95Ms: goAdaptiveP95Ms,
         target: this.goBufferTarget
+      },
+      browserAdaptive: {
+        samples: this.browserLatencySampleCount,
+        p95Ms: browserAdaptiveP95Ms,
+        target: this.browserQueueTarget,
+        pendingLimit: this.browserPendingLimit,
+        stableForMs: this.browserQueueStableSince > 0
+          ? Math.max(0, Math.round(now - this.browserQueueStableSince)) : 0,
+        underrunBlocks: this.diagnostics.lastWorkletStatus?.underrunBlocks ?? null
       },
       stream: {
         generation: this.streamGeneration,

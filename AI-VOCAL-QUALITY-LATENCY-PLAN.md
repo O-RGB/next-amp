@@ -186,20 +186,24 @@ F16 ลด memory bandwidth ครึ่งหนึ่ง บน Apple Silicon 
 
 ### C1. Adaptive Safety Queue
 
-**ไฟล์:** `next-amp-extension/modules/ai-vocal/ai-vocal-manager.js`
+**ไฟล์:** `next-amp-extension/modules/ai-vocal/ai-vocal-manager.js`, `next-amp-extension/modules/ai-vocal/vocal-worklet.js`
 
 ปัจจุบัน: `MAX_BROWSER_PENDING_CHUNKS = 2` (fixed)
 
-- [ ] ตรวจสอบว่า MAX_BROWSER_PENDING_CHUNKS ใช้เป็น hard limit หรือ soft target
-- [ ] เพิ่ม P95 inference time tracker โดยใช้ `this.lastInferMs` ที่มีอยู่แล้ว
+- [x] ตรวจสอบว่า `MAX_BROWSER_PENDING_CHUNKS` เดิมเป็น hard limit; เปลี่ยนเป็น hard ceiling 4 และให้ target ปรับได้ต่ำกว่านั้น
+- [x] เพิ่ม P95 inference time tracker โดยใช้ `this.lastInferMs` ที่มีอยู่แล้ว
   ```
   เก็บ rolling window ของ inference time 16 ค่าล่าสุด
   target_depth = ceil(P95_inference / chunk_duration) + 1
   ```
-- [ ] ตั้ง minimum safety depth = 1 chunk เสมอ
-- [ ] Scale UP ทันทีเมื่อเกิด underrun หรือ deadline miss
-- [ ] Scale DOWN ช้า ๆ เท่านั้น: ลดได้หลังจาก 30 วินาทีที่ stable และ inference ต่ำกว่า target
+- [x] ตั้ง minimum safety depth = 1 chunk เสมอ
+- [x] Scale UP ทันทีเมื่อเกิด underrun หรือ deadline miss; ส่ง target ไปยัง Worklet output queue ด้วย
+- [x] Scale DOWN ช้า ๆ เท่านั้น: ลดทีละระดับหลังจาก 30 วินาทีที่ stable และ inference ต่ำกว่า target
 - [ ] ผ่าน interruption test: hide popup, scroll, เปลี่ยน tab ก่อน enable เป็น default
+
+**สิ่งที่ทำใน C1 candidate:** ปิด B4 F16 เพื่อแยกผล, คง GO queue controller เดิม,
+เพิ่ม browser-only adaptive pending queue และส่ง underrun counter จาก Worklet
+โดยไม่เปิด diagnostics หนักใน hot path; candidate เริ่มที่ค่าเดิม 2 chunk และมี hard cap 4.
 
 **ทำไมดี:**
 Queue แบบ fixed ตั้งค่าสำหรับ worst-case GPU (GTX 1050 Ti ช้าสุด) ซึ่งอาจ over-buffer
