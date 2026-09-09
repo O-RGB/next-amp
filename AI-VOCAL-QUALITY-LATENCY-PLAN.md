@@ -220,11 +220,18 @@ Queue แบบ fixed ตั้งค่าสำหรับ worst-case GPU (GT
 
 **ไฟล์:** model graph analysis ด้วย external tools
 
-- [ ] วิเคราะห์ model graph โดยใช้ `tf.GraphModel` และ trace backward จาก output frames กลาง
-- [ ] หา decoder layers ที่ไม่ส่งผล (zero gradient path) ต่อ output frame ที่ใช้จริง
+- [x] วิเคราะห์ model graph โดยใช้ `tf.GraphModel` และ trace backward จาก output frames กลาง
+- [x] ตรวจสอบ decoder dependencies และหา layer ที่ไม่ส่งผลต่อ output frame ที่ใช้จริง — ไม่พบ safe zero-gradient/prunable path
 - [ ] ทดสอบ "pruned forward pass" บน test inputs เทียบ max error กับ full forward pass
 - [ ] เฉพาะถ้า max error < 1e-6 จึงพิจารณา implement จริง
-- [ ] ห้าม implement จนกว่า Phase A + B จะ stable แล้ว
+- [x] ไม่ implement จนกว่า Phase A + B จะ stable แล้ว; ผล C2 ระบุว่าไม่มี candidate ที่ปลอดภัยให้ implement
+
+**ผล C2 analysis:** Detail (32 output frames) และ Smooth (15 output frames)
+ยัง trace กลับไปถึง input ครบ `[1, 1024, 64, 2]` ทั้งคู่ มี resize/align-corners
+geometry barrier 20 จุด และไม่สามารถ reuse decoder activation ข้าม window ได้
+ค่า theoretical MAC reduction 7.77% (Detail) และ 11.05% (Smooth) เป็นเพียง
+ตัวเลขจากการ crop แบบอุดมคติ ไม่ใช่การลดที่ปลอดภัยสำหรับ graph นี้ จึงไม่สร้าง
+pruned model และคง full-context model เดิมเพื่อรักษาคุณภาพเสียง.
 
 **ทำไมดี:**
 Model รับ input 64 frames แต่ output ที่ต้องการจริงมีเพียง 15–16 frames ตรงกลาง
