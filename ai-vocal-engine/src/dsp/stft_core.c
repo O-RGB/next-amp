@@ -60,6 +60,15 @@ static int g_rolling_start = 0;
 static int g_reference_timeline_active = 0;
 static int g_attenuation_floor_enabled = ENABLE_ATTENUATION_FLOOR;
 static float g_attenuation_floor = 0.035f;
+static float g_mask_smooth[2][NUM_BINS];
+static unsigned char g_mask_smooth_valid[2];
+static int g_asymmetric_smoothing_enabled = ENABLE_ASYMMETRIC_SMOOTHING;
+static float g_smoothing_fast_alpha = 0.1f;
+static float g_smoothing_slow_alpha = 0.5f;
+static float g_prev_mag[2][NUM_BINS];
+static unsigned char g_transient_flags[QUEUE_CAPACITY][REFERENCE_SPECTRUM_FRAMES];
+static int g_transient_gate_enabled = ENABLE_TRANSIENT_GATE;
+static float g_transient_threshold = 0.35f;
 
 // Working buffer for in-place FFT
 static float g_work_real[FFT_SIZE];
@@ -219,6 +228,10 @@ void stft_reset(void) {
     memset(g_interleaved_mags, 0, sizeof(g_interleaved_mags));
     memset(g_rolling_mags, 0, sizeof(g_rolling_mags));
     memset(g_norm_input, 0, sizeof(g_norm_input));
+    memset(g_mask_smooth, 0, sizeof(g_mask_smooth));
+    memset(g_mask_smooth_valid, 0, sizeof(g_mask_smooth_valid));
+    memset(g_prev_mag, 0, sizeof(g_prev_mag));
+    memset(g_transient_flags, 0, sizeof(g_transient_flags));
     g_chunk_peak = 1e-5f;
     g_queue_head = 0;
     g_rolling_start = 0;
@@ -355,6 +368,29 @@ static void stft_forward_internal(int spectrum_frames, int mag_start_frame,
         }
     }
 
+    // Detect abrupt spectral energy changes while the current spectra are
+    // still in the WASM heap. Store one flag beside each queued frame so the
+    // delayed synthesis path gates the matching target, not the newer model
+    // input chunk.
+    memset(g_transient_flags[g_queue_head], 0, sizeof(g_transient_flags[g_queue_head]));
+    for (int f = 0; f < mag_frames && f < REFERENCE_SPECTRUM_FRAMES; f++) {
+        float flux = 0.0f;
+        float energy = 0.0f;
+        for (int ch = 0; ch < 2; ch++) {
+            const float* current = &g_magnitudes[ch][f * NUM_BINS];
+            for (int k = 0; k < NUM_BINS; k++) {
+                float value = current[k];
+                float previous = g_prev_mag[ch][k];
+                if (value > previous) flux += value - previous;
+                energy += value;
+                g_prev_mag[ch][k] = value;
+            }
+        }
+        if (g_transient_gate_enabled && flux > g_transient_threshold * (energy + 1e-6f)) {
+            g_transient_flags[g_queue_head][f] = 1;
+        }
+    }
+
     // Advance circular queue
     g_queue_head = (g_queue_head + 1) % QUEUE_CAPACITY;
 
@@ -418,6 +454,30 @@ void stft_set_attenuation_floor(float epsilon) {
     if (epsilon > 1.0f) epsilon = 1.0f;
     g_attenuation_floor = epsilon;
     g_attenuation_floor_enabled = 1;
+}
+
+void stft_set_smoothing_alphas(float fast, float slow) {
+    if (!isfinite(fast) || !isfinite(slow) ||
+        fast <= 0.0f || fast > 1.0f || slow <= 0.0f || slow > 1.0f) {
+        g_asymmetric_smoothing_enabled = 0;
+        return;
+    }
+    g_smoothing_fast_alpha = fast;
+    g_smoothing_slow_alpha = slow;
+    g_asymmetric_smoothing_enabled = 1;
+    memset(g_mask_smooth, 0, sizeof(g_mask_smooth));
+    memset(g_mask_smooth_valid, 0, sizeof(g_mask_smooth_valid));
+}
+
+void stft_set_transient_threshold(float threshold) {
+    if (!isfinite(threshold) || threshold <= 0.0f) {
+        g_transient_gate_enabled = 0;
+        return;
+    }
+    g_transient_threshold = threshold;
+    g_transient_gate_enabled = 1;
+    memset(g_prev_mag, 0, sizeof(g_prev_mag));
+    memset(g_transient_flags, 0, sizeof(g_transient_flags));
 }
 
 float stft_get_rolling_max(void) {
@@ -484,7 +544,8 @@ void stft_prepare_norm_input(float inv_max) {
 // mode, strength, window and timeline semantics stay untouched.
 static void apply_mask_to_spectrum(const float* source_real, const float* source_imag,
                                    float* destination_real, float* destination_imag,
-                                   const float* mask, int mode, float strength) {
+                                   const float* mask, int channel, int mode,
+                                   float strength, int transient_bypass) {
     if (mode != 0 && mode != 1) {
         if (source_real != destination_real) {
             memcpy(destination_real, source_real, NUM_BINS * sizeof(float));
@@ -494,6 +555,33 @@ static void apply_mask_to_spectrum(const float* source_real, const float* source
     }
 
     int k = 0;
+    if (mode == 1 && g_asymmetric_smoothing_enabled) {
+        const int first_frame = !g_mask_smooth_valid[channel];
+        for (; k < NUM_BINS; k++) {
+            float value = mask[k];
+            if (first_frame) {
+                g_mask_smooth[channel][k] = value;
+            } else if (transient_bypass) {
+                // Preserve the current transient and restart from it so the
+                // next release does not drag along an obsolete mask value.
+                g_mask_smooth[channel][k] = value;
+            } else {
+                float previous = g_mask_smooth[channel][k];
+                float alpha = value < previous
+                    ? g_smoothing_fast_alpha
+                    : g_smoothing_slow_alpha;
+                g_mask_smooth[channel][k] = alpha * previous + (1.0f - alpha) * value;
+            }
+            float gain = g_mask_smooth[channel][k] * strength;
+            if (g_attenuation_floor_enabled && gain < g_attenuation_floor) {
+                gain = g_attenuation_floor;
+            }
+            destination_real[k] = source_real[k] * gain;
+            destination_imag[k] = source_imag[k] * gain;
+        }
+        g_mask_smooth_valid[channel] = 1;
+        return;
+    }
 #if USE_SIMD
     v128_t vstrength = wasm_f32x4_splat(strength);
     if (mode == 0) {
@@ -540,7 +628,7 @@ void stft_apply_mask(int num_frames, int mode, float strength) {
             float* m = &g_mask[ch][f * NUM_BINS];
             float* sr = g_spec_real[ch][f];
             float* si = g_spec_imag[ch][f];
-            apply_mask_to_spectrum(sr, si, sr, si, m, mode, strength);
+            apply_mask_to_spectrum(sr, si, sr, si, m, ch, mode, strength, 0);
         }
     }
 }
@@ -561,7 +649,8 @@ void stft_apply_mask_delayed(int delay_chunks, int num_frames, int mode, float s
             float* target_i = g_queue_imag[ch][target_idx][f];
             float* sr = g_spec_real[ch][f];
             float* si = g_spec_imag[ch][f];
-            apply_mask_to_spectrum(target_r, target_i, sr, si, m, mode, strength);
+            apply_mask_to_spectrum(target_r, target_i, sr, si, m, ch, mode, strength,
+                                   g_transient_flags[target_idx][f]);
         }
     }
 }
@@ -637,7 +726,8 @@ void stft_backward_masked(int delay_chunks, int num_frames, int mode, float stre
             const float* target_r = g_queue_real[ch][target_idx][f];
             const float* target_i = g_queue_imag[ch][target_idx][f];
             const float* m = &g_mask[ch][f * NUM_BINS];
-            apply_mask_to_spectrum(target_r, target_i, g_work_real, g_work_imag, m, mode, strength);
+            apply_mask_to_spectrum(target_r, target_i, g_work_real, g_work_imag, m,
+                                   ch, mode, strength, g_transient_flags[target_idx][f]);
             g_work_real[NUM_BINS] = 0.0f;
             g_work_imag[NUM_BINS] = 0.0f;
             for (int k = 1; k < NUM_BINS; k++) {

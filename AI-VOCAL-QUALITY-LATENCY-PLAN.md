@@ -107,9 +107,9 @@ WebGPU ตามปกติจะ batch GPU commands แล้วส่งเ�
 
 **ไฟล์:** `ai-vocal-engine/src/dsp/stft_core.c`
 
-- [ ] เพิ่ม static buffer `g_mask_smooth[2][NUM_BINS]` (stereo, per-bin state)
-- [ ] เพิ่ม feature flag `ENABLE_ASYMMETRIC_SMOOTHING` ใน stft_core.h
-- [ ] ใน `apply_mask_to_spectrum()`: ก่อน apply ให้ผ่าน IIR ก่อน
+- [x] เพิ่ม static buffer `g_mask_smooth[2][NUM_BINS]` (stereo, per-bin state)
+- [x] เพิ่ม feature flag `ENABLE_ASYMMETRIC_SMOOTHING` ใน stft_core.h
+- [x] ใน `apply_mask_to_spectrum()`: ก่อน apply ให้ผ่าน IIR ก่อน
   ```
   ถ้า mask[k] < g_mask_smooth[ch][k]:  // vocal เข้า → ตัดเร็ว
       g_mask_smooth[ch][k] = α_fast * g_mask_smooth + (1 - α_fast) * mask[k]
@@ -118,8 +118,8 @@ WebGPU ตามปกติจะ batch GPU commands แล้วส่งเ�
       g_mask_smooth[ch][k] = α_slow * g_mask_smooth + (1 - α_slow) * mask[k]
       α_slow ≈ 0.5
   ```
-- [ ] reset `g_mask_smooth` ทุก song/mode/generation boundary
-- [ ] expose `stft_set_smoothing_alphas(float fast, float slow)` จาก JS
+- [x] reset `g_mask_smooth` ทุก song/mode/generation boundary
+- [x] expose `stft_set_smoothing_alphas(float fast, float slow)` จาก JS
 - [ ] ฟังจริงโดยเน้น: drum transient, guitar pluck, piano attack ต้องไม่หาย
 
 **ทำไมดี:**
@@ -138,14 +138,14 @@ IIR ที่ attack เร็วทำให้ตัดเสียงร้�
 
 **ไฟล์:** `ai-vocal-engine/src/dsp/stft_core.c`
 
-- [ ] เพิ่ม feature flag `ENABLE_TRANSIENT_GATE` ใน stft_core.h
-- [ ] คำนวณ spectral flux ต่อ frame ใน WASM (SIMD-friendly):
+- [x] เพิ่ม feature flag `ENABLE_TRANSIENT_GATE` ใน stft_core.h
+- [x] คำนวณ spectral flux ต่อ frame ใน WASM (SIMD-friendly):
   ```
   SF(f) = Σ_k max(0, mag[f][k] - mag[f-1][k])
   ```
-- [ ] เก็บ `g_prev_mag[2][NUM_BINS]` เป็น static buffer สำหรับ previous frame
-- [ ] ถ้า SF(f) > TRANSIENT_THRESHOLD: ข้าม smoothing สำหรับ frame นั้น (α = 0)
-- [ ] TRANSIENT_THRESHOLD ต้องปรับจากการฟังจริงบนเพลงที่มี drum/percussion หนัก
+- [x] เก็บ `g_prev_mag[2][NUM_BINS]` เป็น static buffer สำหรับ previous frame
+- [x] ถ้า SF(f) > TRANSIENT_THRESHOLD: ข้าม smoothing สำหรับ frame นั้น (α = 0)
+- [x] เพิ่ม runtime threshold setter และเปิดเป็น listening candidate
 - [ ] ทำงานร่วมกับ B2 เท่านั้น — ไม่มีความหมายถ้า B2 ปิดอยู่
 
 **ทำไมดี:**

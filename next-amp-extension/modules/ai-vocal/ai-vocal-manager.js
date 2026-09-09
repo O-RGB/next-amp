@@ -30,8 +30,15 @@ const EXACT_MODEL_GRAPH_OPTIMIZATION = true;
 const EXACT_MODEL_OUTPUT_HEAD = false;
 // Phase B1 listening candidate. Keep the current baseline available by
 // changing this single flag back to false; the floor never affects Acapella.
-const ENABLE_ATTENUATION_FLOOR_CANDIDATE = true;
+const ENABLE_ATTENUATION_FLOOR_CANDIDATE = false;
 const ATTENUATION_FLOOR = 0.035;
+// Phase B2+B3 listening candidate. These are isolated from B1 so listening
+// can identify the effect of mask smoothing/transient preservation alone.
+const ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE = true;
+const ENABLE_TRANSIENT_GATE_CANDIDATE = true;
+const SMOOTHING_FAST_ALPHA = 0.1;
+const SMOOTHING_SLOW_ALPHA = 0.5;
+const TRANSIENT_THRESHOLD = 0.35;
 const VOCAL_PROFILES = Object.freeze({
   // Retained as a rollback candidate. This shorter cadence still runs the
   // full 64-frame model and therefore invokes inference more often.
@@ -957,6 +964,17 @@ export class AIVocalManager {
       if (this.exp.stft_set_attenuation_floor) {
         this.exp.stft_set_attenuation_floor(
           ENABLE_ATTENUATION_FLOOR_CANDIDATE ? ATTENUATION_FLOOR : 0
+        );
+      }
+      if (this.exp.stft_set_smoothing_alphas) {
+        this.exp.stft_set_smoothing_alphas(
+          ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE ? SMOOTHING_FAST_ALPHA : 0,
+          ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE ? SMOOTHING_SLOW_ALPHA : 0
+        );
+      }
+      if (this.exp.stft_set_transient_threshold) {
+        this.exp.stft_set_transient_threshold(
+          ENABLE_TRANSIENT_GATE_CANDIDATE ? TRANSIENT_THRESHOLD : 0
         );
       }
 
