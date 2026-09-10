@@ -20,7 +20,7 @@ const DEFAULT_VOCAL_PROFILE = "ai_remove";
 // Isolated Web listening candidate: compare two predictions of the same
 // absolute frames from the existing full model output. This does not enable
 // the rejected compact output head, alter the Detail timeline, or touch GO.
-const WEB_OVERLAP_CONSENSUS_CANDIDATE = true;
+const WEB_OVERLAP_CONSENSUS_CANDIDATE = false;
 // Exact graph folding is enabled independently: it preserves weights and
 // model equations while removing export-only data-reordering/padding nodes.
 const EXACT_MODEL_GRAPH_OPTIMIZATION = true;

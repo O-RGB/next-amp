@@ -122,14 +122,15 @@ FP16 ลด memory bandwidth ครึ่งหนึ่ง GPU ย้ายข�
 
 ---
 
-#### B2. Overlap Consensus เปิดอยู่แล้ว — ตรวจว่าเป็นตัวที่ทำให้ช้าขึ้นไหม
+#### B2. Overlap Consensus — ตรวจว่าเป็นตัวที่ทำให้ช้าขึ้นไหม
 
-`WEB_OVERLAP_CONSENSUS_CANDIDATE = true` (line 23)
+`WEB_OVERLAP_CONSENSUS_CANDIDATE = false` (ปิดเป็น B2 listening/latency candidate รอบนี้)
 ตรวจโค้ดแล้ว: overlap consensus ต้อง readback `maskFrames * 2` แทน `maskFrames`
 จาก GPU (ดู line ~1617–1623, 1669–1681) นั่นคือ readback data ขนาดสองเท่า
 
-- [ ] ปิด `WEB_OVERLAP_CONSENSUS_CANDIDATE = false` ชั่วคราว
-- [ ] วัด inference time ก่อนและหลัง
+- [x] ปิด `WEB_OVERLAP_CONSENSUS_CANDIDATE = false` ชั่วคราว
+- [x] วัด inference time ก่อนและหลัง — หลังปิดอยู่ประมาณ 50–65ms และค่ากลางราว 58–60ms
+- [x] ฟัง A/B แล้วคุณภาพเสียงยังดีเหมือนเดิม; ใช้การตั้งค่า B2 แบบปิดต่อในรอบถัดไป
 - [ ] ถ้า latency ลด ≥5ms: ต้องตัดสินใจว่าคุณภาพที่ overlap consensus เพิ่ม
       คุ้มกับ latency ที่เสียไปหรือไม่
 - [ ] ถ้า latency ไม่เปลี่ยน: overlap consensus ไม่ใช่ตัวปัญหา ปล่อยเปิดต่อ
