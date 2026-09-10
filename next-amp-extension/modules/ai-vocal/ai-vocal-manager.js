@@ -389,6 +389,21 @@ export class AIVocalManager {
       streamResets: 0,
       processErrors: 0,
       maxPendingQueue: 0,
+      webGpuReadbackStarted: 0,
+      webGpuReadbackCompleted: 0,
+      webGpuReadbackRejected: 0,
+      webGpuReadbackTimeouts: 0,
+      webGpuDeviceLosses: 0,
+      webGpuRecoveryRequests: 0,
+      webGpuRecoveriesSucceeded: 0,
+      webGpuRecoveriesFailed: 0,
+      webGpuFallbacksToWebGL: 0,
+      queueRunnerStarts: 0,
+      queueRunnerStops: 0,
+      queueRunnerRestarts: 0,
+      lastRecoveryReason: null,
+      lastRecoveryStartedAt: null,
+      lastRecoveryCompletedAt: null,
       lastInputChunkIndex: null,
       lastProcessed: null,
       lastWorkletStatus: null,
@@ -2063,6 +2078,32 @@ export class AIVocalManager {
       },
       timingMs,
       tensorCount,
+      recovery: {
+        state: this.recoveryState || "idle",
+        engineEpoch: this.engineEpoch || 0,
+        attemptCount: this.recoveryAttemptCount || 0,
+        forceWebGlForSession: this.forceWebGlForSession === true,
+        activeReadbackAgeMs: this.activeReadbackStartedAt
+          ? Math.max(0, Math.round(now - this.activeReadbackStartedAt))
+          : null,
+        counters: {
+          webGpuReadbackStarted: this.diagnostics.webGpuReadbackStarted,
+          webGpuReadbackCompleted: this.diagnostics.webGpuReadbackCompleted,
+          webGpuReadbackRejected: this.diagnostics.webGpuReadbackRejected,
+          webGpuReadbackTimeouts: this.diagnostics.webGpuReadbackTimeouts,
+          webGpuDeviceLosses: this.diagnostics.webGpuDeviceLosses,
+          webGpuRecoveryRequests: this.diagnostics.webGpuRecoveryRequests,
+          webGpuRecoveriesSucceeded: this.diagnostics.webGpuRecoveriesSucceeded,
+          webGpuRecoveriesFailed: this.diagnostics.webGpuRecoveriesFailed,
+          webGpuFallbacksToWebGL: this.diagnostics.webGpuFallbacksToWebGL,
+          queueRunnerStarts: this.diagnostics.queueRunnerStarts,
+          queueRunnerStops: this.diagnostics.queueRunnerStops,
+          queueRunnerRestarts: this.diagnostics.queueRunnerRestarts
+        },
+        lastReason: this.diagnostics.lastRecoveryReason,
+        lastStartedAt: this.diagnostics.lastRecoveryStartedAt,
+        lastCompletedAt: this.diagnostics.lastRecoveryCompletedAt
+      },
       worklet: this.diagnostics.lastWorkletStatus
     };
   }
