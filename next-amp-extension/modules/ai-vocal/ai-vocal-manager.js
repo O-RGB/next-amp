@@ -8,6 +8,11 @@ import { GoEngineClient } from "./go-engine-client.js";
 import { createVocalModelLoader } from "./model-optimizer.mjs";
 import { applyOverlapConsensusToMask } from "./overlap-consensus.mjs";
 import { createProtectedModelSource, loadProtectedAsset } from "./web-protected-assets.mjs";
+import {
+  calculateWebGpuReadbackTimeout,
+  settleWithDeadline,
+  WebGpuReadbackTimeoutError
+} from "./webgpu-recovery-controller.mjs";
 
 const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
@@ -105,6 +110,10 @@ const DIAGNOSTIC_SUMMARY_CACHE_MS = 250;
 const GO_STATUS_UPDATE_INTERVAL_MS = 500; // UI/IPC only; audio response cadence stays unchanged.
 const WEB_STATUS_UPDATE_INTERVAL_MS = 500; // UI only; never throttle audio processing.
 const GO_LATENCY_SAMPLE_CAPACITY = 24;
+const WEBGPU_READBACK_TIMEOUT_MIN_MS = 1000;
+const WEBGPU_READBACK_TIMEOUT_MAX_MS = 2000;
+const WEBGPU_READBACK_TIMEOUT_P95_MULTIPLIER = 8;
+const WEBGPU_READBACK_TIMEOUT_CHUNK_MULTIPLIER = 5;
 let webGpuBackendPromise = null;
 
 function describeWebHardware(renderer, backendType) {
@@ -334,6 +343,11 @@ export class AIVocalManager {
 
     // Concurrency Lock & Latency Ceiling: Prevents GPU backlog and WASM memory collision
     this.isBusy = false;
+    this.queueRestartScheduled = false;
+    this.queueFaulted = false;
+    this.activeReadbackStartedAt = 0;
+    this.activeReadbackToken = 0;
+    this.browserWarmupChunksRemaining = 0;
     this.chunkQueue = new Array(MAX_BROWSER_PENDING_CHUNKS).fill(null);
     this.chunkQueueSize = 0;
     this.browserPendingLimit = DEFAULT_BROWSER_PENDING_LIMIT;
@@ -842,6 +856,9 @@ export class AIVocalManager {
     this.overlapTail.fill(0);
     this.overlapTailValid = false;
     this.clearChunkQueue();
+    this.browserWarmupChunksRemaining = this.engineType === "webgl"
+      ? Math.max(0, Number(this.getProcessingConfig().delayChunks) || 0)
+      : 0;
     this.queueNeedsResync = false;
     this.resyncChunkIndex = null;
     this.chunkPeakHistoryIndex.fill(-1);
@@ -969,7 +986,11 @@ export class AIVocalManager {
             // unavailable. The worklet's GO concealment path will mute the
             // brief underrun instead of leaking the original vocal signal.
           } else {
-            if (this.isReady) {
+            if (this.queueFaulted) {
+              // A failed GPU readback must not accumulate raw input while a
+              // later recovery controller decides how to rebuild the engine.
+              this.returnInputBuffers(data.rawL, data.rawR);
+            } else if (this.isReady) {
               // Under a tab switch/page load, inference can temporarily stop
               // while the worklet keeps collecting audio. Once that happens,
               // processing every old chunk only creates growing latency. Keep
@@ -1055,8 +1076,9 @@ export class AIVocalManager {
   }
 
   async runChunkQueue() {
-    if (this.isBusy || this.currentMode === "bypass" || !this.isReady) return;
+    if (this.isBusy || this.queueFaulted || this.currentMode === "bypass" || !this.isReady) return;
     this.isBusy = true;
+    this.diagnostics.queueRunnerStarts++;
     try {
       while (this.chunkQueueSize > 0 && this.currentMode !== "bypass") {
         const chunk = this.dequeueChunk();
@@ -1089,10 +1111,98 @@ export class AIVocalManager {
         }
       }
     } catch (err) {
-      console.error("[NextAmp AI] Queue processing error:", err);
+      if (err?.recoverable === true) {
+        // S1 stops the runner safely. S2 will attach the actual backend
+        // recovery action. Never retry a possibly-stalled GPU immediately.
+        this.queueFaulted = true;
+        this.isReady = false;
+        this.setStatus("AI GPU STALLED");
+        console.warn("[NextAmp AI] Recoverable GPU processing fault:", err);
+      } else {
+        console.error("[NextAmp AI] Queue processing error:", err);
+      }
     } finally {
       this.isBusy = false;
+      this.diagnostics.queueRunnerStops++;
+      if (!this.queueFaulted && this.chunkQueueSize > 0 &&
+          this.currentMode !== "bypass" && this.isReady &&
+          !this.queueRestartScheduled) {
+        this.queueRestartScheduled = true;
+        queueMicrotask(() => {
+          this.queueRestartScheduled = false;
+          this.diagnostics.queueRunnerRestarts++;
+          this.runChunkQueue();
+        });
+      }
     }
+  }
+
+  getWebGpuReadbackTimeoutMs() {
+    const processing = this.getProcessingConfig();
+    const sampleRate = this.audioCtx?.sampleRate || 44100;
+    const chunkMs = (processing.chunkSamples / sampleRate) * 1000;
+    let p95Ms = 0;
+    if (this.browserLatencySampleCount > 0) {
+      const sampleCount = this.getSortedBrowserLatencyCount();
+      p95Ms = this.browserLatencySortBuffer[
+        Math.min(sampleCount - 1, Math.ceil(sampleCount * 0.95) - 1)
+      ];
+    }
+    return calculateWebGpuReadbackTimeout({
+      chunkMs,
+      p95Ms,
+      lastInferMs: this.lastInferMs,
+      minMs: WEBGPU_READBACK_TIMEOUT_MIN_MS,
+      maxMs: WEBGPU_READBACK_TIMEOUT_MAX_MS,
+      p95Multiplier: WEBGPU_READBACK_TIMEOUT_P95_MULTIPLIER,
+      chunkMultiplier: WEBGPU_READBACK_TIMEOUT_CHUNK_MULTIPLIER
+    });
+  }
+
+  async readWebGpuMaskData(maskTensor) {
+    const readbackToken = ++this.activeReadbackToken;
+    const timeoutMs = this.getWebGpuReadbackTimeoutMs();
+    this.activeReadbackStartedAt = performance.now();
+    this.diagnostics.webGpuReadbackStarted++;
+
+    const result = await settleWithDeadline(
+      () => maskTensor.data(),
+      timeoutMs,
+      {
+        onLateSettle: () => {
+          // The original Promise is observed by settleWithDeadline. Dispose
+          // only when it eventually settles; disposing a tensor while
+          // TensorFlow.js still owns a pending readback is unsafe.
+          try { maskTensor.dispose(); } catch (_) {}
+        }
+      }
+    );
+
+    if (readbackToken === this.activeReadbackToken) {
+      this.activeReadbackStartedAt = 0;
+    }
+
+    if (result.status === "fulfilled") {
+      this.diagnostics.webGpuReadbackCompleted++;
+      try { maskTensor.dispose(); } catch (_) {}
+      return result.value;
+    }
+
+    if (result.status === "rejected") {
+      this.diagnostics.webGpuReadbackRejected++;
+      try { maskTensor.dispose(); } catch (_) {}
+      throw result.error;
+    }
+
+    if (result.status === "timeout") {
+      this.diagnostics.webGpuReadbackTimeouts++;
+      throw result.error;
+    }
+
+    // settleWithDeadline only returns the statuses above. Keep a defensive
+    // error so a future helper change cannot silently pass an invalid result.
+    try { maskTensor.dispose(); } catch (_) {}
+    throw new Error("Unknown WebGPU readback result");
   }
 
   async loadEngine() {
@@ -1416,6 +1526,7 @@ export class AIVocalManager {
 
       console.log(`[NextAmp AI] Engine ready with hardware: ${this.backendName}`);
       this.isReady = true;
+      this.queueFaulted = false;
       this.engineLoading = false;
 
       if (this.workletNode) {
@@ -1642,12 +1753,16 @@ export class AIVocalManager {
         if (maskTensor !== outTensor) outTensor.dispose();
 
         const readbackStart = diagnosticsEnabled ? performance.now() : 0;
-        const maskData = await maskTensor.data();
+        const maskData = this.backendType === "webgpu"
+          ? await this.readWebGpuMaskData(maskTensor)
+          : await maskTensor.data();
         if (diagnosticsEnabled) {
           modelReadbackMs = performance.now() - readbackStart;
           inferenceMs = performance.now() - modelStart;
         }
-        maskTensor.dispose(); // Free mask tensor immediately!
+        if (this.backendType !== "webgpu") {
+          maskTensor.dispose(); // Free mask tensor immediately!
+        }
 
         // A mode/song/engine switch can happen while GPU readback is pending.
         // Do not let that old inference mutate the new stream or emit stale audio.
@@ -1765,9 +1880,11 @@ export class AIVocalManager {
         return;
       }
 
-      // Chunk 0 primes the WASM lookahead ring buffer (reads from uninitialized delay slot)
-      // Discard Chunk 0 so it never injects one cadence of digital silence into playback.
-      if (chunkIndex === 0) {
+      // Every reset primes the WASM lookahead ring buffer. Chunk indexes do
+      // not necessarily restart at zero after a YouTube song boundary or a
+      // backend recovery, so use an explicit stream-local counter.
+      if (this.engineType === "webgl" && this.browserWarmupChunksRemaining > 0) {
+        this.browserWarmupChunksRemaining--;
         this.diagnostics.intentionalWarmupDrops++;
         this.recycleOutputBuffers(outL, outR);
         return;
@@ -1784,6 +1901,9 @@ export class AIVocalManager {
     } catch (err) {
       if (outputBuffers) this.recycleOutputBuffers(outputBuffers.outL, outputBuffers.outR);
       this.diagnostics.processErrors++;
+      if (err?.recoverable === true) {
+        throw err;
+      }
       console.error("[NextAmp AI] processChunk error:", err);
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: " + this.lastError.substring(0, 16));

@@ -427,13 +427,13 @@ browserWarmupChunksRemaining = processing.delayChunks
 
 ### Gate S1
 
-- [ ] จำลอง Promise ค้างแล้ว test จบเอง
-- [ ] `isBusy` กลับ false เสมอ
-- [ ] ไม่มี raw input ถูกส่งเป็น output
-- [ ] ไม่มี late generation output
-- [ ] normal path ไม่เปลี่ยน PCM/mask
-- [ ] WebGL/GO path ไม่ผ่าน watchdog
-- [ ] existing tests ผ่านทั้งหมด
+- [x] จำลอง Promise ค้างแล้ว test จบเอง
+- [x] `isBusy` กลับ false เสมอ
+- [x] ไม่มี raw input ถูกส่งเป็น output
+- [x] ไม่มี late generation output
+- [x] normal path ไม่เปลี่ยน PCM/mask
+- [x] WebGL/GO path ไม่ผ่าน watchdog
+- [x] existing tests ผ่านทั้งหมด
 
 ใน S1 หาก timeout เกิดจริง ให้ขึ้นสถานะ `Recovering AI...` และคง mute ไว้ แต่ยังไม่ต้องพยายาม recreate backend จนทำ S2
 
