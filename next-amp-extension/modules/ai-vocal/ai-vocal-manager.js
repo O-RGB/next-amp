@@ -30,7 +30,7 @@ const EXACT_MODEL_GRAPH_OPTIMIZATION = true;
 const EXACT_MODEL_OUTPUT_HEAD = false;
 // Phase B1 listening candidate. Keep the current baseline available by
 // changing this single flag back to false; the floor never affects Acapella.
-const ENABLE_ATTENUATION_FLOOR_CANDIDATE = false;
+const ENABLE_ATTENUATION_FLOOR_CANDIDATE = true;
 const ATTENUATION_FLOOR = 0.035;
 // Phase B2+B3 candidate flags remain available for rollback/A-B. They are
 // disabled while the isolated B4 texture candidate is being evaluated.
