@@ -41,7 +41,7 @@ const SMOOTHING_SLOW_ALPHA = 0.5;
 const TRANSIENT_THRESHOLD = 0.35;
 // Phase B4 listening candidate. Keep isolated from Phase C queue work so a
 // timing result cannot be confused with reduced-precision texture behavior.
-const CANDIDATE_WEBGL_F16 = false;
+const CANDIDATE_WEBGL_F16 = true;
 // Phase C1 listening candidate. The browser scheduler adapts its bounded
 // pending-work cushion from measured processing time and Worklet underruns.
 // GO keeps its existing queue controller and is never routed through this.

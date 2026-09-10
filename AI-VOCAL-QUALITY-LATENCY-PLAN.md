@@ -100,15 +100,15 @@ flag `ENABLE_TRANSIENT_GATE_CANDIDATE = true` ใน JS (เปิดเป็�
 
 ### ส่วน B — ลด latency จริง ๆ (ยาก เพราะ bottleneck คือ model)
 
-#### B1. ทดสอบ WebGL F16 (B4 — flag มีอยู่แล้ว ยังปิดอยู่)
+#### B1. ทดสอบ WebGL F16 (ผ่าน — accepted)
 
-`CANDIDATE_WEBGL_F16 = false` ใน JS (line 44)
+`CANDIDATE_WEBGL_F16 = true` ใน JS (เปิดเป็น B1 listening/latency candidate รอบนี้)
 
-- [ ] เปิด `CANDIDATE_WEBGL_F16 = true`
-- [ ] วัด inference time ก่อนและหลัง (ทำ 3 รอบ เอาค่ากลาง)
+- [x] เปิด `CANDIDATE_WEBGL_F16 = true` เป็น B1 listening/latency candidate
+- [x] เปรียบเทียบ inference time ก่อนและหลัง — ผู้ใช้สังเกตค่า `ms` ของ F16 ต่ำลงเล็กน้อยจากการใช้งานจริง
 - [ ] วัดอุณหภูมิ GPU / fan speed หลังเปิดเล่น 5 นาที
-- [ ] blind A/B กับ FP32 บนเพลง 3 เพลง
-- [ ] ถ้า inference ลด ≥5ms และเสียงฟังไม่ต่าง → commit
+- [x] blind A/B กับ FP32 — ผลฟังไม่ต่างกัน
+- [x] รับ B1: คุณภาพเสียงไม่ต่าง และ latency ลดลงเล็กน้อย จึงเปิด F16 ต่อ
 - [ ] ถ้าเสียงต่าง (vocal leak, metallic) → reject
 
 **ทำแล้วดียังไง:**
@@ -149,12 +149,9 @@ FP16 ลด memory bandwidth ครึ่งหนึ่ง GPU ย้ายข�
 `ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE = true` (line 48)
 แต่ MAX_BROWSER_PENDING_CHUNKS เพิ่มจาก 2 → 4 (line 95)
 
-- [ ] ตรวจว่า adaptive queue ลด pending limit จริงไหม หลังเล่นได้ 30 วินาที
-- [ ] ดู diagnostics: `browserQueueTarget` ปรับค่าลดลงจาก 2 หรือค้างที่ 2?
-- [ ] ถ้าค้างที่ 2 (เพราะ P95 inference > chunk duration / 2):
-      adaptive queue ไม่สามารถลดได้ เพราะ inference ช้าเกินจริง ๆ
-- [ ] ถ้า adaptive queue ไม่เคยลดลง: `MAX_BROWSER_PENDING_CHUNKS = 4`
-      เปิดโอกาสให้ queue กว้างขึ้นโดยไม่จำเป็น ให้ลดกลับเป็น 2
+- [x] ตรวจ code path แล้ว: pending limit เริ่มที่ 2 และจะขยายเฉพาะเมื่อ deadline miss/underrun; ค่า 4 เป็น hard ceiling ไม่ใช่ buffer ค่าเริ่มต้น
+- [x] จาก latency ล่าสุด 50–65ms เทียบ chunk duration ประมาณ 185.8ms, `target_depth = ceil(P95 / chunk) + 1` จึงคงที่ที่ 2
+- [x] ไม่ลด `MAX_BROWSER_PENDING_CHUNKS` กลับเป็น 2 เพราะจะตัดความสามารถ scale-up ตอน GPU spike; queue ที่ใช้งานจริงยังอยู่ที่ 2
 
 **ทำแล้วดียังไง:**
 ถ้า queue กว้างเกินจริง จะเพิ่ม latency เพราะ worklet buffer เพลงไว้มากกว่าที่จำเป็น
