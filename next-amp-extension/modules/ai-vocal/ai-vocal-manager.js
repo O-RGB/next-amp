@@ -13,6 +13,7 @@ import {
   settleWithDeadline,
   WebGpuReadbackTimeoutError
 } from "./webgpu-recovery-controller.mjs";
+import { webGpuRecoveryCoordinator } from "./webgpu-recovery-controller.mjs";
 
 const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
@@ -348,6 +349,15 @@ export class AIVocalManager {
     this.activeReadbackStartedAt = 0;
     this.activeReadbackToken = 0;
     this.browserWarmupChunksRemaining = 0;
+    this.engineEpoch = 0;
+    this.recoveryState = "idle";
+    this.recoveryPromise = null;
+    this.recoveryAttemptCount = 0;
+    this.recoveryAttemptTimes = [];
+    this.forceWebGlForSession = false;
+    this.destroyed = false;
+    this.webGpuLossDevice = null;
+    this.awaitingRecoveryFirstChunk = false;
     this.chunkQueue = new Array(MAX_BROWSER_PENDING_CHUNKS).fill(null);
     this.chunkQueueSize = 0;
     this.browserPendingLimit = DEFAULT_BROWSER_PENDING_LIMIT;
@@ -433,6 +443,7 @@ export class AIVocalManager {
       timingSummaryCache: null,
       timingSummaryAt: 0
     };
+    this.unregisterWebGpuManager = webGpuRecoveryCoordinator.register(this);
   }
 
   async detectWebHardwareInfo(backendType) {
@@ -991,6 +1002,21 @@ export class AIVocalManager {
               // later recovery controller decides how to rebuild the engine.
               this.returnInputBuffers(data.rawL, data.rawR);
             } else if (this.isReady) {
+              if (this.awaitingRecoveryFirstChunk) {
+                // Do not guess the next chunk index while the engine was
+                // rebuilding. Use the first live packet after recovery as
+                // the new timeline origin.
+                this.awaitingRecoveryFirstChunk = false;
+                this.streamChunkFloor = data.chunkIndex;
+                this.resetState();
+                if (this.workletNode) {
+                  this.workletNode.port.postMessage({
+                    type: "RESYNC",
+                    nextChunkIndex: data.chunkIndex,
+                    generation: this.streamGeneration
+                  });
+                }
+              }
               // Under a tab switch/page load, inference can temporarily stop
               // while the worklet keeps collecting audio. Once that happens,
               // processing every old chunk only creates growing latency. Keep
@@ -1112,12 +1138,22 @@ export class AIVocalManager {
       }
     } catch (err) {
       if (err?.recoverable === true) {
-        // S1 stops the runner safely. S2 will attach the actual backend
-        // recovery action. Never retry a possibly-stalled GPU immediately.
+        // Never retry a possibly-stalled GPU immediately. The serialized
+        // coordinator owns backend removal/recreation so multiple managers
+        // cannot reset the global TensorFlow.js backend at once.
         this.queueFaulted = true;
         this.isReady = false;
-        this.setStatus("AI GPU STALLED");
+        this.diagnostics.webGpuRecoveryRequests++;
+        const reason = err instanceof WebGpuReadbackTimeoutError
+          ? "readback-timeout" : "webgpu-processing-error";
+        this.diagnostics.lastRecoveryReason = reason;
+        this.setStatus("Recovering AI...");
         console.warn("[NextAmp AI] Recoverable GPU processing fault:", err);
+        try {
+          await this.requestWebGpuRecovery(reason);
+        } catch (recoveryError) {
+          console.error("[NextAmp AI] WebGPU recovery failed:", recoveryError);
+        }
       } else {
         console.error("[NextAmp AI] Queue processing error:", err);
       }
@@ -1205,8 +1241,170 @@ export class AIVocalManager {
     throw new Error("Unknown WebGPU readback result");
   }
 
+  canRecoverWebGpu() {
+    return !this.destroyed && this.engineType === "webgl" &&
+      (this.backendType === "webgpu" || this.queueFaulted);
+  }
+
+  requestWebGpuRecovery(reason) {
+    if (this.destroyed || this.engineType !== "webgl") {
+      return Promise.resolve([{ ok: false, skipped: true }]);
+    }
+    if (this.recoveryPromise) return this.recoveryPromise;
+    this.recoveryPromise = webGpuRecoveryCoordinator
+      .request(this, reason)
+      .finally(() => {
+        this.recoveryPromise = null;
+      });
+    return this.recoveryPromise;
+  }
+
+  beginWebGpuRecovery(reason) {
+    if (this.destroyed || this.engineType !== "webgl") return;
+
+    const now = performance.now();
+    this.recoveryAttemptTimes = this.recoveryAttemptTimes.filter(
+      startedAt => now - startedAt < 120000
+    );
+    if (this.recoveryAttemptTimes.length > 0) {
+      // Two hard failures in two minutes are enough evidence to avoid
+      // repeatedly reopening the same unstable WebGPU session.
+      this.forceWebGlForSession = true;
+      this.diagnostics.webGpuFallbacksToWebGL++;
+    }
+    this.recoveryAttemptTimes.push(now);
+    this.recoveryAttemptCount++;
+    this.engineEpoch++;
+    this.activeReadbackToken++;
+    this.webGpuLossDevice = null;
+    this.recoveryState = "recovering";
+    this.queueFaulted = true;
+    this.isReady = false;
+    this.engineLoading = false;
+    this.awaitingRecoveryFirstChunk = true;
+    this.diagnostics.lastRecoveryReason = reason;
+    this.diagnostics.lastRecoveryStartedAt = Date.now();
+
+    // Invalidate all in-flight output before disposing GPU resources. The
+    // Worklet remains muted and can never play a result from the old epoch.
+    this.streamGeneration++;
+    this.clearChunkQueue();
+    this.resetState();
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({
+        type: "RESYNC",
+        generation: this.streamGeneration
+      });
+    }
+    this.disposeBrowserEngineResources({
+      preserveMode: true,
+      reason
+    });
+  }
+
+  async finishWebGpuRecovery({ reason } = {}) {
+    if (this.destroyed || this.engineType !== "webgl" || this.currentMode === "bypass") {
+      this.recoveryState = "idle";
+      this.queueFaulted = false;
+      return { ok: false, skipped: true };
+    }
+
+    const recoveryEpoch = this.engineEpoch;
+    try {
+      await this.loadEngine();
+      if (!this.isReady || recoveryEpoch !== this.engineEpoch || this.destroyed) {
+        throw new Error("WebGPU recovery did not produce a ready engine");
+      }
+    } catch (firstError) {
+      if (this.destroyed || this.currentMode === "bypass") {
+        this.recoveryState = "idle";
+        this.queueFaulted = false;
+        return { ok: false, skipped: true };
+      }
+
+      // If recreating WebGPU failed, make one bounded WebGL attempt. This is
+      // still the same production model/profile; only the provider changes.
+      this.forceWebGlForSession = true;
+      this.diagnostics.webGpuFallbacksToWebGL++;
+      this.engineEpoch++;
+      this.disposeBrowserEngineResources({
+        preserveMode: true,
+        reason: "webgpu-recovery-failed"
+      });
+      try {
+        await this.loadEngine();
+        if (!this.isReady || this.destroyed) throw firstError;
+      } catch (fallbackError) {
+        this.recoveryState = "failed";
+        this.queueFaulted = true;
+        this.isReady = false;
+        this.diagnostics.webGpuRecoveriesFailed++;
+        this.diagnostics.lastRecoveryCompletedAt = Date.now();
+        this.setStatus("AI GPU unavailable");
+        throw fallbackError;
+      }
+    }
+
+    this.recoveryState = "idle";
+    this.queueFaulted = false;
+    this.awaitingRecoveryFirstChunk = true;
+    this.diagnostics.webGpuRecoveriesSucceeded++;
+    this.diagnostics.lastRecoveryCompletedAt = Date.now();
+    this.diagnostics.lastRecoveryReason = reason || this.diagnostics.lastRecoveryReason;
+    this.setStatus("Buffering...");
+    return { ok: true, backend: this.backendType };
+  }
+
+  attachWebGpuDeviceLossWatcher() {
+    if (this.backendType !== "webgpu" || typeof tf === "undefined") return;
+    let device = null;
+    try { device = tf.backend()?.device || null; } catch (_) {}
+    if (!device || typeof device.lost?.then !== "function" || device === this.webGpuLossDevice) {
+      return;
+    }
+    this.webGpuLossDevice = device;
+    const watchedEpoch = this.engineEpoch;
+    device.lost.then(info => {
+      if (this.destroyed || watchedEpoch !== this.engineEpoch ||
+          this.webGpuLossDevice !== device) return;
+      this.diagnostics.webGpuDeviceLosses++;
+      this.diagnostics.lastRecoveryReason = "device-lost";
+      this.diagnostics.lastRecoveryStartedAt = Date.now();
+      console.warn("[NextAmp AI] WebGPU device lost:", info?.reason || info?.message || info);
+      this.requestWebGpuRecovery("device-lost").catch(error => {
+        console.error("[NextAmp AI] Device-loss recovery failed:", error);
+      });
+    }).catch(error => {
+      // A rejected lost promise is still a provider failure, but do not let
+      // the diagnostic watcher create an unhandled rejection.
+      if (this.destroyed || watchedEpoch !== this.engineEpoch) return;
+      this.diagnostics.webGpuDeviceLosses++;
+      console.warn("[NextAmp AI] WebGPU device-loss watcher rejected:", error);
+    });
+  }
+
+  disposeBrowserEngineResources({ preserveMode = true } = {}) {
+    this.engineEpoch++;
+    this.activeReadbackToken++;
+    this.engineLoading = false;
+    this.isReady = false;
+    this.webGpuLossDevice = null;
+    this.clearChunkQueue();
+    this.resetState();
+    if (this.model) {
+      try { this.model.dispose(); } catch (_) {}
+      this.model = null;
+    }
+    this.modelOutputHead = null;
+    if (typeof tf !== "undefined") {
+      try { tf.disposeVariables(); } catch (_) {}
+    }
+    if (!preserveMode) this.currentMode = "bypass";
+  }
+
   async loadEngine() {
-    if (this.isReady || this.engineLoading) return;
+    if (this.destroyed || this.isReady || this.engineLoading) return;
+    const loadEpoch = this.engineEpoch;
     this.engineLoading = true;
     try {
       this.setStatus("Loading DSP...");
@@ -1308,7 +1506,8 @@ export class AIVocalManager {
 
       let currentBackend = "";
       try {
-        const hasWebGpu = typeof navigator !== "undefined" && navigator.gpu && await ensureWebGpuBackend();
+        const hasWebGpu = !this.forceWebGlForSession &&
+          typeof navigator !== "undefined" && navigator.gpu && await ensureWebGpuBackend();
         if (hasWebGpu && typeof tf.setBackend === "function") {
           // Keep the model's small post-processing ops on the same device;
           // CPU handoffs introduce synchronization and extra power draw.
@@ -1330,6 +1529,7 @@ export class AIVocalManager {
       // Detect GPU hardware device label early before loading model
       currentBackend = tf.getBackend() || currentBackend || "webgl";
       this.backendType = currentBackend;
+      this.attachWebGpuDeviceLossWatcher();
       const hardwareDescription = await this.detectWebHardwareInfo(currentBackend);
       let deviceLabel = hardwareDescription.device;
 
@@ -1463,7 +1663,7 @@ export class AIVocalManager {
       }
 
       // Check if cancelled/unloaded while downloading/loading model
-      if (!this.engineLoading) {
+      if (!this.engineLoading || loadEpoch !== this.engineEpoch || this.destroyed) {
         if (this.model) {
           try { this.model.dispose(); } catch (_) {}
           this.model = null;
@@ -1480,8 +1680,12 @@ export class AIVocalManager {
       this.setStatus("Warming up GPU...");
       try {
         await warmupWithOriginalFallback();
+        if (loadEpoch !== this.engineEpoch || this.destroyed) {
+          throw new Error("AI engine load was superseded");
+        }
         console.log(`[NextAmp AI] ${currentBackend.toUpperCase()} pipeline pre-warmed`);
       } catch (warmErr) {
+        if (loadEpoch !== this.engineEpoch || this.destroyed) throw warmErr;
         if (!(await fallbackToWebGL())) {
           throw warmErr;
         }
@@ -1524,7 +1728,16 @@ export class AIVocalManager {
         console.warn("[NextAmp AI] Benchmark test error:", benchErr);
       }
 
+      if (loadEpoch !== this.engineEpoch || this.destroyed || !this.engineLoading) {
+        if (this.model) {
+          try { this.model.dispose(); } catch (_) {}
+          this.model = null;
+        }
+        return;
+      }
+
       console.log(`[NextAmp AI] Engine ready with hardware: ${this.backendName}`);
+      this.lastError = null;
       this.isReady = true;
       this.queueFaulted = false;
       this.engineLoading = false;
@@ -1543,6 +1756,7 @@ export class AIVocalManager {
         }
       }
     } catch (err) {
+      if (this.destroyed || loadEpoch !== this.engineEpoch) return;
       this.engineLoading = false;
       console.error("[NextAmp AI] Engine load failed:", err);
       this.lastError = err.message || err.toString();
@@ -1950,22 +2164,11 @@ export class AIVocalManager {
   }
 
   unloadEngine() {
-    this.isReady = false;
-    this.engineLoading = false;
-    this.resetState();
-    if (this.model) {
-      try {
-        this.model.dispose();
-      } catch (_) {}
-      this.model = null;
-    }
-    this.modelOutputHead = null;
-    if (typeof tf !== "undefined") {
-      try {
-        tf.disposeVariables();
-      } catch (_) {}
-    }
-    this.currentMode = "bypass";
+    this.streamGeneration++;
+    this.disposeBrowserEngineResources({ preserveMode: false });
+    this.queueFaulted = false;
+    this.recoveryState = "idle";
+    this.awaitingRecoveryFirstChunk = false;
     this.setStatus("ORIGINAL");
     if (this.workletNode) {
       this.workletNode.port.postMessage({
@@ -1977,6 +2180,7 @@ export class AIVocalManager {
         generation: this.streamGeneration
       });
     }
+    webGpuRecoveryCoordinator.releaseBackendIfUnused();
     console.log("[NextAmp AI] Model unloaded & GPU memory freed");
   }
 
@@ -2229,10 +2433,16 @@ export class AIVocalManager {
   }
 
   destroy() {
-    this.resetState();
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.streamGeneration++;
+    this.disposeBrowserEngineResources({ preserveMode: false });
+    this.recoveryState = "idle";
+    this.unregisterWebGpuManager?.();
     if (this.workletNode) {
       try { this.workletNode.disconnect(); } catch (_) {}
       this.workletNode = null;
     }
+    webGpuRecoveryCoordinator.releaseBackendIfUnused();
   }
 }

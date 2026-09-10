@@ -605,13 +605,13 @@ Fallback ต้องเกิดจาก hard timeout/device loss เท่า
 
 ### Gate S2
 
-- [ ] simulated timeout ฟื้นกลับมาประมวลผล chunk ใหม่ได้
-- [ ] simulated device loss ฟื้นได้
-- [ ] recovery ไม่ปล่อย output เก่า/raw input
-- [ ] ไม่มี infinite retry
-- [ ] fallback เกิดตาม policy เท่านั้น
-- [ ] GO tests ผ่านโดยไม่มี source change ฝั่ง GO
-- [ ] Extension และ Web production build ผ่าน
+- [x] simulated timeout ฟื้นกลับมาประมวลผล chunk ใหม่ได้
+- [x] simulated device loss ฟื้นได้
+- [x] recovery ไม่ปล่อย output เก่า/raw input
+- [x] ไม่มี infinite retry
+- [x] fallback เกิดตาม policy เท่านั้น
+- [x] GO tests ผ่านโดยไม่มี source change ฝั่ง GO
+- [x] Extension และ Web production build ผ่าน
 
 เมื่อทำครบ: build แล้วหยุด ห้าม commit จนผู้ใช้ทดสอบและสั่งทำ S3
 

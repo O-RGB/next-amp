@@ -121,6 +121,27 @@ export class WebGpuRecoveryCoordinator {
     this.managers.delete(manager);
   }
 
+  releaseBackendIfUnused() {
+    const activeWebGpuManager = Array.from(this.managers).some(manager => {
+      try {
+        return manager?.backendType === "webgpu" &&
+          manager?.destroyed !== true && manager?.currentMode !== "bypass";
+      } catch (_) {
+        return false;
+      }
+    });
+    if (activeWebGpuManager) return false;
+    const runtime = globalThis.tf;
+    if (runtime?.getBackend?.() !== "webgpu" || !runtime.removeBackend) return false;
+    try {
+      runtime.removeBackend("webgpu");
+      this.backendEpoch++;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   request(requester, reason = "unknown") {
     if (this.sharedRecoveryPromise) return this.sharedRecoveryPromise;
 
