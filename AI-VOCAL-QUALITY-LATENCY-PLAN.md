@@ -43,13 +43,13 @@
 #### A1. เปิด Attenuation Floor (B1 — implement แล้ว ยังปิดอยู่)
 
 โค้ดมีอยู่แล้วใน `stft_core.c` (line ~576, 602–604, 613–614)
-และ flag `ENABLE_ATTENUATION_FLOOR_CANDIDATE = true` ใน JS (เปิดเป็น candidate สำหรับรอบทดสอบนี้)
+และ flag `ENABLE_ATTENUATION_FLOOR_CANDIDATE = false` ใน JS (ปิดชั่วคราวเพื่อเทียบ baseline หลัง A/B)
 + `stft_set_attenuation_floor()` ใน WASM (line 59 ใน .h)
 
-- [x] เปิด `ENABLE_ATTENUATION_FLOOR_CANDIDATE = true` เป็น A1 listening candidate; ยังไม่ปรับค่า floor จาก 0.035
-- [ ] ฟังจริงบนเพลง 3–5 เพลง: vocal decay, room ambience, centered instrument
-- [ ] ถ้าเสียงร้องเหลือให้ได้ยิน ลด ATTENUATION_FLOOR จาก 0.035 → 0.02
-- [ ] ถ้าเสียงดี commit เป็น default; ถ้าไม่ดี เปลี่ยนกลับเป็น false
+- [x] เปิด `ENABLE_ATTENUATION_FLOOR_CANDIDATE = true` ทดสอบเป็น A1 listening candidateแล้ว; รอบ baseline ปัจจุบันปิดกลับเป็น `false` และยังไม่ปรับค่า floor จาก 0.035
+- [x] ฟังจริงบนเพลง 3–5 เพลง: vocal decay, room ambience, centered instrument — เทียบ `false/true` แล้วไม่พบความต่างที่ฟังได้
+- [x] ไม่ลด `ATTENUATION_FLOOR` จาก 0.035 → 0.02 เพราะไม่พบความต่างที่แก้ได้ด้วย floor
+- [x] ไม่เปิดเป็น default; คง `ENABLE_ATTENUATION_FLOOR_CANDIDATE = false` เพราะ A/B ไม่ให้ผลต่างชัดเจน
 
 **ทำแล้วดียังไง:**
 Gain ปัจจุบันลงได้ถึง 0.0 (เงียบสนิท) ทำให้ bin ที่โมเดลบอกว่าเป็น vocal
