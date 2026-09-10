@@ -651,6 +651,7 @@ startup-benchmark
 live-deadline
 readback-timeout
 device-lost
+recovering
 fallback-webgl
 recovered
 ```
@@ -684,10 +685,10 @@ recovered
 
 ### Gate S3
 
-- [ ] warning สะท้อน backend และเหตุการณ์จริง
-- [ ] reload popup ไม่ทำให้ warning เก่ากลับมา
-- [ ] ไม่มี telemetry allocation ใน Worklet hot path
-- [ ] audio output และ model path ไม่เปลี่ยน
+- [x] warning สะท้อน backend และเหตุการณ์จริง
+- [x] reload popup ไม่ทำให้ warning เก่ากลับมา
+- [x] ไม่มี telemetry allocation ใน Worklet hot path
+- [x] audio output และ model path ไม่เปลี่ยน
 
 เมื่อทำครบ: build แล้วหยุด ห้าม commit จนผู้ใช้ทดสอบและสั่งทำ S4
 

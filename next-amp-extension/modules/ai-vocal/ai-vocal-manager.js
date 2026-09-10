@@ -115,6 +115,12 @@ const WEBGPU_READBACK_TIMEOUT_MIN_MS = 1000;
 const WEBGPU_READBACK_TIMEOUT_MAX_MS = 2000;
 const WEBGPU_READBACK_TIMEOUT_P95_MULTIPLIER = 8;
 const WEBGPU_READBACK_TIMEOUT_CHUNK_MULTIPLIER = 5;
+const LIVE_GPU_HEALTH_MIN_SAMPLES = 8;
+const LIVE_GPU_HEALTH_SLOW_STREAK = 3;
+const LIVE_GPU_HEALTH_CLEAR_STREAK = 8;
+const LIVE_GPU_HEALTH_WARN_RATIO = 0.95;
+const LIVE_GPU_HEALTH_CLEAR_RATIO = 0.80;
+const CACHED_GPU_WARNING_MAX_AGE_MS = 10 * 60 * 1000;
 let webGpuBackendPromise = null;
 
 function describeWebHardware(renderer, backendType) {
@@ -389,6 +395,11 @@ export class AIVocalManager {
     this.hardwareApi = "WEBGL";
     this.benchmarkMs = 0;
     this.isHardwareSlow = false;
+    this.startupBenchmarkSlow = false;
+    this.liveGpuWarningActive = false;
+    this.liveGpuSlowStreak = 0;
+    this.liveGpuHealthyStreak = 0;
+    this.liveGpuP95Ms = 0;
     this.modelGraphFoldedBranches = 0;
     this.modelGraphExplicitPads = 0;
     this.goLatencySamples = new Float64Array(GO_LATENCY_SAMPLE_CAPACITY);
@@ -814,6 +825,64 @@ export class AIVocalManager {
         now - this.browserQueueStableSince >= BROWSER_QUEUE_STABLE_WINDOW_MS) {
       this.browserQueueStableSince = now;
       this.setBrowserQueueTarget(this.browserQueueTarget - 1);
+    }
+  }
+
+  getBrowserLatencyP95() {
+    if (this.browserLatencySampleCount <= 0) return null;
+    const sampleCount = this.getSortedBrowserLatencyCount();
+    return this.browserLatencySortBuffer[
+      Math.min(sampleCount - 1, Math.ceil(sampleCount * 0.95) - 1)
+    ];
+  }
+
+  observeLiveGpuHealth(elapsedMs) {
+    if (this.backendType !== "webgpu" || !Number.isFinite(elapsedMs) || elapsedMs <= 0) {
+      return;
+    }
+    if (this.browserLatencySampleCount < LIVE_GPU_HEALTH_MIN_SAMPLES) return;
+
+    const p95Ms = this.getBrowserLatencyP95();
+    const sampleRate = this.audioCtx?.sampleRate || 44100;
+    const chunkMs = (this.getProcessingConfig().chunkSamples / sampleRate) * 1000;
+    if (!Number.isFinite(p95Ms) || !Number.isFinite(chunkMs) || chunkMs <= 0) return;
+    this.liveGpuP95Ms = p95Ms;
+
+    if (p95Ms > chunkMs * LIVE_GPU_HEALTH_WARN_RATIO) {
+      this.liveGpuSlowStreak++;
+      this.liveGpuHealthyStreak = 0;
+      if (!this.liveGpuWarningActive &&
+          this.liveGpuSlowStreak >= LIVE_GPU_HEALTH_SLOW_STREAK) {
+        this.liveGpuWarningActive = true;
+        this.isHardwareSlow = true;
+        this.broadcastHardwareWarning(this.benchmarkMs || p95Ms, this.backendName, {
+          liveP95Ms: p95Ms,
+          chunkDeadlineMs: chunkMs,
+          reason: "live-deadline",
+          active: true
+        });
+      }
+      return;
+    }
+
+    if (p95Ms < chunkMs * LIVE_GPU_HEALTH_CLEAR_RATIO) {
+      this.liveGpuHealthyStreak++;
+      this.liveGpuSlowStreak = 0;
+      if ((this.liveGpuWarningActive || this.startupBenchmarkSlow) &&
+          this.liveGpuHealthyStreak >= LIVE_GPU_HEALTH_CLEAR_STREAK) {
+        this.liveGpuWarningActive = false;
+        this.startupBenchmarkSlow = false;
+        this.isHardwareSlow = false;
+        this.broadcastHardwareWarning(this.benchmarkMs || p95Ms, this.backendName, {
+          liveP95Ms: p95Ms,
+          chunkDeadlineMs: chunkMs,
+          reason: "recovered",
+          active: false
+        });
+      }
+    } else {
+      this.liveGpuHealthyStreak = 0;
+      this.liveGpuSlowStreak = 0;
     }
   }
 
@@ -1281,9 +1350,19 @@ export class AIVocalManager {
     this.queueFaulted = true;
     this.isReady = false;
     this.engineLoading = false;
+    this.isHardwareSlow = false;
+    this.startupBenchmarkSlow = false;
+    this.liveGpuWarningActive = false;
+    this.liveGpuSlowStreak = 0;
+    this.liveGpuHealthyStreak = 0;
     this.awaitingRecoveryFirstChunk = true;
     this.diagnostics.lastRecoveryReason = reason;
     this.diagnostics.lastRecoveryStartedAt = Date.now();
+    this.broadcastHardwareWarning(this.benchmarkMs || this.liveGpuP95Ms, this.backendName, {
+      liveP95Ms: this.liveGpuP95Ms || null,
+      reason: "recovering",
+      active: false
+    });
 
     // Invalidate all in-flight output before disposing GPU resources. The
     // Worklet remains muted and can never play a result from the old epoch.
@@ -1351,6 +1430,13 @@ export class AIVocalManager {
     this.diagnostics.webGpuRecoveriesSucceeded++;
     this.diagnostics.lastRecoveryCompletedAt = Date.now();
     this.diagnostics.lastRecoveryReason = reason || this.diagnostics.lastRecoveryReason;
+    this.broadcastHardwareWarning(this.benchmarkMs || this.liveGpuP95Ms, this.backendName, {
+      liveP95Ms: this.liveGpuP95Ms || null,
+      chunkDeadlineMs: this.getProcessingConfig().chunkSamples /
+        (this.audioCtx?.sampleRate || 44100) * 1000,
+      reason: "recovered",
+      active: false
+    });
     this.setStatus("Buffering...");
     return { ok: true, backend: this.backendType };
   }
@@ -1533,13 +1619,19 @@ export class AIVocalManager {
       const hardwareDescription = await this.detectWebHardwareInfo(currentBackend);
       let deviceLabel = hardwareDescription.device;
 
-      // Early fast check before loading model:
-      // If software CPU / SwiftShader is used, or if cached benchmark says slow, alert user immediately!
+      // Early fast check before loading model. A cached benchmark is only a
+      // historical hint and must never become a live warning by itself.
       if (currentBackend === "cpu" || deviceLabel.includes("SwiftShader")) {
         console.warn("[NextAmp AI] Software rendering detected (CPU / SwiftShader)");
         this.isHardwareSlow = true;
         this.benchmarkMs = 2500;
-        this.broadcastHardwareWarning(2500, deviceLabel);
+        this.startupBenchmarkSlow = true;
+        this.broadcastHardwareWarning(2500, deviceLabel, {
+          reason: "startup-benchmark",
+          active: true,
+          chunkDeadlineMs: this.getProcessingConfig().chunkSamples /
+            (this.audioCtx?.sampleRate || 44100) * 1000
+        });
         // Do not upload the 15MB model or start a CPU inference loop that
         // cannot meet real-time audio. The caller remains in a safe bypass.
         this.engineLoading = false;
@@ -1548,10 +1640,13 @@ export class AIVocalManager {
       } else {
         try {
           const cached = (await chrome.storage.local.get("cachedGpuBenchmark"))?.cachedGpuBenchmark;
-          if (cached && cached.deviceLabel === deviceLabel && cached.isHardwareSlow) {
-            this.isHardwareSlow = true;
+          if (cached && cached.deviceLabel === deviceLabel &&
+              cached.isHardwareSlow && Number.isFinite(cached.timestamp) &&
+              Date.now() - cached.timestamp <= CACHED_GPU_WARNING_MAX_AGE_MS) {
+            // Keep the number for diagnostics, but wait for the current
+            // session's live samples before showing GPU Slow.
             this.benchmarkMs = cached.benchmarkMs;
-            this.broadcastHardwareWarning(cached.benchmarkMs, cached.deviceLabel);
+            console.log("[NextAmp AI] Cached GPU benchmark retained as history only");
           }
         } catch (_) {}
       }
@@ -1707,11 +1802,15 @@ export class AIVocalManager {
         this.benchmarkMs = benchmarkMs;
         console.log(`[NextAmp AI] Hardware benchmark 1-chunk: ${benchmarkMs}ms on ${this.backendName}`);
 
-        if (benchmarkMs > 185) {
-          this.isHardwareSlow = true;
-          this.broadcastHardwareWarning(benchmarkMs, this.backendName);
-        } else {
-          this.isHardwareSlow = false;
+        this.startupBenchmarkSlow = benchmarkMs > 185;
+        this.isHardwareSlow = this.startupBenchmarkSlow;
+        if (this.startupBenchmarkSlow) {
+          this.broadcastHardwareWarning(benchmarkMs, this.backendName, {
+            reason: "startup-benchmark",
+            active: true,
+            chunkDeadlineMs: this.getProcessingConfig().chunkSamples /
+              (this.audioCtx?.sampleRate || 44100) * 1000
+          });
         }
 
         try {
@@ -1719,7 +1818,7 @@ export class AIVocalManager {
             cachedGpuBenchmark: {
               deviceLabel: this.backendName,
               benchmarkMs: benchmarkMs,
-              isHardwareSlow: this.isHardwareSlow,
+              isHardwareSlow: this.startupBenchmarkSlow,
               timestamp: Date.now()
             }
           }).catch(() => {});
@@ -2087,6 +2186,7 @@ export class AIVocalManager {
           generation === this.streamGeneration &&
           this.currentMode !== "bypass" && mode === this.currentMode) {
         this.observeBrowserLatency(this.lastInferMs);
+        this.observeLiveGpuHealth(this.lastInferMs);
       }
 
       if (generation !== this.streamGeneration || this.currentMode === "bypass" || mode !== this.currentMode) {
@@ -2130,19 +2230,27 @@ export class AIVocalManager {
     this.strength = 1.0;
   }
 
-  broadcastHardwareWarning(benchmarkMs, deviceLabel) {
+  broadcastHardwareWarning(benchmarkMs, deviceLabel, {
+    liveP95Ms = null,
+    chunkDeadlineMs = null,
+    reason = "startup-benchmark",
+    active = true
+  } = {}) {
+    const payload = {
+      benchmarkMs: Number.isFinite(benchmarkMs) ? benchmarkMs : null,
+      liveP95Ms: Number.isFinite(liveP95Ms) ? liveP95Ms : null,
+      chunkDeadlineMs: Number.isFinite(chunkDeadlineMs) ? chunkDeadlineMs : null,
+      deviceLabel: deviceLabel || this.backendName || "GPU",
+      backend: this.backendType,
+      reason,
+      active: active === true,
+      timestamp: Date.now()
+    };
     try {
-      chrome.storage.local.set({
-        aiHardwareWarning: {
-          benchmarkMs: benchmarkMs,
-          deviceLabel: deviceLabel,
-          timestamp: Date.now()
-        }
-      }).catch(() => {});
+      chrome.storage.local.set({ aiHardwareWarning: payload }).catch(() => {});
       chrome.runtime.sendMessage({
         type: "AI_HARDWARE_WARNING",
-        benchmarkMs: benchmarkMs,
-        deviceLabel: deviceLabel
+        ...payload
       }).catch(() => {});
     } catch (_) {}
   }
@@ -2169,6 +2277,16 @@ export class AIVocalManager {
     this.queueFaulted = false;
     this.recoveryState = "idle";
     this.awaitingRecoveryFirstChunk = false;
+    this.isHardwareSlow = false;
+    this.startupBenchmarkSlow = false;
+    this.liveGpuWarningActive = false;
+    this.liveGpuSlowStreak = 0;
+    this.liveGpuHealthyStreak = 0;
+    this.broadcastHardwareWarning(this.benchmarkMs || this.liveGpuP95Ms, this.backendName, {
+      liveP95Ms: this.liveGpuP95Ms || null,
+      reason: "recovered",
+      active: false
+    });
     this.setStatus("ORIGINAL");
     if (this.workletNode) {
       this.workletNode.port.postMessage({

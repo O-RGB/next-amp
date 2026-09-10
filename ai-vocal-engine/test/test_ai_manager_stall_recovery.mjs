@@ -71,5 +71,20 @@ assert.equal(fallbackManager.backendType, 'webgl');
 assert.equal(fallbackManager.recoveryState, 'idle');
 fallbackManager.destroy();
 
+const healthManager = makeManager();
+healthManager.backendType = 'webgpu';
+healthManager.browserLatencySampleCount = 8;
+healthManager.browserLatencySamples.fill(190);
+healthManager.observeLiveGpuHealth(190);
+healthManager.observeLiveGpuHealth(190);
+healthManager.observeLiveGpuHealth(190);
+assert.equal(healthManager.liveGpuWarningActive, true);
+assert.equal(healthManager.isHardwareSlow, true);
+healthManager.browserLatencySamples.fill(100);
+for (let i = 0; i < 8; i++) healthManager.observeLiveGpuHealth(100);
+assert.equal(healthManager.liveGpuWarningActive, false);
+assert.equal(healthManager.isHardwareSlow, false);
+healthManager.destroy();
+
 globalThis.tf = oldTf;
 console.log('AIVocalManager WebGPU stall recovery lifecycle passed.');

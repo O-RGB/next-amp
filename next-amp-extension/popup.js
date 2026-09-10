@@ -25,6 +25,7 @@ const PRESETS = {
   pop: [2, 1, 3, 2, 1, 0, 1, 2, 2, 1],
   voice: [-2, -1, 0, 2, 4, 4, 3, 1, 0, 0],
 };
+const AI_WARNING_MAX_AGE_MS = 10 * 60 * 1000;
 
 let isAudioMasterOn = true;
 let isVideoMasterOn = true;
@@ -688,18 +689,35 @@ chrome.runtime.onMessage.addListener((msg) => {
   } else if (msg.type === "RECORDING_SAVED") {
     handleRecordingSaved();
   } else if (msg.type === "AI_HARDWARE_WARNING") {
-    showAiSlowModal(msg.benchmarkMs, msg.deviceLabel);
+    if (msg.active === false || msg.reason === "recovered") {
+      hideAiSlowModal();
+    } else if (isCurrentAiWarning(msg)) {
+      showAiSlowModal(msg.liveP95Ms || msg.benchmarkMs, msg.deviceLabel);
+    }
   }
 });
 
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.aiHardwareWarning && changes.aiHardwareWarning.newValue) {
     const val = changes.aiHardwareWarning.newValue;
-    if (val && val.benchmarkMs > 185) {
-      showAiSlowModal(val.benchmarkMs, val.deviceLabel);
+    if (isCurrentAiWarning(val)) {
+      showAiSlowModal(val.liveP95Ms || val.benchmarkMs, val.deviceLabel);
+    } else if (val?.active === false || val?.reason === "recovered") {
+      hideAiSlowModal();
     }
   }
 });
+
+function isCurrentAiWarning(value) {
+  if (!value || value.active !== true) return false;
+  if (!Number.isFinite(value.timestamp)) return false;
+  if (Date.now() - value.timestamp > AI_WARNING_MAX_AGE_MS) return false;
+  return value.reason !== "recovered";
+}
+
+function hideAiSlowModal() {
+  $("#ai-slow-overlay")?.classList.remove("active");
+}
 
 function showAiSlowModal(benchmarkMs, deviceLabel) {
   const overlay = $("#ai-slow-overlay");
@@ -1167,8 +1185,9 @@ function setupListeners() {
   });
   $("#btn-vocal-karaoke")?.addEventListener("click", () => {
     chrome.storage.local.get("aiHardwareWarning").then((res) => {
-      if (res?.aiHardwareWarning?.benchmarkMs > 185) {
-        showAiSlowModal(res.aiHardwareWarning.benchmarkMs, res.aiHardwareWarning.deviceLabel);
+      if (isCurrentAiWarning(res?.aiHardwareWarning)) {
+        const warning = res.aiHardwareWarning;
+        showAiSlowModal(warning.liveP95Ms || warning.benchmarkMs, warning.deviceLabel);
       }
     }).catch(() => {});
     sendParam("vocalMode", "karaoke");
@@ -1176,8 +1195,9 @@ function setupListeners() {
   });
   $("#btn-vocal-acapella")?.addEventListener("click", () => {
     chrome.storage.local.get("aiHardwareWarning").then((res) => {
-      if (res?.aiHardwareWarning?.benchmarkMs > 185) {
-        showAiSlowModal(res.aiHardwareWarning.benchmarkMs, res.aiHardwareWarning.deviceLabel);
+      if (isCurrentAiWarning(res?.aiHardwareWarning)) {
+        const warning = res.aiHardwareWarning;
+        showAiSlowModal(warning.liveP95Ms || warning.benchmarkMs, warning.deviceLabel);
       }
     }).catch(() => {});
     sendParam("vocalMode", "acapella");
