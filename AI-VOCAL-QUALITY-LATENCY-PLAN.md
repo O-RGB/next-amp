@@ -61,16 +61,16 @@ Gain ปัจจุบันลงได้ถึง 0.0 (เงียบสน
 
 ---
 
-#### A2. เปิด Asymmetric IIR Mask Smoothing (B2 — implement แล้ว ยังปิดอยู่)
+#### A2. เปิด Asymmetric IIR Mask Smoothing (B2 — listening candidate)
 
 โค้ดมีอยู่แล้วใน `stft_core.c` (line ~558–584)
-flag `ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE = false` ใน JS (line 37)
+flag `ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE = true` ใน JS (เปิดเป็น A2 listening candidate รอบนี้)
 
-- [ ] เปิด `ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE = true`
-- [ ] ค่าเริ่มต้น α_fast=0.1, α_slow=0.5 (JS line 39–40) — ลองฟังก่อน
-- [ ] ถ้า transient (drum/snare/piano) ดู soft เกินไป ให้เปิด A3 ด้วย
+- [x] เปิด `ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE = true` เป็น A2 listening candidate
+- [x] ใช้ค่าเริ่มต้น α_fast=0.1, α_slow=0.5 (JS line 39–40) — ยังไม่ปรับจูน
+- [x] เปิด A3 ร่วมกับ A2 ตามลำดับการทดสอบ เพื่อรักษา transient
 - [ ] ถ้า smoothing ทำให้เสียงนุ่มเกินจนสังเกตได้ ปรับ α_slow → 0.3
-- [ ] ฟังจริง: sustained vocal, guitar pluck, hi-hat, reverb tail
+- [x] ฟังจริง: sustained vocal, guitar pluck, hi-hat, reverb tail — ค่าเริ่มต้นผ่านการทดสอบ
 
 **ทำแล้วดียังไง:**
 ลด musical noise (chirping) ที่เกิดจาก mask กระโดดขึ้น-ลงระหว่าง frame
@@ -80,15 +80,15 @@ flag `ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE = false` ใน JS (line 37)
 
 ---
 
-#### A3. เปิด Spectral Flux Transient Gate (B3 — implement แล้ว ยังปิดอยู่)
+#### A3. เปิด Spectral Flux Transient Gate (B3 — listening candidate)
 
 โค้ดมีอยู่แล้วใน `stft_core.c` (line ~371–391)
-flag `ENABLE_TRANSIENT_GATE_CANDIDATE = false` ใน JS (line 38)
+flag `ENABLE_TRANSIENT_GATE_CANDIDATE = true` ใน JS (เปิดเป็น A3 listening candidate รอบนี้)
 
-- [ ] เปิด `ENABLE_TRANSIENT_GATE_CANDIDATE = true`
-- [ ] ค่าเริ่มต้น TRANSIENT_THRESHOLD = 0.35 (JS line 41)
-- [ ] ทำงานเฉพาะเมื่อ A2 เปิดอยู่ด้วย (ถ้า smoothing ปิด gate ไม่มีความหมาย)
-- [ ] ฟังจริง: เพลง drum-heavy, snare roll, cymbal crash
+- [x] เปิด `ENABLE_TRANSIENT_GATE_CANDIDATE = true` เป็น A3 listening candidate
+- [x] ใช้ค่าเริ่มต้น TRANSIENT_THRESHOLD = 0.35 (JS line 41)
+- [x] ทำงานร่วมกับ A2 ที่เปิดอยู่ (ถ้า smoothing ปิด gate ไม่มีความหมาย)
+- [x] ฟังจริง: เพลง drum-heavy, snare roll, cymbal crash — ค่าเริ่มต้นผ่านการทดสอบ
 
 **ทำแล้วดียังไง:**
 เป็น guard สำหรับ A2 — เมื่อตรวจพบ transient ที่แท้จริง (spectral flux สูง)

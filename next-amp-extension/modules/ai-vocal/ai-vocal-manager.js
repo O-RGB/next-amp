@@ -34,8 +34,8 @@ const ENABLE_ATTENUATION_FLOOR_CANDIDATE = false;
 const ATTENUATION_FLOOR = 0.035;
 // Phase B2+B3 candidate flags remain available for rollback/A-B. They are
 // disabled while the isolated B4 texture candidate is being evaluated.
-const ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE = false;
-const ENABLE_TRANSIENT_GATE_CANDIDATE = false;
+const ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE = true;
+const ENABLE_TRANSIENT_GATE_CANDIDATE = true;
 const SMOOTHING_FAST_ALPHA = 0.1;
 const SMOOTHING_SLOW_ALPHA = 0.5;
 const TRANSIENT_THRESHOLD = 0.35;
