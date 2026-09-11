@@ -11,7 +11,7 @@
  */
 
 const GO_CHUNK_SIZE = 8192; // 16 frames * 512 hop (GO wire protocol)
-const BROWSER_CHUNK_SIZE = 7680; // 15 hops * 512 (~174.1ms), ECO/MEDIUM profile
+const BROWSER_CHUNK_SIZE = 7680; // 15 hops * 512 (~174.1ms), ECO profile
 const DEFAULT_BROWSER_CHUNK_SIZE = GO_CHUNK_SIZE; // 16 hops, Detail production profile
 const MAX_CHUNK_SIZE = GO_CHUNK_SIZE;
 const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute

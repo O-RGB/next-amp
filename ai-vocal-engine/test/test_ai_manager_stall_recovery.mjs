@@ -3,11 +3,24 @@ import { AIVocalManager } from '../../next-amp-extension/modules/ai-vocal/ai-voc
 
 const oldTf = globalThis.tf;
 let backendRemoves = 0;
+let backendRegisters = 0;
+const webGpuFactory = () => ({ backend: 'webgpu' });
+let registeredFactory = webGpuFactory;
 globalThis.tf = {
   getBackend: () => 'webgpu',
+  findBackendFactory: name => name === 'webgpu' ? registeredFactory : null,
   removeBackend: name => {
     assert.equal(name, 'webgpu');
     backendRemoves++;
+    registeredFactory = null;
+  },
+  registerBackend: (name, factory, priority) => {
+    assert.equal(name, 'webgpu');
+    assert.equal(factory, webGpuFactory);
+    assert.equal(priority, 3);
+    registeredFactory = factory;
+    backendRegisters++;
+    return true;
   },
   disposeVariables: () => {}
 };
@@ -37,6 +50,9 @@ manager.loadEngine = async () => {
 
 await manager.requestWebGpuRecovery('readback-timeout');
 assert.equal(backendRemoves, 1);
+assert.equal(backendRegisters, 1);
+assert.equal(registeredFactory, webGpuFactory,
+  'WebGPU backend factory must survive recovery for the next activation');
 assert.equal(loadCalls, 1);
 assert.equal(manager.isReady, true);
 assert.equal(manager.queueFaulted, false);

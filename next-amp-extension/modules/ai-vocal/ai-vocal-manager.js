@@ -59,7 +59,7 @@ const CANDIDATE_WEBGL_F16 = true;
 // GO keeps its existing queue controller and is never routed through this.
 const ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE = true;
 const VOCAL_PROFILES = Object.freeze({
-  // ECO and MEDIUM intentionally share this tested browser cadence.
+  // ECO is the single shared low-power browser cadence.
   balanced: Object.freeze({
     frames: 15,
     analysisFrames: 15,
@@ -215,6 +215,17 @@ async function ensureWebGpuBackend() {
     if (tf.findBackendFactory && tf.findBackendFactory("webgpu")) return true;
   } catch (_) {}
 
+  // A previous TensorFlow.js removeBackend() may have removed the provider
+  // factory while this module-level promise still says its script was loaded.
+  // Revalidate the real registry before trusting that cached result.
+  if (webGpuBackendPromise) {
+    await webGpuBackendPromise;
+    try {
+      if (tf.findBackendFactory && tf.findBackendFactory("webgpu")) return true;
+    } catch (_) {}
+    webGpuBackendPromise = null;
+  }
+
   if (!webGpuBackendPromise) {
     webGpuBackendPromise = new Promise((resolve) => {
       const script = document.createElement("script");
@@ -240,6 +251,7 @@ export class AIVocalManager {
     this.workletNode = null;
     this.isReady = false;
     this.engineLoading = false;
+    this.engineLoadPromise = null;
     this.currentMode = "bypass";
     this.currentStatus = "ORIGINAL";
     this.onStatusChange = null;
@@ -622,7 +634,7 @@ export class AIVocalManager {
   }
 
   getProcessingProfileName() {
-    // ECO/MEDIUM's shorter cadence is browser-only. GO keeps its native
+    // ECO's shorter cadence is browser-only. GO keeps its native
     // 16-frame packet contract regardless of the saved WEB preference.
     if (this.engineType === "webgl") {
       const processingProfile = this.getPowerModeConfig().processingProfile;
@@ -663,7 +675,7 @@ export class AIVocalManager {
     if (this.engineType !== "webgl") return true;
     // F16 is a WebGL texture policy, not a WebGPU model precision. Comparing
     // it while WebGPU is active caused a needless model/backend reload when
-    // switching MEDIUM -> FULL even though the active provider was valid.
+    // switching ECO -> FULL even though the active provider was valid.
     if (this.backendType === "webgl") {
       const wantsF16 = CANDIDATE_WEBGL_F16 && this.getPowerModeConfig().webglF16 === true;
       const hasF16 = this.getTexturePrecision() === "F16";
@@ -1239,15 +1251,22 @@ export class AIVocalManager {
    */
   async init() {
     try {
+      if (this.destroyed) return null;
       // 1. Load AudioWorklet module & create AudioWorkletNode
       const workletUrl = chrome.runtime.getURL("modules/ai-vocal/vocal-worklet.js");
       await this.audioCtx.audioWorklet.addModule(workletUrl);
+      if (this.destroyed) return null;
 
       this.workletNode = new AudioWorkletNode(this.audioCtx, "nextamp-ai-vocal-processor", {
         numberOfInputs: 1,
         numberOfOutputs: 1,
         outputChannelCount: [2]
       });
+      if (this.destroyed) {
+        try { this.workletNode.disconnect(); } catch (_) {}
+        this.workletNode = null;
+        return null;
+      }
 
       // 2. Wire Worklet <-> Engine
       this.workletNode.port.onmessage = (e) => {
@@ -1385,6 +1404,7 @@ export class AIVocalManager {
 
       return this.workletNode;
     } catch (err) {
+      if (this.destroyed) return null;
       console.error("[NextAmp AI] Worklet creation failed:", err);
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: Worklet");
@@ -1710,7 +1730,22 @@ export class AIVocalManager {
     if (!preserveMode) this.currentMode = "bypass";
   }
 
-  async loadEngine() {
+  loadEngine() {
+    if (this.destroyed || this.isReady) return Promise.resolve();
+    if (this.engineLoadPromise) return this.engineLoadPromise;
+    if (this.engineLoading) return Promise.resolve();
+
+    const loadTask = this._loadEngine();
+    const trackedTask = loadTask.finally(() => {
+      if (this.engineLoadPromise === trackedTask) {
+        this.engineLoadPromise = null;
+      }
+    });
+    this.engineLoadPromise = trackedTask;
+    return trackedTask;
+  }
+
+  async _loadEngine() {
     if (this.destroyed || this.isReady || this.engineLoading) return;
     const loadEpoch = this.engineEpoch;
     this.engineLoading = true;
@@ -1857,7 +1892,7 @@ export class AIVocalManager {
       }
       if (!currentBackend) {
         currentBackend = await configureWebGL();
-        // The shared ECO/MEDIUM preset prefers WebGPU. A driver that cannot
+        // The shared ECO preset prefers WebGPU. A driver that cannot
         // initialize WebGL still gets one bounded fallback attempt.
         if (currentBackend === "cpu" && preferWebGlForPowerMode) {
           currentBackend = await configureWebGPU();
@@ -2155,6 +2190,15 @@ export class AIVocalManager {
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: " + this.lastError.substring(0, 18));
     }
+  }
+
+  async waitForEngineIdle(timeoutMs = 2000) {
+    const pendingLoad = this.engineLoadPromise;
+    if (!pendingLoad) return;
+    await Promise.race([
+      pendingLoad.catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, timeoutMs))
+    ]);
   }
 
   handleWorkletStatus(data) {

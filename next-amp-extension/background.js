@@ -167,8 +167,17 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
     );
     return true;
   } else if (msg.type === "STOP_CAPTURE") {
-    chrome.runtime.sendMessage(msg);
-    sendResponse({ success: true });
+    // Wait for the offscreen document to invalidate/tear down the capture.
+    // Returning immediately lets the popup close while START_CAPTURE is still
+    // preparing a stream, which used to leave an orphaned AI load behind.
+    chrome.runtime.sendMessage(msg, (response) => {
+      // Reading lastError prevents Chrome from reporting an unhandled
+      // "Receiving end does not exist" warning when the offscreen document is
+      // already gone.
+      void chrome.runtime.lastError;
+      sendResponse(response || { success: true });
+    });
+    return true;
   } else if (msg.type === "SET_PARAM") {
     chrome.runtime.sendMessage(msg);
     sendResponse({ success: true });

@@ -27,6 +27,11 @@ const PRESETS = {
   voice: [-2, -1, 0, 2, 4, 4, 3, 1, 0, 0],
 };
 const AI_WARNING_MAX_AGE_MS = 10 * 60 * 1000;
+const DONATION_URL = "https://ganknow.com/nextfeeder/tip";
+const DONATION_MIN_USAGE_MS = 30 * 60 * 1000;
+const DONATION_MIN_SESSIONS = 3;
+const DONATION_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+const DONATION_MAX_PROMPTS = 3;
 
 let isAudioMasterOn = true;
 let isVideoMasterOn = true;
@@ -35,7 +40,7 @@ let isEqOn = true;
 let isVocalOn = false;
 let currentVocalMode = "bypass";
 let aiEngineType = "webgl"; // "webgl" or "go_native"
-let aiPowerMode = "quality"; // "eco", "medium", or "quality"; WEB AI only
+let aiPowerMode = "eco"; // "eco" or "quality"; WEB AI only
 // Detail is the single production profile. Keep experimental profiles
 // internal and do not expose a profile selector.
 let currentVocalProfile = "ai_remove";
@@ -51,6 +56,7 @@ let isRecording = false;
 let db = new DBManager();
 let isTabReady = true;
 let currentTabId = null;
+let captureRequestId = 0;
 
 let sessionManager;
 let settingsModal;
@@ -115,7 +121,7 @@ function getActionNotification(key, value) {
     case "vocalProfile":
       return { message: `AI PROFILE ${String(value).replace(/_/g, " ").toUpperCase()}`, icon: "ph-sliders" };
     case "aiPowerMode":
-      return { message: `AI ${String(value).toUpperCase()}`, icon: value === "eco" ? "ph-leaf" : value === "medium" ? "ph-gauge" : "ph-sparkle" };
+      return { message: `AI ${normalizeAiPowerMode(value).toUpperCase()}`, icon: normalizeAiPowerMode(value) === "eco" ? "ph-leaf" : "ph-sparkle" };
     case "aiEngineType":
       return { message: `AI ENGINE ${value === "go_native" ? "GO" : "WEB"}`, icon: value === "go_native" ? "ph-lightning" : "ph-globe" };
     case "videoQuality":
@@ -295,6 +301,71 @@ async function checkFirstLaunchModal() {
   }
 }
 
+async function maybeShowUsageDonateModal(audioState) {
+  // Never cover a live audio session or another status/error dialog.
+  if (!isTabReady || isAudioMasterOn || audioState?.isAudioActive) return;
+
+  const overlay = $("#usage-donate-overlay");
+  if (!overlay || overlay.classList.contains("active")) return;
+
+  const data = await chrome.storage.local.get([
+    "hasSeenWelcomeDonateModal",
+    "donationUsage",
+  ]);
+  if (!data.hasSeenWelcomeDonateModal) return;
+
+  const usage = data.donationUsage || {};
+  const usageMs = Number(usage.usageMs) || 0;
+  const completedSessions = Number(usage.completedSessions) || 0;
+  const promptCount = Number(usage.promptCount) || 0;
+  const now = Date.now();
+
+  if (usage.dismissedForever || promptCount >= DONATION_MAX_PROMPTS) return;
+  if (Number(usage.snoozeUntil) > now) return;
+  if (Number(usage.lastPromptAt) && now - Number(usage.lastPromptAt) < DONATION_COOLDOWN_MS) return;
+  if (usageMs < DONATION_MIN_USAGE_MS && completedSessions < DONATION_MIN_SESSIONS) return;
+
+  // Reserve this prompt before displaying it so reopening the popup cannot
+  // show the same request repeatedly if the user closes it immediately.
+  await chrome.storage.local.set({
+    donationUsage: {
+      ...usage,
+      promptCount: promptCount + 1,
+      lastPromptAt: now,
+    },
+  });
+
+  const close = () => overlay.classList.remove("active");
+  const updatePromptState = (extra = {}) =>
+    chrome.storage.local.set({
+      donationUsage: {
+        ...usage,
+        promptCount: promptCount + 1,
+        lastPromptAt: now,
+        ...extra,
+      },
+    });
+  const openDonation = () => {
+    updatePromptState({ dismissedForever: true });
+    close();
+    chrome.tabs.create({ url: DONATION_URL });
+  };
+  const later = () => {
+    updatePromptState({ snoozeUntil: now + DONATION_COOLDOWN_MS });
+    close();
+  };
+  const dismissForever = () => {
+    updatePromptState({ dismissedForever: true });
+    close();
+  };
+
+  $("#btn-usage-donate").onclick = openDonation;
+  $("#btn-usage-later").onclick = later;
+  $("#btn-usage-dismiss").onclick = dismissForever;
+  $("#btn-close-usage-donate").onclick = later;
+  overlay.classList.add("active");
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) currentTabId = tab.id;
@@ -348,6 +419,7 @@ async function finalizeInitialization() {
     "isVideoMasterOn",
     "isEqOn",
     "isVocalOn",
+    "vocalMode",
     "aiEngineType",
     "vocalProfile",
     "aiPowerMode",
@@ -358,9 +430,15 @@ async function finalizeInitialization() {
     isVideoMasterOn = savedToggles.isVideoMasterOn;
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
   if (savedToggles.isVocalOn !== undefined) isVocalOn = savedToggles.isVocalOn;
+  if (["bypass", "karaoke", "acapella"].includes(savedToggles.vocalMode)) {
+    currentVocalMode = savedToggles.vocalMode;
+  }
   if (savedToggles.aiEngineType !== undefined) aiEngineType = savedToggles.aiEngineType;
   if (savedToggles.aiPowerMode !== undefined) {
     aiPowerMode = normalizeAiPowerMode(savedToggles.aiPowerMode);
+    if (savedToggles.aiPowerMode === "medium" && sessionManager.sessionMode === "shared") {
+      await chrome.storage.local.set({ aiPowerMode: aiPowerMode });
+    }
   }
   currentVocalProfile = "ai_remove";
   await sessionManager.setSetting({ vocalProfile: currentVocalProfile });
@@ -385,6 +463,8 @@ async function finalizeInitialization() {
       "videoPosX",
       "videoPosY",
       "isEqOn",
+      "isVocalOn",
+      "vocalMode",
       "reverbTime",
       "reverbDecay",
       "dynBoost",
@@ -508,6 +588,10 @@ async function finalizeInitialization() {
     if (frameCount < 60) requestAnimationFrame(loop);
   };
   loop();
+
+  // Check only when the user opens the popup and the audio session is idle.
+  // It never interrupts playback or model loading.
+  maybeShowUsageDonateModal(state).catch(() => {});
 }
 
 function setupStorageListener() {
@@ -786,10 +870,13 @@ function applyTheme(colorCode) {
 
 async function initCapture(mode) {
   if (!currentTabId) return;
+  const requestId = ++captureRequestId;
   let hasOffscreen = await sendMessageWithRetry({ type: "CHECK_OFFSCREEN" });
+  if (requestId !== captureRequestId) return;
   if (!hasOffscreen) {
     await sendMessageWithRetry({ type: "INIT_OFFSCREEN" });
     await new Promise((r) => setTimeout(r, 1000));
+    if (requestId !== captureRequestId) return;
   }
   const latencyHint = $("#sel-latency")?.value || "balanced";
   const sampleRate = $("#sel-sample-rate")?.value || "44100";
@@ -798,6 +885,7 @@ async function initCapture(mode) {
   chrome.tabCapture.getMediaStreamId(
     { targetTabId: currentTabId },
     (streamId) => {
+      if (requestId !== captureRequestId) return;
       if (chrome.runtime.lastError || !streamId) return;
       chrome.runtime
         .sendMessage({
@@ -811,6 +899,7 @@ async function initCapture(mode) {
           aiPowerMode: aiPowerMode,
         })
         .then((res) => {
+          if (requestId !== captureRequestId || !res?.success) return;
           if (res && res.sampleRate) {
             settingsModal.updateActiveSampleRate(res.sampleRate);
           }
@@ -974,27 +1063,25 @@ function updateVocalProfileUI(profile) {
 
 function updateAiPowerModeUI(mode = aiPowerMode) {
   aiPowerMode = normalizeAiPowerMode(mode);
-  const button = $("#btn-vocal-power");
-  if (!button) return;
-
   const isEco = aiPowerMode === "eco";
-  const isMedium = aiPowerMode === "medium";
-  button.classList.toggle("pressed", aiPowerMode !== "quality");
-  button.classList.toggle("text-amber-300", isEco);
-  button.classList.toggle("text-sky-300", isMedium);
-  button.classList.toggle("text-gray-500", aiPowerMode === "quality");
-  if (isEco) {
-    button.innerHTML = '<i class="ph-bold ph-leaf text-[8px]"></i><span>ECO</span>';
-    button.title = "Eco AI: lowest GPU load (15-hop WebGL F16)";
-  } else if (isMedium) {
-    button.innerHTML = '<i class="ph-bold ph-gauge text-[8px]"></i><span>MED</span>';
-    button.title = "Medium AI: balanced 15-hop mode";
-  } else {
-    button.innerHTML = '<i class="ph-bold ph-sparkle text-[8px]"></i><span>FULL</span>';
-    button.title = "Full AI quality: prefer WebGPU when available";
-  }
-  button.setAttribute("aria-label", `AI power mode: ${isMedium ? "medium" : aiPowerMode}`);
-  button.setAttribute("aria-pressed", String(aiPowerMode !== "quality"));
+  const ecoButton = $("#btn-ai-mode-eco");
+  const fullButton = $("#btn-ai-mode-full");
+  [ecoButton, fullButton].forEach((button) => {
+    if (!button) return;
+    const active = (button === ecoButton) === isEco;
+    button.classList.toggle("pressed", active);
+    button.classList.toggle("ai-mode-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function selectAiPowerMode(mode) {
+  const nextMode = normalizeAiPowerMode(mode);
+  aiPowerMode = nextMode;
+  sessionManager.setSetting({ aiPowerMode: nextMode });
+  sendParam("aiPowerMode", nextMode);
+  updateAiPowerModeUI(nextMode);
+  notifyAction("aiPowerMode", nextMode, { immediate: true });
 }
 
 function updateVocalRuntimeStatus(status) {
@@ -1282,6 +1369,7 @@ function setupListeners() {
     if (isAudioMasterOn) {
       initCapture(sessionManager.sessionMode);
     } else {
+      captureRequestId++;
       if (currentTabId) {
         sendMessageWithRetry({ type: "STOP_CAPTURE", tabId: currentTabId });
 
@@ -1425,17 +1513,8 @@ function setupListeners() {
       notifyAction("vocalProfile", profile, { immediate: true });
     });
   });
-  $("#btn-vocal-power")?.addEventListener("click", () => {
-    aiPowerMode = aiPowerMode === "quality"
-      ? "medium"
-      : aiPowerMode === "medium"
-        ? "eco"
-        : "quality";
-    sessionManager.setSetting({ aiPowerMode });
-    sendParam("aiPowerMode", aiPowerMode);
-    updateAiPowerModeUI(aiPowerMode);
-    notifyAction("aiPowerMode", aiPowerMode, { immediate: true });
-  });
+  $("#btn-ai-mode-eco")?.addEventListener("click", () => selectAiPowerMode("eco"));
+  $("#btn-ai-mode-full")?.addEventListener("click", () => selectAiPowerMode("quality"));
 
   // AI Engine Switcher & Modal
   $("#btn-engine-toggle")?.addEventListener("click", () => {
@@ -1510,6 +1589,7 @@ function setupListeners() {
   $("#btn-reset").addEventListener("click", handleReset);
 
   $("#btn-close").addEventListener("click", async () => {
+    captureRequestId++;
     if (currentTabId) {
       try {
         await sendMessageWithRetry({
@@ -1634,7 +1714,7 @@ function setupListeners() {
   $("#btn-rec-top").onclick = toggleRecording;
 
   const openCoffeeDonation = () => {
-    chrome.tabs.create({ url: "https://ganknow.com/nextfeeder/tip" });
+    chrome.tabs.create({ url: DONATION_URL });
   };
   const buyCoffeeBtn = $("#btn-buy-coffee");
   if (buyCoffeeBtn) buyCoffeeBtn.addEventListener("click", openCoffeeDonation);

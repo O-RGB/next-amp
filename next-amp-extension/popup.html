@@ -161,6 +161,42 @@
       </div>
     </div>
 
+    <!-- Occasional, non-blocking community support prompt -->
+    <div id="usage-donate-overlay" class="z-[155000]" role="dialog" aria-modal="true" aria-labelledby="usage-donate-title">
+      <div class="win-border-out session-dialog donation-dialog shadow-2xl bg-[#292929]">
+        <div class="theme-bar justify-between mb-2">
+          <span class="flex items-center gap-1 font-bold">
+            <i class="ph-bold ph-coffee text-amber-300"></i>
+            <span id="usage-donate-title">SUPPORT NEXT-AMP</span>
+          </span>
+          <button id="btn-close-usage-donate" class="win-btn text-red-900 font-bold bg-[#e0e0e0]" aria-label="Close">X</button>
+        </div>
+        <div class="bg-[#222] p-3 flex flex-col gap-2 text-center">
+          <div class="w-9 h-9 rounded-full border border-amber-500/50 bg-amber-500/10 flex items-center justify-center self-center text-amber-400 text-lg">
+            <i class="ph-bold ph-heart"></i>
+          </div>
+          <span class="text-[10px] font-bold text-amber-300 font-pixel uppercase tracking-wide">
+            ENJOYING NEXT-AMP?
+          </span>
+          <p class="text-white text-[8.5px] font-pixel leading-relaxed">
+            If Next-Amp is useful to you, an optional coffee helps support maintenance and future updates.
+          </p>
+          <div class="flex gap-1.5 w-full mt-1">
+            <button id="btn-usage-donate" class="win-btn h-7 flex-1 bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] text-[#4a2810] font-bold font-pixel text-[8px] flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer">
+              <i class="ph-bold ph-coffee text-[9px]"></i>
+              <span>SUPPORT</span>
+            </button>
+            <button id="btn-usage-later" class="win-btn h-7 px-2 bg-gray-700 text-gray-200 hover:bg-gray-600 font-pixel text-[8px] cursor-pointer">
+              LATER
+            </button>
+            <button id="btn-usage-dismiss" class="win-btn h-7 px-2 bg-gray-800 text-gray-400 hover:bg-gray-700 font-pixel text-[8px] cursor-pointer">
+              DON'T SHOW
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- AI Performance / Slow GPU Alert Modal -->
     <div id="ai-slow-overlay" class="z-[170000]">
       <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">
@@ -461,11 +497,11 @@
               </button>
             </div>
             <div
-              class="text-[9px] font-bold text-emerald-400 mb-0.5 mt-1.5 border-b border-gray-700"
+              class="hidden text-[9px] font-bold text-emerald-400 mb-0.5 mt-1.5 border-b border-gray-700"
             >
               AI ACCELERATION ENGINE
             </div>
-            <div class="setting-row">
+            <div class="hidden setting-row">
               <span>Engine</span>
               <select id="sel-ai-engine" class="bg-black border border-gray-600 text-[8px] text-cyan-400 h-4 outline-none">
                 <option value="webgl">Browser WebGL (In-App)</option>
@@ -740,13 +776,14 @@
           <span>AI VOCAL</span>
         </div>
         <div class="flex items-center gap-1 overflow-hidden min-w-0">
-          <button
-            id="btn-engine-toggle"
-            class="win-btn h-3 px-1 text-[7px] font-bold text-gray-400 cursor-pointer flex-none"
-            title="Switch AI Engine: Browser WebGL (WEB) / Go Desktop Engine (GO)"
-          >
-            WEB
-          </button>
+          <div class="flex items-center gap-0.5" role="group" aria-label="AI power mode">
+            <button id="btn-ai-mode-eco" class="win-btn ai-mode-btn ai-mode-active pressed h-3 px-1.5 text-[7px] font-bold" type="button" aria-label="Use ECO AI mode" aria-pressed="true" title="ECO: lower GPU power">
+              <i class="ph-bold ph-leaf text-[8px]"></i><span>ECO</span>
+            </button>
+            <button id="btn-ai-mode-full" class="win-btn ai-mode-btn h-3 px-1.5 text-[7px] font-bold" type="button" aria-label="Use FULL AI mode" aria-pressed="false" title="FULL: highest AI quality">
+              <i class="ph-bold ph-sparkle text-[8px]"></i><span>FULL</span>
+            </button>
+          </div>
         </div>
       </div>
       <div class="p-1 flex flex-col gap-1 bg-[#222]" id="vocal-controls-area" style="opacity: 0.4; filter: grayscale(100%); pointer-events: none;">
@@ -756,7 +793,6 @@
             <button id="btn-vocal-bypass" class="win-btn h-4 px-1.5 text-[7px] font-bold pressed text-black flex items-center justify-center gap-0.5" title="Original Track"><i class="ph-bold ph-speaker-high text-[8px]"></i><span>ORIG</span></button>
             <button id="btn-vocal-karaoke" class="win-btn h-4 px-1.5 text-[7px] font-bold text-black flex items-center justify-center gap-0.5" title="Remove Vocals (Karaoke)"><i class="ph-bold ph-microphone-slash text-[8px]"></i><span>KARA</span></button>
             <button id="btn-vocal-acapella" class="win-btn h-4 px-1.5 text-[7px] font-bold text-black flex items-center justify-center gap-0.5" title="Isolate Vocals (Acapella)"><i class="ph-bold ph-music-notes-simple text-[8px]"></i><span>SOLO</span></button>
-            <button id="btn-vocal-power" class="win-btn h-4 px-1.5 text-[7px] font-bold text-gray-500 flex items-center justify-center gap-0.5" title="AI power mode: Full / Medium / Eco" aria-label="AI power mode: quality" aria-pressed="false"><i class="ph-bold ph-sparkle text-[8px]"></i><span>FULL</span></button>
           </div>
           <div id="vocal-runtime-status" class="flex min-w-0 max-w-[230px] flex-col items-end justify-center gap-0.5 leading-none text-right overflow-hidden" title="Active AI hardware">
             <span class="flex-none text-[7px] font-pixel font-bold text-emerald-400 whitespace-nowrap">

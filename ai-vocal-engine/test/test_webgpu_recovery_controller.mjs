@@ -80,24 +80,45 @@ coordinator.register(managerA);
 coordinator.register(managerB);
 const oldTf = globalThis.tf;
 let backendRemoves = 0;
+let backendRegisters = 0;
+const webGpuFactory = () => ({ backend: 'webgpu' });
+let registeredFactory = webGpuFactory;
 globalThis.tf = {
   getBackend: () => 'webgpu',
+  findBackendFactory: name => name === 'webgpu' ? registeredFactory : null,
   removeBackend: name => {
     assert.equal(name, 'webgpu');
     backendRemoves++;
-  }
+    registeredFactory = null;
+  },
+  registerBackend: (name, factory, priority) => {
+    assert.equal(name, 'webgpu');
+    assert.equal(factory, webGpuFactory);
+    assert.equal(priority, 3);
+    registeredFactory = factory;
+    backendRegisters++;
+    return true;
+  },
 };
 const recoveryA = coordinator.request(managerA, 'readback-timeout');
 const recoveryB = coordinator.request(managerB, 'device-lost');
 assert.equal(recoveryA, recoveryB, 'concurrent requests must share one recovery');
 await recoveryA;
 assert.equal(backendRemoves, 1, 'shared backend must be removed once');
+assert.equal(backendRegisters, 1, 'shared backend factory must be restored after disposal');
+assert.equal(registeredFactory, webGpuFactory, 'WebGPU must remain available for the next session');
 assert.deepEqual(calls, [
   'begin-a:readback-timeout',
   'begin-b:readback-timeout',
   'finish-a:1',
   'finish-b:1'
 ]);
+assert.equal(coordinator.releaseBackendIfUnused(), true,
+  'closing the last session must dispose the backend instance');
+assert.equal(backendRemoves, 2);
+assert.equal(backendRegisters, 2);
+assert.equal(registeredFactory, webGpuFactory,
+  'closing and reopening must retain a usable WebGPU provider factory');
 globalThis.tf = oldTf;
 
 console.log('WebGPU recovery timeout and coordinator tests passed.');

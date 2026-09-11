@@ -51,6 +51,40 @@ export function calculateWebGpuReadbackTimeout({
 }
 
 /**
+ * Dispose the current WebGPU backend instance without permanently deleting
+ * the backend factory. TensorFlow.js removeBackend() removes both; failing to
+ * register the captured factory again makes every later setBackend("webgpu")
+ * fail in the same offscreen document.
+ */
+export function recycleWebGpuBackend(runtime = globalThis.tf) {
+  if (!runtime || runtime.getBackend?.() !== "webgpu" || !runtime.removeBackend) {
+    return false;
+  }
+
+  let factory = null;
+  try { factory = runtime.findBackendFactory?.("webgpu") || null; } catch (_) {}
+
+  try {
+    runtime.removeBackend("webgpu");
+  } catch (_) {
+    return false;
+  }
+
+  if (factory && runtime.registerBackend) {
+    try {
+      if (!runtime.findBackendFactory?.("webgpu")) {
+        // Match the priority used by @tensorflow/tfjs-backend-webgpu.
+        runtime.registerBackend("webgpu", factory, 3);
+      }
+    } catch (_) {
+      // If registration fails, ensureWebGpuBackend() will reload the bundled
+      // provider script on the next activation.
+    }
+  }
+  return true;
+}
+
+/**
  * Observe a Promise with a deadline without creating an unhandled rejection.
  *
  * `task` may be a Promise or a function returning a Promise. The original
@@ -133,14 +167,11 @@ export class WebGpuRecoveryCoordinator {
     });
     if (activeWebGpuManager) return false;
     const runtime = globalThis.tf;
-    if (runtime?.getBackend?.() !== "webgpu" || !runtime.removeBackend) return false;
-    try {
-      runtime.removeBackend("webgpu");
+    if (recycleWebGpuBackend(runtime)) {
       this.backendEpoch++;
       return true;
-    } catch (_) {
-      return false;
     }
+    return false;
   }
 
   /**
@@ -190,9 +221,7 @@ export class WebGpuRecoveryCoordinator {
       }
 
       const runtime = globalThis.tf;
-      if (runtime?.getBackend?.() === "webgpu" && runtime.removeBackend) {
-        try { runtime.removeBackend("webgpu"); } catch (_) {}
-      }
+      recycleWebGpuBackend(runtime);
       this.backendEpoch++;
 
       const results = [];

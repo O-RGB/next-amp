@@ -97,6 +97,25 @@ body {
   background-color: #a0a0a0;
 }
 
+.ai-mode-btn {
+  min-width: 31px;
+  gap: 2px;
+}
+
+.ai-mode-btn.ai-mode-active {
+  background-color: var(--theme-window);
+  color: var(--theme-text);
+  border-top-color: #000;
+  border-left-color: #000;
+  border-right-color: #fff;
+  border-bottom-color: #fff;
+  text-shadow: 0 0 2px rgba(0, 255, 0, 0.45);
+}
+
+.ai-mode-btn:not(.ai-mode-active) {
+  color: #666;
+}
+
 .theme-text-main {
   color: var(--theme-text);
   text-shadow: 0 0 2px rgba(0, 255, 0, 0.5);
@@ -247,6 +266,7 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 #session-mode-overlay,
 #tab-status-overlay,
 #first-launch-overlay,
+#usage-donate-overlay,
 #ai-slow-overlay,
 #go-engine-overlay {
   position: fixed;
@@ -263,6 +283,7 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 #session-mode-overlay.active,
 #tab-status-overlay.active,
 #first-launch-overlay.active,
+#usage-donate-overlay.active,
 #ai-slow-overlay.active,
 #go-engine-overlay.active {
   display: flex;
@@ -282,6 +303,10 @@ input[type="range"].h-slider::-webkit-slider-thumb {
   max-width: 260px;
   background: #292929;
   padding: 4px;
+}
+
+.donation-dialog {
+  max-width: 278px;
 }
 
 .tab-header {
