@@ -1,4 +1,74 @@
-// video-delay.js
+// Lightweight page toast for user actions and remote commands.
+// This script is already injected on media pages, so no extra content script
+// or runtime cost is needed for the notification surface.
+(function setupActionNotification() {
+  if (window.top !== window) return;
+
+  let activeTimer = null;
+  const groupTimers = new Map();
+
+  function getHost() {
+    let host = document.getElementById("nextamp-action-notification");
+    if (host) return host;
+    host = document.createElement("div");
+    host.id = "nextamp-action-notification";
+    host.style.cssText = "position:fixed;top:18px;right:18px;z-index:2147483647;pointer-events:none";
+    const root = host.attachShadow ? host.attachShadow({ mode: "open" }) : host;
+    root.innerHTML = `
+      <style>
+        :host { all: initial; }
+        .toast { width:min(320px,calc(100vw - 36px));box-sizing:border-box;background:#292929;border-top:2px solid #888;border-left:2px solid #888;border-right:2px solid #000;border-bottom:2px solid #000;box-shadow:0 4px 15px rgba(0,0,0,.5);font-family:"Chakra Petch","Trebuchet MS",Arial,sans-serif;opacity:0;visibility:hidden;transform:translateY(-6px);transition:opacity .12s ease,transform .12s ease,visibility .12s ease }
+        .toast.active { opacity:1;visibility:visible;transform:translateY(0) }
+        .bar { display:flex;align-items:center;justify-content:space-between;min-height:20px;padding:2px 6px;background:#000080;border-bottom:1px solid #000;color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px;line-height:1 }
+        .title { display:flex;align-items:center;gap:4px }
+        .led { color:#00ff00;font-size:8px;text-shadow:0 0 3px rgba(0,255,0,.75) }
+        .source { color:#ffcc00;font-size:9px;letter-spacing:.5px }
+        .body { display:flex;align-items:center;gap:8px;min-height:36px;padding:7px 9px;background:#222;color:#00ff00;font-size:12px;font-weight:700;line-height:1.15;text-shadow:0 0 2px rgba(0,255,0,.5) }
+        .icon { display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex:none;background:#c0c0c0;color:#000;border-top:1px solid #fff;border-left:1px solid #fff;border-right:1px solid #000;border-bottom:1px solid #000;font:700 12px/1 Arial,sans-serif;text-shadow:none }
+        .text { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+        .toast.remote .source { color:#eadcf8 }
+        .toast.loading .source { color:#ffcc00 }
+      </style>
+      <div class="toast" role="status" aria-live="polite"><div class="bar"><span class="title"><span class="led">●</span><span>NEXT-AMP</span></span><span class="source">ACTION</span></div><div class="body"><span class="icon">✓</span><span class="text"></span></div></div>`;
+    (document.body || document.documentElement).appendChild(host);
+    return host;
+  }
+
+  function show(message, options = {}) {
+    if (!message) return;
+    const host = getHost();
+    const root = host.shadowRoot || host;
+    const toast = root.querySelector(".toast");
+    const text = root.querySelector(".text");
+    const icon = root.querySelector(".icon");
+    const source = root.querySelector(".source");
+    if (!toast || !text || !icon || !source) return;
+    text.textContent = options.source === "remote" ? `REMOTE • ${message}` : message;
+    source.textContent = options.source === "remote" ? "REMOTE" : "ACTION";
+    icon.textContent = options.source === "remote" ? "↗" : "✓";
+    toast.classList.toggle("remote", options.source === "remote");
+    toast.classList.toggle("loading", options.tone === "loading");
+    toast.classList.add("active");
+    if (activeTimer) clearTimeout(activeTimer);
+    activeTimer = setTimeout(() => toast.classList.remove("active"), 1500);
+  }
+
+  function schedule(group, message, options) {
+    const oldTimer = groupTimers.get(group);
+    if (oldTimer) clearTimeout(oldTimer);
+    const timer = setTimeout(() => {
+      groupTimers.delete(group);
+      show(message, options);
+    }, 280);
+    groupTimers.set(group, timer);
+  }
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type !== "SHOW_ACTION_NOTIFICATION") return;
+    if (message.group) schedule(message.group, message.message, message);
+    else show(message.message, message);
+  });
+})();
 
 class Monitor {
   constructor() {

@@ -22,8 +22,12 @@
           <button id="btn-close-qr" class="win-btn text-red-900 font-bold bg-[#e0e0e0]">X</button>
         </div>
         <div class="p-4 flex flex-col gap-4 items-center bg-[#222]">
-          <div class="bg-white p-2">
-            <img id="qr-image" src="" alt="Scan QR" class="w-[150px] h-[150px] object-contain" />
+          <div class="bg-white p-2 w-[166px] h-[166px] flex items-center justify-center">
+            <div id="qr-loading" class="flex flex-col items-center justify-center gap-2 text-center text-[#000080]">
+              <div class="w-9 h-9 border-4 border-[#000080] border-t-transparent rounded-full animate-spin"></div>
+              <span id="qr-loading-text" class="text-[8px] font-bold font-pixel tracking-wide">LOADING QR...</span>
+            </div>
+            <img id="qr-image" alt="Scan QR" class="hidden w-[150px] h-[150px] object-contain" />
           </div>
           <p class="text-[9px] text-gray-400 font-pixel text-center">
             Scan with your phone to control

@@ -54,6 +54,105 @@ let currentTabId = null;
 
 let sessionManager;
 let settingsModal;
+const ACTION_NOTIFICATION_DELAY_MS = 280;
+const actionNotificationTimers = new Map();
+
+function showActionNotification(message, { source = "local", tone = "success", icon = "ph-check-circle" } = {}) {
+  if (!message) return;
+
+  // Notifications live on the media page, not inside this popup. Remote
+  // commands are relayed by the offscreen host when the popup is closed.
+  if (source !== "remote" && currentTabId) {
+    chrome.tabs.sendMessage(currentTabId, {
+      type: "SHOW_ACTION_NOTIFICATION",
+      message,
+      icon,
+      tone,
+    }).catch(() => {});
+  }
+}
+
+function scheduleActionNotification(group, messageFactory, options = {}) {
+  const oldTimer = actionNotificationTimers.get(group);
+  if (oldTimer) clearTimeout(oldTimer);
+  const timer = setTimeout(() => {
+    actionNotificationTimers.delete(group);
+    const message = typeof messageFactory === "function" ? messageFactory() : messageFactory;
+    showActionNotification(message, options);
+  }, ACTION_NOTIFICATION_DELAY_MS);
+  actionNotificationTimers.set(group, timer);
+}
+
+function formatSignedValue(value, decimals = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value ?? "");
+  const formatted = decimals > 0 ? number.toFixed(decimals) : String(Math.round(number));
+  return number > 0 ? `+${formatted}` : formatted;
+}
+
+function getActionNotification(key, value) {
+  switch (key) {
+    case "isAudioMasterOn":
+      return { message: `AUDIO ${value ? "ON" : "OFF"}`, icon: value ? "ph-speaker-high" : "ph-speaker-slash" };
+    case "pitch":
+      return { group: "pitch", message: `KEY ${formatSignedValue(value)}`, icon: "ph-music-note" };
+    case "reverb":
+      return { group: "reverb", message: `REVERB ${Number(value).toFixed(1)}`, icon: "ph-waveform" };
+    case "isEqOn":
+      return { message: `EQ ${value ? "ON" : "OFF"}`, icon: value ? "ph-equalizer" : "ph-speaker-slash" };
+    case "normalize":
+      return { message: `DYN ${value ? "ON" : "OFF"}`, icon: value ? "ph-arrows-in" : "ph-arrows-out" };
+    case "isVocalOn":
+      return { message: `AI VOCAL ${value ? "ON" : "OFF"}`, icon: value ? "ph-sparkle" : "ph-sparkle-slash" };
+    case "vocalMode": {
+      const labels = { karaoke: "KARAOKE", acapella: "ACAPELLA", bypass: "ORIGINAL" };
+      return {
+        message: `${labels[value] || String(value).toUpperCase()} ACTIVE`,
+        icon: value === "karaoke" ? "ph-microphone-slash" : "ph-speaker-high",
+        tone: "loading",
+      };
+    }
+    case "vocalProfile":
+      return { message: `AI PROFILE ${String(value).replace(/_/g, " ").toUpperCase()}`, icon: "ph-sliders" };
+    case "aiPowerMode":
+      return { message: `AI ${String(value).toUpperCase()}`, icon: value === "eco" ? "ph-leaf" : value === "medium" ? "ph-gauge" : "ph-sparkle" };
+    case "aiEngineType":
+      return { message: `AI ENGINE ${value === "go_native" ? "GO" : "WEB"}`, icon: value === "go_native" ? "ph-lightning" : "ph-globe" };
+    case "videoQuality":
+      return { message: `VIDEO ${String(value).toUpperCase()}`, icon: "ph-monitor-play" };
+    case "videoDelay":
+      return { group: "videoDelay", message: `VIDEO DELAY ${Number(value).toFixed(2)}s`, icon: "ph-clock-countdown" };
+    case "videoTransform":
+      return {
+        group: "videoTransform",
+        message: () => `VIDEO ${Math.round(Number($("#video-zoom")?.value || 1) * 100)}% / ${Number($("#video-rotate")?.value || 0)}°`,
+        icon: "ph-crop",
+      };
+    case "isVideoMasterOn":
+      return { message: `VIDEO ${value ? "ON" : "OFF"}`, icon: value ? "ph-monitor-play" : "ph-monitor-slash" };
+    case "videoPosition":
+      return {
+        group: "videoPosition",
+        message: () => `VIDEO POS ${$("#video-pos-x")?.value || 0},${$("#video-pos-y")?.value || 0}`,
+        icon: "ph-arrows-out-cardinal",
+      };
+    default:
+      return null;
+  }
+}
+
+function notifyAction(key, value, { source = "local", immediate = false, groupOverride = null } = {}) {
+  const config = getActionNotification(key, value);
+  if (!config) return;
+  const options = { source, tone: config.tone, icon: config.icon };
+  const group = groupOverride || config.group;
+  if (!immediate && group) {
+    scheduleActionNotification(group, config.message, options);
+  } else {
+    const message = typeof config.message === "function" ? config.message() : config.message;
+    showActionNotification(message, options);
+  }
+}
 
 async function checkTabStatus(tab) {
   if (!tab || !tab.id) {
@@ -505,7 +604,8 @@ async function buildMicroBootloaderUrl(hostId, token) {
   const bootloader = `Loading...<script src=https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js></script><script>let H=${JSON.stringify(hostId)},T=${JSON.stringify(token)},p=new Peer(),c;p.on('open',()=>{c=p.connect(H,{reliable:1});c.on('open',()=>c.send({type:'HANDSHAKE',token:T,needUI:1}));c.on('data',d=>{if(d.type==='MOUNT_UI'){if(d.css)document.head.appendChild(document.createElement('style')).textContent=d.css;document.body.innerHTML=d.html;if(d.js)(new Function('conn','initState','H','T','peer',d.js))(c,d.state,H,T,p);}});});<\/script>`;
 
   // Compress using native browser CompressionStream("deflate")
-  const stream = new Blob([bootloader]).stream().pipeThrough(new CompressionStream("deflate"));
+  // itty.bitty's format=gz decoder expects a gzip stream, not zlib/deflate.
+  const stream = new Blob([bootloader]).stream().pipeThrough(new CompressionStream("gzip"));
   const buf = await new Response(stream).arrayBuffer();
   const bytes = new Uint8Array(buf);
   let binary = "";
@@ -521,11 +621,62 @@ async function setupRemoteUI() {
   const btnConnect = $("#btn-remote-connect");
   const qrOverlay = $("#qr-overlay");
   const qrImage = $("#qr-image");
+  const qrLoading = $("#qr-loading");
+  const qrLoadingText = $("#qr-loading-text");
   const urlDisplay = $("#remote-url-display");
   const btnCloseQr = $("#btn-close-qr");
   const btnCopyUrl = $("#btn-copy-url");
+  let qrRequestUrl = "";
+  let qrRetryCount = 0;
+  let qrLoadGeneration = 0;
+
+  const setQrLoading = (message) => {
+    if (qrLoading) qrLoading.classList.remove("hidden");
+    if (qrLoadingText) qrLoadingText.textContent = message;
+    if (qrImage) {
+      qrImage.classList.add("hidden");
+    }
+  };
+
+  const loadQrImage = (url) => {
+    qrRequestUrl = url;
+    qrRetryCount = 0;
+    qrLoadGeneration += 1;
+    const generation = qrLoadGeneration;
+    setQrLoading("LOADING QR...");
+    if (qrImage) {
+      qrImage.dataset.qrGeneration = String(generation);
+      qrImage.src = `${url}&_=${Date.now()}`;
+    }
+  };
+
+  qrImage?.addEventListener("load", () => {
+    if (qrImage.dataset.qrGeneration !== String(qrLoadGeneration)) return;
+    if (qrLoading) qrLoading.classList.add("hidden");
+    qrImage.classList.remove("hidden");
+  });
+
+  qrImage?.addEventListener("error", () => {
+    if (qrImage.dataset.qrGeneration !== String(qrLoadGeneration)) return;
+    if (qrRetryCount < 2 && qrRequestUrl) {
+      qrRetryCount += 1;
+      setQrLoading(`RETRYING QR ${qrRetryCount}/2...`);
+      setTimeout(() => {
+        if (qrImage && qrImage.dataset.qrGeneration === String(qrLoadGeneration)) {
+          qrImage.src = `${qrRequestUrl}&_=${Date.now()}`;
+        }
+      }, 500);
+    } else {
+      setQrLoading("QR SERVER UNAVAILABLE");
+    }
+  });
 
   btnConnect.addEventListener("click", async () => {
+    qrLoadGeneration += 1;
+    qrRequestUrl = "";
+    qrRetryCount = 0;
+    setQrLoading("CONNECTING REMOTE...");
+    qrOverlay.classList.remove("hidden");
     try {
       let hasOffscreen = await sendMessageWithRetry({
         type: "CHECK_OFFSCREEN",
@@ -547,22 +698,25 @@ async function setupRemoteUI() {
         if (elTok) elTok.textContent = res.token;
 
         urlDisplay.value = "Generating remote...";
-        qrOverlay.classList.remove("hidden");
+        setQrLoading("GENERATING QR LINK...");
 
         const fullUrl = await buildMicroBootloaderUrl(res.hostId, res.token);
         urlDisplay.value = "Shortening link...";
+        setQrLoading("SHORTENING QR LINK...");
         const finalUrl = await shortenUrl(fullUrl);
 
         urlDisplay.value = finalUrl;
         const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
           finalUrl
         )}`;
-        qrImage.src = qrApi;
+        loadQrImage(qrApi);
       } else {
+        setQrLoading("REMOTE ID NOT READY");
         alert("Remote ID not ready. Please turn Audio Master ON first.");
       }
     } catch (e) {
       console.error(e);
+      setQrLoading("REMOTE ERROR — TRY AGAIN");
       alert("Failed to connect remote.");
     }
   });
@@ -1137,6 +1291,7 @@ function setupListeners() {
         });
       }
     }
+    notifyAction("isAudioMasterOn", isAudioMasterOn, { immediate: true });
     updateEQVisuals();
   });
 
@@ -1145,6 +1300,7 @@ function setupListeners() {
     updateMasterTogglesUI();
     sessionManager.setSetting({ isVideoMasterOn });
     sendParam("isVideoMasterOn", isVideoMasterOn);
+    notifyAction("isVideoMasterOn", isVideoMasterOn, { immediate: true });
     if (isVideoMasterOn) {
       syncVideoTransform();
       const d = parseFloat($("#video-delay").value);
@@ -1183,6 +1339,7 @@ function setupListeners() {
     sessionManager.setSetting({ isEqOn });
     updateEqToggleButton();
     sendParam("isEqOn", isEqOn);
+    notifyAction("isEqOn", isEqOn, { immediate: true });
     updateEQVisuals();
   });
 
@@ -1204,18 +1361,21 @@ function setupListeners() {
     const v = parseInt(e.target.value);
     $("#txt-pitch").textContent = (v > 0 ? "+" : "") + v;
     sendParam("pitch", v);
+    notifyAction("pitch", v);
   });
   $("#main-verb").addEventListener("input", (e) => {
     if (!isAudioMasterOn) return;
     const v = parseFloat(e.target.value);
     $("#txt-verb").textContent = v.toFixed(1);
     sendParam("reverb", v);
+    notifyAction("reverb", v);
   });
 
   $("#btn-normalize")?.addEventListener("click", () => {
     isNormalizeOn = !isNormalizeOn;
     updateNormalizeButton();
     sendParam("normalize", isNormalizeOn);
+    notifyAction("normalize", isNormalizeOn, { immediate: true });
   });
 
   // --- AI VOCAL SEPARATOR CONTROLS ---
@@ -1224,10 +1384,12 @@ function setupListeners() {
     updateVocalMasterUI();
     sessionManager.setSetting({ isVocalOn });
     sendParam("isVocalOn", isVocalOn);
+    notifyAction("isVocalOn", isVocalOn, { immediate: true });
   });
   $("#btn-vocal-bypass")?.addEventListener("click", () => {
     sendParam("vocalMode", "bypass");
     updateVocalUI("bypass");
+    notifyAction("vocalMode", "bypass", { immediate: true });
   });
   $("#btn-vocal-karaoke")?.addEventListener("click", () => {
     chrome.storage.local.get("aiHardwareWarning").then((res) => {
@@ -1238,6 +1400,7 @@ function setupListeners() {
     }).catch(() => {});
     sendParam("vocalMode", "karaoke");
     updateVocalUI("karaoke");
+    notifyAction("vocalMode", "karaoke", { immediate: true });
   });
   $("#btn-vocal-acapella")?.addEventListener("click", () => {
     chrome.storage.local.get("aiHardwareWarning").then((res) => {
@@ -1248,6 +1411,7 @@ function setupListeners() {
     }).catch(() => {});
     sendParam("vocalMode", "acapella");
     updateVocalUI("acapella");
+    notifyAction("vocalMode", "acapella", { immediate: true });
   });
   $$(".btn-vocal-profile").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -1258,6 +1422,7 @@ function setupListeners() {
       sessionManager.setSetting({ vocalProfile: profile });
       sendParam("vocalProfile", profile);
       updateVocalProfileUI(profile);
+      notifyAction("vocalProfile", profile, { immediate: true });
     });
   });
   $("#btn-vocal-power")?.addEventListener("click", () => {
@@ -1269,6 +1434,7 @@ function setupListeners() {
     sessionManager.setSetting({ aiPowerMode });
     sendParam("aiPowerMode", aiPowerMode);
     updateAiPowerModeUI(aiPowerMode);
+    notifyAction("aiPowerMode", aiPowerMode, { immediate: true });
   });
 
   // AI Engine Switcher & Modal
@@ -1282,6 +1448,7 @@ function setupListeners() {
     updateAiEngineUI();
     sessionManager.setSetting({ aiEngineType });
     sendParam("aiEngineType", aiEngineType);
+    notifyAction("aiEngineType", aiEngineType, { immediate: true });
   });
 
   $("#btn-go-modal-close")?.addEventListener("click", () => {
@@ -1377,6 +1544,7 @@ function setupListeners() {
       chrome.tabs
         .sendMessage(currentTabId, { type: "SET_VIDEO_DELAY", value: v })
         .catch(() => {});
+    notifyAction("videoDelay", v);
   };
   $("#video-delay").addEventListener("input", (e) => syncDelay(e.target.value));
   $("#num-video-delay").addEventListener("change", (e) =>
@@ -1393,6 +1561,7 @@ function setupListeners() {
   $("#video-quality")?.addEventListener("change", (e) => {
     const val = e.target.value;
     sendParam("videoQuality", val);
+    notifyAction("videoQuality", val, { immediate: true });
     if (currentTabId)
       chrome.tabs
         .sendMessage(currentTabId, { type: "SET_VIDEO_QUALITY", value: val })
@@ -1400,7 +1569,10 @@ function setupListeners() {
   });
 
   const handleTransform = () => {
-    if (isVideoMasterOn) syncVideoTransform();
+    if (isVideoMasterOn) {
+      syncVideoTransform();
+      notifyAction("videoTransform", null);
+    }
   };
   $("#video-zoom").addEventListener("input", handleTransform);
   $("#video-rotate").addEventListener("input", handleTransform);
@@ -1410,12 +1582,14 @@ function setupListeners() {
     if (isVideoMasterOn) {
       syncVideoTransform();
       sendParam("videoPosX", parseFloat(e.target.value));
+      notifyAction("videoPosition", null);
     }
   });
   $("#video-pos-y").addEventListener("input", (e) => {
     if (isVideoMasterOn) {
       syncVideoTransform();
       sendParam("videoPosY", parseFloat(e.target.value));
+      notifyAction("videoPosition", null);
     }
   });
 
@@ -1426,6 +1600,7 @@ function setupListeners() {
     handleTransform();
     sendParam("videoPosX", 0);
     sendParam("videoPosY", 0);
+    notifyAction("videoPosition", null, { immediate: true });
   });
 
   $("#btn-zoom-fit").addEventListener("click", () => {

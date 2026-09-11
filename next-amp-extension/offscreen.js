@@ -477,10 +477,82 @@ function getKeyByValue(map, searchValue) {
   return null;
 }
 
+function getPageActionNotification(key, value, params) {
+  const asNumber = Number(value);
+  const fixed = Number.isFinite(asNumber) ? asNumber.toFixed(2) : String(value ?? "");
+  switch (key) {
+    case "isAudioMasterOn":
+      return { message: `AUDIO ${value ? "ON" : "OFF"}`, icon: value ? "speaker" : "speaker-off" };
+    case "pitch":
+      return { group: "pitch", message: `KEY ${asNumber > 0 ? "+" : ""}${Math.round(asNumber)}`, icon: "music" };
+    case "reverb":
+      return { group: "reverb", message: `REVERB ${Number(value).toFixed(1)}`, icon: "wave" };
+    case "isEqOn":
+      return { message: `EQ ${value ? "ON" : "OFF"}`, icon: "eq" };
+    case "normalize":
+      return { message: `DYN ${value ? "ON" : "OFF"}`, icon: "dynamic" };
+    case "isVocalOn":
+      return { message: `AI VOCAL ${value ? "ON" : "OFF"}`, icon: "ai" };
+    case "vocalMode": {
+      const labels = { karaoke: "KARAOKE", acapella: "ACAPELLA", bypass: "ORIGINAL" };
+      return { message: `${labels[value] || String(value).toUpperCase()} ACTIVE`, icon: value === "karaoke" ? "vocal-off" : "speaker", tone: "loading" };
+    }
+    case "vocalProfile":
+      return { message: `AI PROFILE ${String(value).replace(/_/g, " ").toUpperCase()}`, icon: "profile" };
+    case "aiPowerMode":
+      return { message: `AI ${String(value).toUpperCase()}`, icon: "ai" };
+    case "aiEngineType":
+      return { message: `AI ENGINE ${value === "go_native" ? "GO" : "WEB"}`, icon: "engine" };
+    case "videoQuality":
+      return { message: `VIDEO ${String(value).toUpperCase()}`, icon: "video" };
+    case "videoDelay":
+      return { group: "videoDelay", message: `VIDEO DELAY ${fixed}s`, icon: "delay" };
+    case "videoZoom":
+    case "videoRotate":
+      return {
+        group: "videoTransform",
+        message: `VIDEO ${Math.round(Number(params.videoZoom || 1) * 100)}% / ${Number(params.videoRotate || 0)}°`,
+        icon: "transform",
+      };
+    case "videoPosX":
+    case "videoPosY":
+      return {
+        group: "videoPosition",
+        message: `VIDEO POS ${params.videoPosX || 0},${params.videoPosY || 0}`,
+        icon: "position",
+      };
+    case "isVideoMasterOn":
+      return { message: `VIDEO ${value ? "ON" : "OFF"}`, icon: value ? "video" : "video-off" };
+    default:
+      return null;
+  }
+}
+
+function notifyPageAction(session, key, value, source) {
+  if (source !== "remote") return;
+  const tId = getKeyByValue(sessions, session);
+  const action = getPageActionNotification(key, value, session.params);
+  if (!tId || !action) return;
+  chrome.runtime.sendMessage({
+    type: "BG_RELAY_TO_TAB",
+    tabId: Number(tId),
+    payload: {
+      type: "SHOW_ACTION_NOTIFICATION",
+      message: action.message,
+      group: action.group,
+      icon: action.icon,
+      tone: action.tone,
+      source: "remote",
+    },
+  }).catch(() => {});
+}
+
 function applyParamToSession(session, key, value, index, source) {
   const { params, effects, pitchProc } = session;
   if (key === "eq" && index !== null) params.eq[index] = value;
   else if (key in params) params[key] = value;
+
+  notifyPageAction(session, key, value, source);
 
   // -- VIDEO TRANSFORM MERGE LOGIC --
   // (Resolves zoom override or rotate resetting zoom issue)
@@ -754,6 +826,7 @@ function applyParamToSession(session, key, value, index, source) {
           key,
           value,
           index,
+          source,
         })
         .catch(() => {});
     }
