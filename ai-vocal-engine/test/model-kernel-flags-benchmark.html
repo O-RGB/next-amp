@@ -1,0 +1,124 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>RUNNING</title>
+<pre id="result">Running...</pre>
+<script src="../../next-amp-extension/assets/libs/js/tf.min.js"></script>
+<script type="module">
+import { optimizeVocalModelArtifacts } from '../../next-amp-extension/modules/ai-vocal/model-optimizer.mjs';
+
+const params = new URLSearchParams(location.search);
+const candidate = params.get('candidate') || 'baseline';
+const rounds = Math.max(8, Number(params.get('rounds')) || 24);
+const result = document.querySelector('#result');
+const MODEL_URL = '../../next-amp-extension/model/model.json';
+
+const candidates = {
+  baseline: {},
+  exp_conv: { WEBGL_EXP_CONV: true },
+  direct_conv: { WEBGL_CONV_IM2COL: false },
+  unpacked_depthwise: { WEBGL_PACK_DEPTHWISECONV: false },
+  unpacked_transpose: { WEBGL_PACK_CONV2DTRANSPOSE: false },
+  shapes_uniforms: { WEBGL_USE_SHAPES_UNIFORMS: true },
+  unpacked_all: { WEBGL_PACK: false }
+};
+
+function summarize(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const at = ratio => sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)];
+  return {
+    p50Ms: Number(at(0.50).toFixed(3)),
+    p95Ms: Number(at(0.95).toFixed(3)),
+    minMs: Number(sorted[0].toFixed(3)),
+    maxMs: Number(sorted.at(-1).toFixed(3))
+  };
+}
+
+async function infer(model, input) {
+  const start = performance.now();
+  const mask = tf.tidy(() => model.execute(input)
+    .slice([0, 0, 34, 0], [1, 1024, 15, 2])
+    .transpose([0, 3, 2, 1])
+    .reshape([2, 15, 1024])
+    .sigmoid());
+  try { await mask.data(); } finally { mask.dispose(); }
+  return performance.now() - start;
+}
+
+async function run() {
+  if (!Object.hasOwn(candidates, candidate)) throw new Error(`Unknown candidate: ${candidate}`);
+  const baseFlags = {
+    WEBGL_VERSION: 2,
+    WEBGL_PACK: true,
+    WEBGL_PACK_BINARY_OPERATIONS: true,
+    WEBGL_PACK_NORMALIZATION: true,
+    WEBGL_PACK_DEPTHWISECONV: true,
+    WEBGL_PACK_CONV2DTRANSPOSE: true,
+    WEBGL_CONV_IM2COL: true,
+    WEBGL_EXP_CONV: false,
+    WEBGL_CPU_FORWARD: false,
+    WEBGL_LAZILY_UNPACK: true,
+    WEBGL_DELETE_TEXTURE_THRESHOLD: -1,
+    WEBGL_FORCE_F16_TEXTURES: true,
+    WEBGL_USE_SHAPES_UNIFORMS: false,
+    PROD: true,
+    ...candidates[candidate]
+  };
+  for (const [key, value] of Object.entries(baseFlags)) tf.env().set(key, value);
+  if (!await tf.setBackend('webgl')) throw new Error('WebGL backend unavailable');
+  await tf.ready();
+
+  const artifacts = await tf.io.browserHTTPRequest(MODEL_URL).load();
+  const optimized = optimizeVocalModelArtifacts(artifacts);
+  const model = await tf.loadGraphModel({ load: async () => optimized.artifacts });
+  const values = new Float32Array(1024 * 64 * 2);
+  let seed = 0x5eeda11;
+  for (let i = 0; i < values.length; i++) {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    values[i] = seed / 4294967296;
+  }
+  const input = tf.tensor4d(values, [1, 1024, 64, 2]);
+  try {
+    for (let i = 0; i < 5; i++) await infer(model, input);
+    const timings = [];
+    for (let i = 0; i < rounds; i++) timings.push(await infer(model, input));
+    let renderer = '';
+    try {
+      const gl = tf.backend()?.gpgpu?.gl;
+      const ext = gl?.getExtension('WEBGL_debug_renderer_info');
+      renderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl?.getParameter(gl.RENDERER);
+    } catch (_) {}
+    const output = {
+      candidate,
+      rounds,
+      backend: tf.getBackend(),
+      renderer,
+      tfjs: tf.version_core,
+      foldedCount: optimized.foldedCount,
+      explicitPadCount: optimized.explicitPadCount,
+      flags: baseFlags,
+      timing: summarize(timings)
+    };
+    result.textContent = JSON.stringify(output);
+    document.title = [
+      'DONE', candidate, output.timing.p50Ms, output.timing.p95Ms,
+      output.timing.minMs, output.timing.maxMs,
+      encodeURIComponent(renderer || 'unknown')
+    ].join('|');
+    if (parent !== window) parent.postMessage({ type: 'NEXTAMP_KERNEL_BENCH', output }, location.origin);
+  } finally {
+    input.dispose();
+    model.dispose();
+  }
+}
+
+run().catch(error => {
+  result.textContent = JSON.stringify({ candidate, error: error?.stack || String(error) });
+  document.title = `ERROR|${candidate}|${encodeURIComponent(error?.message || String(error))}`;
+  if (parent !== window) {
+    parent.postMessage({
+      type: 'NEXTAMP_KERNEL_BENCH',
+      output: { candidate, error: error?.stack || String(error) }
+    }, location.origin);
+  }
+});
+</script>

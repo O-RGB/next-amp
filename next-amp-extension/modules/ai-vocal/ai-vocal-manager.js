@@ -14,6 +14,12 @@ import {
   WebGpuReadbackTimeoutError
 } from "./webgpu-recovery-controller.mjs";
 import { webGpuRecoveryCoordinator } from "./webgpu-recovery-controller.mjs";
+import {
+  DEFAULT_AI_POWER_MODE,
+  getAiPowerModeConfig,
+  normalizeAiPowerMode,
+  shouldPreferWebGlForPowerMode
+} from "./ai-power-mode.mjs";
 
 const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
@@ -53,8 +59,7 @@ const CANDIDATE_WEBGL_F16 = true;
 // GO keeps its existing queue controller and is never routed through this.
 const ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE = true;
 const VOCAL_PROFILES = Object.freeze({
-  // Retained as a rollback candidate. This shorter cadence still runs the
-  // full 64-frame model and therefore invokes inference more often.
+  // ECO and MEDIUM intentionally share this tested browser cadence.
   balanced: Object.freeze({
     frames: 15,
     analysisFrames: 15,
@@ -276,6 +281,7 @@ export class AIVocalManager {
 
     // Former DIFF=2 behavior is now fixed: one chunk of lookahead.
     this.vocalProfile = DEFAULT_VOCAL_PROFILE;
+    this.aiPowerMode = DEFAULT_AI_POWER_MODE;
     this.strength = 1.0;
 
     // Engine Selection: "webgl" (Browser in-app) or "go_native" (Desktop engine)
@@ -361,6 +367,9 @@ export class AIVocalManager {
     this.recoveryAttemptCount = 0;
     this.recoveryAttemptTimes = [];
     this.forceWebGlForSession = false;
+    this.powerModeSwitchPromise = null;
+    this.powerModeReloadRequested = false;
+    this.powerModeReloadRequiredAfterLoad = false;
     this.destroyed = false;
     this.webGpuLossDevice = null;
     this.awaitingRecoveryFirstChunk = false;
@@ -526,7 +535,9 @@ export class AIVocalManager {
 
   getHardwareApi() {
     if (this.engineType === "go_native") return "DIRECTML";
-    return this.hardwareApi || String(this.backendType || "WEBGL").toUpperCase();
+    const api = this.hardwareApi || String(this.backendType || "WEBGL").toUpperCase();
+    const precision = this.getTexturePrecision();
+    return api.includes(precision) ? api : `${api} • ${precision}`;
   }
 
   returnInputBuffers(rawL, rawR) {
@@ -607,7 +618,216 @@ export class AIVocalManager {
   }
 
   getProcessingConfig() {
-    return VOCAL_PROFILES[this.vocalProfile] || VOCAL_PROFILES[DEFAULT_VOCAL_PROFILE];
+    return VOCAL_PROFILES[this.getProcessingProfileName()] || VOCAL_PROFILES[DEFAULT_VOCAL_PROFILE];
+  }
+
+  getProcessingProfileName() {
+    // ECO/MEDIUM's shorter cadence is browser-only. GO keeps its native
+    // 16-frame packet contract regardless of the saved WEB preference.
+    if (this.engineType === "webgl") {
+      const processingProfile = this.getPowerModeConfig().processingProfile;
+      if (processingProfile && VOCAL_PROFILES[processingProfile]) return processingProfile;
+    }
+    return this.vocalProfile;
+  }
+
+  getPowerModeConfig() {
+    return getAiPowerModeConfig(this.aiPowerMode);
+  }
+
+  getPowerMode() {
+    return this.aiPowerMode;
+  }
+
+  isAdaptiveBrowserQueueEnabled() {
+    return ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE &&
+      this.getPowerModeConfig().adaptiveQueue === true;
+  }
+
+  applyBackendPowerModeConfig() {
+    if (typeof tf === "undefined") return;
+    const powerConfig = this.getPowerModeConfig();
+    try {
+      tf.env().set(
+        "WEBGPU_DEFERRED_SUBMIT_BATCH_SIZE",
+        powerConfig.webgpuDeferredSubmitBatchSize
+      );
+    } catch (_) {}
+  }
+
+  getRequestedBackendPolicy() {
+    return this.getPowerModeConfig().backendPolicy;
+  }
+
+  isCurrentBackendCompatibleWithPowerMode() {
+    if (this.engineType !== "webgl") return true;
+    // F16 is a WebGL texture policy, not a WebGPU model precision. Comparing
+    // it while WebGPU is active caused a needless model/backend reload when
+    // switching MEDIUM -> FULL even though the active provider was valid.
+    if (this.backendType === "webgl") {
+      const wantsF16 = CANDIDATE_WEBGL_F16 && this.getPowerModeConfig().webglF16 === true;
+      const hasF16 = this.getTexturePrecision() === "F16";
+      if (wantsF16 !== hasF16) return false;
+    }
+    const policy = this.getRequestedBackendPolicy();
+    if (policy === "prefer_webgl_f16") return this.backendType === "webgl";
+    // WebGPU is the quality preference. A WebGL session is still valid when
+    // recovery already forced a bounded per-session fallback.
+    return this.backendType !== "webgl" || this.forceWebGlForSession;
+  }
+
+  getTexturePrecision() {
+    if (this.backendType !== "webgl") return "F32";
+    try {
+      return typeof tf !== "undefined" && tf.env().get("WEBGL_FORCE_F16_TEXTURES")
+        ? "F16" : "F32";
+    } catch (_) {
+      return "F32";
+    }
+  }
+
+  postPowerModeBoundary() {
+    if (!this.workletNode) return;
+    this.workletNode.port.postMessage({
+      type: "SET_MODE",
+      mode: this.currentMode,
+      profile: this.getProcessingProfileName(),
+      browserChunkSize: this.getProcessingConfig().chunkSamples,
+      engineType: this.engineType,
+      generation: this.streamGeneration
+    });
+    this.sendBrowserQueueTarget();
+  }
+
+  async reloadBrowserEngineForPowerMode() {
+    if (this.destroyed || this.engineType !== "webgl" || this.currentMode === "bypass") {
+      return { ok: false, skipped: true };
+    }
+
+    // Serialize backend/model replacement. The loop also handles a second
+    // toggle while the first reload is still in progress: the final selected
+    // mode is checked before returning.
+    do {
+      if (this.destroyed || this.currentMode === "bypass") {
+        return { ok: false, skipped: true };
+      }
+      if (this.isCurrentBackendCompatibleWithPowerMode() && this.isReady) {
+        return { ok: true, backend: this.backendType };
+      }
+
+      this.setStatus("Switching AI Power Mode...");
+      this.disposeBrowserEngineResources({ preserveMode: true });
+      this.postPowerModeBoundary();
+      await this.loadEngine();
+      if (this.powerModeReloadRequiredAfterLoad) {
+        this.powerModeReloadRequiredAfterLoad = false;
+        continue;
+      }
+      if (!this.isReady) {
+        return { ok: false, backend: this.backendType, mode: this.aiPowerMode };
+      }
+      // A provider fallback can produce a valid engine that is not the first
+      // preference. Keep it as the safe result instead of retrying forever.
+      if (!this.isCurrentBackendCompatibleWithPowerMode()) break;
+    } while (!this.destroyed);
+
+    return {
+      ok: this.isReady,
+      backend: this.backendType,
+      mode: this.aiPowerMode
+    };
+  }
+
+  requestPowerModeReload() {
+    if (!this.powerModeSwitchPromise) {
+      this.powerModeSwitchPromise = webGpuRecoveryCoordinator
+        .runBackendTransition(() => this.reloadBrowserEngineForPowerMode())
+        .finally(() => {
+          this.powerModeSwitchPromise = null;
+        });
+    }
+    return this.powerModeSwitchPromise;
+  }
+
+  setPowerMode(mode) {
+    const nextMode = normalizeAiPowerMode(mode);
+    if (nextMode === this.aiPowerMode) return Promise.resolve({ changed: false });
+
+    const previousMode = this.aiPowerMode;
+    this.aiPowerMode = nextMode;
+
+    // GO owns its native processing settings. Keep the selected WEB preset
+    // for the next WEB session without resetting the active GO stream.
+    if (this.engineType === "go_native") {
+      return Promise.resolve({ changed: true, mode: this.aiPowerMode, engine: "go_native" });
+    }
+
+    this.applyBackendPowerModeConfig();
+    this.resetBrowserQueueTuning();
+
+    this.overlapConsensusEnabled = this.getPowerModeConfig().overlapConsensus;
+    this.streamGeneration++;
+    this.lastGoStatusAt = 0;
+
+    // The DSP preset is applied by resetState through the same WASM instance.
+    // No model or binary asset changes are involved in this operation.
+    this.resetState();
+    this.postPowerModeBoundary();
+
+    if (this.engineLoading) {
+      // The Worklet/DSP already crossed to the new cadence above. Let the
+      // current load finish, then reload only when its selected provider or
+      // precision is incompatible with the final preset.
+      this.powerModeReloadRequested = true;
+      return Promise.resolve({ changed: true, mode: this.aiPowerMode, pending: true });
+    }
+
+    if (this.currentMode === "bypass") {
+      // If the model was preloaded while bypassed, discard it when the new
+      // policy needs another provider. The next Karaoke activation will load
+      // the same model through the selected policy.
+      if (this.isReady && !this.isCurrentBackendCompatibleWithPowerMode()) {
+        this.disposeBrowserEngineResources({ preserveMode: true });
+      }
+      return Promise.resolve({ changed: true, mode: this.aiPowerMode });
+    }
+
+    if (!this.isReady) {
+      return Promise.resolve({ changed: true, mode: this.aiPowerMode });
+    }
+
+    if (this.isCurrentBackendCompatibleWithPowerMode()) {
+      if (this.currentMode !== "bypass") this.setStatus("Buffering...");
+      return Promise.resolve({ changed: true, mode: this.aiPowerMode, backend: this.backendType });
+    }
+
+    return this.requestPowerModeReload().then(async (result) => {
+      if (result?.ok !== false || this.aiPowerMode !== nextMode || this.destroyed) {
+        return result;
+      }
+
+      // Keep a failed provider switch from leaving the user with silence.
+      // Restore the previous runtime preset and make one bounded attempt to
+      // reload it. The model and audio path remain shared.
+      this.aiPowerMode = previousMode;
+      this.applyBackendPowerModeConfig();
+      this.resetBrowserQueueTuning();
+      this.overlapConsensusEnabled = this.getPowerModeConfig().overlapConsensus;
+      this.powerModeReloadRequested = false;
+      this.powerModeReloadRequiredAfterLoad = false;
+      this.streamGeneration++;
+      this.resetState();
+      this.postPowerModeBoundary();
+      if (this.currentMode !== "bypass" && !this.engineLoading) {
+        await this.loadEngine();
+      }
+      return {
+        ...result,
+        reverted: true,
+        mode: this.aiPowerMode,
+        restored: this.isReady
+      };
+    });
   }
 
   extractModelMask(outTensor, processing, includeOverlapWindow = false) {
@@ -722,7 +942,7 @@ export class AIVocalManager {
   }
 
   sendBrowserQueueTarget() {
-    if (!ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE ||
+    if (!this.isAdaptiveBrowserQueueEnabled() ||
         this.engineType !== "webgl" || !this.workletNode) return;
     const readyThreshold = Math.max(
       MIN_BROWSER_QUEUE_TARGET,
@@ -753,7 +973,7 @@ export class AIVocalManager {
   }
 
   raiseBrowserQueueTarget() {
-    if (!ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE || this.engineType !== "webgl") return;
+    if (!this.isAdaptiveBrowserQueueEnabled() || this.engineType !== "webgl") return;
     this.browserQueueStableSince = performance.now();
     if (this.browserQueueTarget < MAX_BROWSER_QUEUE_TARGET) {
       this.setBrowserQueueTarget(this.browserQueueTarget + 1);
@@ -761,7 +981,7 @@ export class AIVocalManager {
   }
 
   observeBrowserUnderrun(underrunBlocks) {
-    if (!ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE || this.engineType !== "webgl") return;
+    if (!this.isAdaptiveBrowserQueueEnabled() || this.engineType !== "webgl") return;
     const count = Number(underrunBlocks);
     if (!Number.isFinite(count) || count < 0) return;
     if (this.browserLastUnderrunBlocks === null) {
@@ -782,7 +1002,7 @@ export class AIVocalManager {
   }
 
   observeBrowserLatency(elapsedMs) {
-    if (!ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE ||
+    if (!this.isAdaptiveBrowserQueueEnabled() ||
         this.engineType !== "webgl" || !this.workletNode ||
         !Number.isFinite(elapsedMs) || elapsedMs <= 0) return;
 
@@ -887,7 +1107,9 @@ export class AIVocalManager {
   }
 
   setVocalProfile(profile) {
-    const nextProfile = profile === "balanced"
+    // Old sessions may still send the removed ECO profile name. Treat it as
+    // the shared balanced cadence instead of creating a separate state.
+    const nextProfile = profile === "eco" || profile === "balanced"
       ? "balanced"
       : profile === "ai_remove"
         ? "ai_remove"
@@ -911,7 +1133,7 @@ export class AIVocalManager {
     if (this.workletNode) {
       this.workletNode.port.postMessage({
         type: "SET_PROFILE",
-        profile: this.vocalProfile,
+        profile: this.getProcessingProfileName(),
         browserChunkSize: this.getProcessingConfig().chunkSamples,
         engineType: this.engineType,
         generation: this.streamGeneration
@@ -1530,22 +1752,28 @@ export class AIVocalManager {
       this.interleavedPtr = this.exp.stft_get_interleaved_mags_ptr ? (this.exp.stft_get_interleaved_mags_ptr() / 4) : 0;
       this.normInputPtr = this.exp.stft_get_norm_input_ptr ? (this.exp.stft_get_norm_input_ptr() / 4) : 0;
 
-      // B1 is a runtime candidate in the DSP layer. A zero value explicitly
-      // disables it, so old behavior remains one-line rollback away.
+      const powerConfig = this.getPowerModeConfig();
+
+      // These are runtime switches in the shared DSP binary. A zero value
+      // disables a candidate without requiring a second WASM build.
       if (this.exp.stft_set_attenuation_floor) {
         this.exp.stft_set_attenuation_floor(
-          ENABLE_ATTENUATION_FLOOR_CANDIDATE ? ATTENUATION_FLOOR : 0
+          powerConfig.attenuationFloor && ENABLE_ATTENUATION_FLOOR_CANDIDATE
+            ? ATTENUATION_FLOOR : 0
         );
       }
       if (this.exp.stft_set_smoothing_alphas) {
         this.exp.stft_set_smoothing_alphas(
-          ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE ? SMOOTHING_FAST_ALPHA : 0,
-          ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE ? SMOOTHING_SLOW_ALPHA : 0
+          powerConfig.asymmetricSmoothing && ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE
+            ? SMOOTHING_FAST_ALPHA : 0,
+          powerConfig.asymmetricSmoothing && ENABLE_ASYMMETRIC_SMOOTHING_CANDIDATE
+            ? SMOOTHING_SLOW_ALPHA : 0
         );
       }
       if (this.exp.stft_set_transient_threshold) {
         this.exp.stft_set_transient_threshold(
-          ENABLE_TRANSIENT_GATE_CANDIDATE ? TRANSIENT_THRESHOLD : 0
+          powerConfig.transientGate && ENABLE_TRANSIENT_GATE_CANDIDATE
+            ? TRANSIENT_THRESHOLD : 0
         );
       }
 
@@ -1555,14 +1783,44 @@ export class AIVocalManager {
       // available. It uses the same float32 model and tensor shapes as WebGL,
       // but avoids much of the ANGLE/DirectX11 shader overhead on Windows and
       // the legacy WebGL translation layer on Apple.
+      const configureWebGPU = async () => {
+        try {
+          if (typeof navigator === "undefined" || !navigator.gpu ||
+              !(await ensureWebGpuBackend())) return "";
+          // Keep the model's small post-processing ops on the same device;
+          // CPU handoffs introduce synchronization and extra power draw.
+          tf.env().set("WEBGPU_CPU_FORWARD", false);
+          tf.env().set(
+            "WEBGPU_DEFERRED_SUBMIT_BATCH_SIZE",
+            this.getPowerModeConfig().webgpuDeferredSubmitBatchSize
+          );
+          const selected = await tf.setBackend("webgpu");
+          if (selected && tf.getBackend() === "webgpu") {
+            await tf.ready();
+            return "webgpu";
+          }
+        } catch (webgpuErr) {
+          console.warn("[NextAmp AI] WebGPU unavailable:", webgpuErr);
+        }
+        return "";
+      };
+
       const configureWebGL = async () => {
         try {
           tf.env().set("WEBGL_PACK", true);
           tf.env().set("WEBGL_PACK_BINARY_OPERATIONS", true);
-          tf.env().set("WEBGL_PACK_NORMALIZATION", true);
-          tf.env().set("WEBGL_PACK_DEPTHWISE_CONV", true);
-          if (CANDIDATE_WEBGL_F16) {
+          tf.env().set(
+            "WEBGL_PACK_NORMALIZATION",
+            this.getPowerModeConfig().webglPackNormalization
+          );
+          tf.env().set(
+            "WEBGL_PACK_DEPTHWISE_CONV",
+            this.getPowerModeConfig().webglPackDepthwiseConv
+          );
+          if (CANDIDATE_WEBGL_F16 && this.getPowerModeConfig().webglF16) {
             tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
+          } else {
+            tf.env().set("WEBGL_FORCE_F16_TEXTURES", false);
           }
           tf.env().set("WEBGL_CPU_FORWARD", false);
           tf.env().set("WEBGL_LAZILY_UNPACK", true);
@@ -1574,12 +1832,14 @@ export class AIVocalManager {
           // Try WebGL 2 first; some older Windows drivers only expose WebGL 1.
           try {
             tf.env().set("WEBGL_VERSION", 2);
-            await tf.setBackend("webgl");
+            const selected = await tf.setBackend("webgl");
+            if (!selected || tf.getBackend() !== "webgl") throw new Error("WebGL 2 backend was not selected");
             await tf.ready();
           } catch (e2) {
             console.warn("[NextAmp AI] WebGL 2 failed, falling back to WebGL 1:", e2);
             tf.env().set("WEBGL_VERSION", 1);
-            await tf.setBackend("webgl");
+            const selected = await tf.setBackend("webgl");
+            if (!selected || tf.getBackend() !== "webgl") throw new Error("WebGL 1 backend was not selected");
             await tf.ready();
           }
         } catch (webglErr) {
@@ -1591,25 +1851,17 @@ export class AIVocalManager {
       };
 
       let currentBackend = "";
-      try {
-        const hasWebGpu = !this.forceWebGlForSession &&
-          typeof navigator !== "undefined" && navigator.gpu && await ensureWebGpuBackend();
-        if (hasWebGpu && typeof tf.setBackend === "function") {
-          // Keep the model's small post-processing ops on the same device;
-          // CPU handoffs introduce synchronization and extra power draw.
-          tf.env().set("WEBGPU_CPU_FORWARD", false);
-          tf.env().set("WEBGPU_DEFERRED_SUBMIT_BATCH_SIZE", 0);
-          const selected = await tf.setBackend("webgpu");
-          if (selected && tf.getBackend() === "webgpu") {
-            await tf.ready();
-            currentBackend = "webgpu";
-          }
-        }
-      } catch (webgpuErr) {
-        console.warn("[NextAmp AI] WebGPU unavailable, using WebGL:", webgpuErr);
+      const preferWebGlForPowerMode = shouldPreferWebGlForPowerMode(this.aiPowerMode);
+      if (!preferWebGlForPowerMode && !this.forceWebGlForSession) {
+        currentBackend = await configureWebGPU();
       }
-      if (currentBackend !== "webgpu") {
+      if (!currentBackend) {
         currentBackend = await configureWebGL();
+        // The shared ECO/MEDIUM preset prefers WebGPU. A driver that cannot
+        // initialize WebGL still gets one bounded fallback attempt.
+        if (currentBackend === "cpu" && preferWebGlForPowerMode) {
+          currentBackend = await configureWebGPU();
+        }
       }
 
       // Detect GPU hardware device label early before loading model
@@ -1749,6 +2001,29 @@ export class AIVocalManager {
         return true;
       };
 
+      const fallbackToWebGPU = async () => {
+        if (currentBackend !== "webgl" || !preferWebGlForPowerMode) return false;
+        console.warn("[NextAmp AI] WebGL model path failed; retrying with WebGPU");
+        if (this.model) {
+          try { this.model.dispose(); } catch (_) {}
+          this.model = null;
+        }
+        currentBackend = await configureWebGPU();
+        this.backendType = currentBackend;
+        if (currentBackend !== "webgpu") return false;
+        const hardwareDescription = await this.detectWebHardwareInfo(currentBackend);
+        deviceLabel = hardwareDescription.device;
+        this.setStatus("Loading Model (15MB)...");
+        this.model = await modelLoader.load();
+        this.modelGraphFoldedBranches = modelLoader.foldedCount;
+        this.modelGraphExplicitPads = modelLoader.explicitPadCount;
+        this.modelOutputHead = modelLoader.outputHead;
+        this.resetState();
+        this.setStatus("Warming up GPU...");
+        await warmupWithOriginalFallback();
+        return true;
+      };
+
       this.model = await modelLoader.load();
       this.modelGraphFoldedBranches = modelLoader.foldedCount;
       this.modelGraphExplicitPads = modelLoader.explicitPadCount;
@@ -1781,7 +2056,7 @@ export class AIVocalManager {
         console.log(`[NextAmp AI] ${currentBackend.toUpperCase()} pipeline pre-warmed`);
       } catch (warmErr) {
         if (loadEpoch !== this.engineEpoch || this.destroyed) throw warmErr;
-        if (!(await fallbackToWebGL())) {
+        if (!(await fallbackToWebGL()) && !(await fallbackToWebGPU())) {
           throw warmErr;
         }
       }
@@ -1840,6 +2115,25 @@ export class AIVocalManager {
       this.isReady = true;
       this.queueFaulted = false;
       this.engineLoading = false;
+
+      const powerModeReloadNeeded = this.powerModeReloadRequested &&
+        this.currentMode !== "bypass" &&
+        !this.isCurrentBackendCompatibleWithPowerMode();
+      this.powerModeReloadRequested = false;
+      if (powerModeReloadNeeded) {
+        // Do not announce the superseded backend as ready. The Worklet is
+        // already on the newer generation and remains muted until the
+        // selected provider finishes its own warmup.
+        this.isReady = false;
+        this.powerModeReloadRequiredAfterLoad = true;
+        this.postPowerModeBoundary();
+        if (!this.powerModeSwitchPromise) {
+          this.requestPowerModeReload().catch((error) => {
+            console.warn("[NextAmp AI] Deferred power mode reload failed:", error);
+          });
+        }
+        return;
+      }
 
       if (this.workletNode) {
         this.workletNode.port.postMessage({ type: "WORKER_READY" });
@@ -2164,7 +2458,7 @@ export class AIVocalManager {
         this.diagnostics.lastProcessed = {
           inputChunkIndex: chunkIndex,
           generation,
-          profile: this.vocalProfile,
+          profile: this.getProcessingProfileName(),
           inputFrame: chunkIndex * frames,
           targetChunkIndex,
           targetFrame: targetChunkIndex * frames,
@@ -2261,7 +2555,7 @@ export class AIVocalManager {
       this.workletNode.port.postMessage({
         type: "SET_MODE",
         mode: "bypass",
-        profile: this.vocalProfile,
+        profile: this.getProcessingProfileName(),
         browserChunkSize: this.getProcessingConfig().chunkSamples,
         engineType: this.engineType,
         generation: this.streamGeneration
@@ -2273,6 +2567,8 @@ export class AIVocalManager {
 
   unloadEngine() {
     this.streamGeneration++;
+    this.powerModeReloadRequested = false;
+    this.powerModeReloadRequiredAfterLoad = false;
     this.disposeBrowserEngineResources({ preserveMode: false });
     this.queueFaulted = false;
     this.recoveryState = "idle";
@@ -2292,7 +2588,7 @@ export class AIVocalManager {
       this.workletNode.port.postMessage({
         type: "SET_MODE",
         mode: "bypass",
-        profile: this.vocalProfile,
+        profile: this.getProcessingProfileName(),
         browserChunkSize: this.getProcessingConfig().chunkSamples,
         engineType: this.engineType,
         generation: this.streamGeneration
@@ -2390,7 +2686,7 @@ export class AIVocalManager {
         type: "SET_MODE",
         mode,
         engineType: this.engineType,
-        profile: this.vocalProfile,
+        profile: this.getProcessingProfileName(),
         browserChunkSize: this.getProcessingConfig().chunkSamples,
         generation: this.streamGeneration
       });
@@ -2430,7 +2726,12 @@ export class AIVocalManager {
     let texturePrecision = null;
     try {
       texturePrecision = typeof tf !== "undefined" && this.backendType === "webgl"
-        ? { forceF16: !!tf.env().get("WEBGL_FORCE_F16_TEXTURES") }
+        ? {
+            forceF16: !!tf.env().get("WEBGL_FORCE_F16_TEXTURES"),
+            label: this.getTexturePrecision()
+          }
+        : this.engineType === "webgl"
+          ? { forceF16: false, label: this.getTexturePrecision() }
         : null;
     } catch (_) {}
     const processing = this.getProcessingConfig();
@@ -2463,9 +2764,13 @@ export class AIVocalManager {
       hardwareDevice: this.getHardwareDevice(),
       hardwareDeviceRaw: this.getHardwareDeviceRaw(),
       api: this.getHardwareApi(),
+      powerMode: this.aiPowerMode,
+      backendPolicy: this.getRequestedBackendPolicy(),
       sampleRate,
       texturePrecision,
-      profile: this.vocalProfile,
+      profile: this.getProcessingProfileName(),
+      requestedProfile: this.vocalProfile,
+      processingProfile: this.getProcessingProfileName(),
       modelGraphFoldedBranches: this.modelGraphFoldedBranches,
       modelGraphExplicitPads: this.modelGraphExplicitPads,
       cadence: {

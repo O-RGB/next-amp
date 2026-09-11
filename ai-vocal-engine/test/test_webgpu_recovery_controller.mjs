@@ -43,6 +43,22 @@ assert.equal(lateEvent.status, 'fulfilled');
 assert.equal(lateEvent.value, 'late tensor');
 
 const coordinator = new WebGpuRecoveryCoordinator();
+const transitionOrder = [];
+const transitionA = coordinator.runBackendTransition(async () => {
+  transitionOrder.push('start-a');
+  await new Promise(resolve => setTimeout(resolve, 5));
+  transitionOrder.push('end-a');
+  return 'a';
+});
+const transitionB = coordinator.runBackendTransition(async () => {
+  transitionOrder.push('start-b');
+  transitionOrder.push('end-b');
+  return 'b';
+});
+assert.equal(await transitionA, 'a');
+assert.equal(await transitionB, 'b');
+assert.deepEqual(transitionOrder, ['start-a', 'end-a', 'start-b', 'end-b']);
+
 const calls = [];
 const managerA = {
   canRecoverWebGpu: () => true,

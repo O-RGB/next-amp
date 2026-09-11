@@ -10,6 +10,9 @@ const source = fs.readFileSync(
   .replace('import { createVocalModelLoader } from "./model-optimizer.mjs";\n', '')
   .replace('import { createProtectedModelSource, loadProtectedAsset } from "./web-protected-assets.mjs";\n', '')
   .replace('import { applyOverlapConsensusToMask } from "./overlap-consensus.mjs";\n', '')
+  .replace('import {\n  calculateWebGpuReadbackTimeout,\n  settleWithDeadline,\n  WebGpuReadbackTimeoutError\n} from "./webgpu-recovery-controller.mjs";\n', 'const calculateWebGpuReadbackTimeout = () => 1000;\nconst settleWithDeadline = () => Promise.resolve({ status: "fulfilled", value: null });\nclass WebGpuReadbackTimeoutError extends Error {}\n')
+  .replace('import { webGpuRecoveryCoordinator } from "./webgpu-recovery-controller.mjs";\n', 'const webGpuRecoveryCoordinator = { register: () => () => {}, request: () => Promise.resolve([]), releaseBackendIfUnused: () => false };\n')
+  .replace('import {\n  DEFAULT_AI_POWER_MODE,\n  getAiPowerModeConfig,\n  normalizeAiPowerMode,\n  shouldPreferWebGlForPowerMode\n} from "./ai-power-mode.mjs";\n', 'const DEFAULT_AI_POWER_MODE = "quality";\nconst normalizeAiPowerMode = value => value === "eco" ? "eco" : value === "medium" ? "medium" : "quality";\nconst getAiPowerModeConfig = value => normalizeAiPowerMode(value) === "eco" ? ({ processingProfile: "balanced", backendPolicy: "prefer_webgl_f16", webglF16: true, webgpuDeferredSubmitBatchSize: 15, attenuationFloor: false, asymmetricSmoothing: false, transientGate: false, overlapConsensus: false, adaptiveQueue: false }) : normalizeAiPowerMode(value) === "medium" ? ({ processingProfile: "balanced", backendPolicy: "auto_webgpu_first", webglF16: false, webgpuDeferredSubmitBatchSize: 15, attenuationFloor: false, asymmetricSmoothing: false, transientGate: false, overlapConsensus: false, adaptiveQueue: false }) : ({ processingProfile: "ai_remove", backendPolicy: "auto_webgpu_first", webglF16: true, webgpuDeferredSubmitBatchSize: 0, attenuationFloor: false, asymmetricSmoothing: true, transientGate: true, overlapConsensus: false, adaptiveQueue: true });\nconst shouldPreferWebGlForPowerMode = value => normalizeAiPowerMode(value) === "eco";\n')
   .replace('export class AIVocalManager', 'const applyOverlapConsensusToMask = () => false;\n\nclass AIVocalManager') +
   '\nthis.AIVocalManager = AIVocalManager;';
 
@@ -71,6 +74,38 @@ assert.equal(manager.workletNode.port.messages.at(-1).profile, 'ai_remove');
 manager.setVocalProfile('ai_remove');
 assert.equal(manager.goClient.resetCalls, 2,
   'reselecting the active profile must not reset an active stream');
+
+const goGenerationBeforePowerMode = manager.streamGeneration;
+await manager.setPowerMode('eco');
+assert.equal(manager.getPowerMode(), 'eco');
+assert.equal(manager.goClient.resetCalls, 2,
+  'changing WEB power mode must not reset the active GO stream');
+assert.equal(manager.streamGeneration, goGenerationBeforePowerMode,
+  'changing WEB power mode must not create a GO stream boundary');
+assert.equal(manager.getProcessingProfileName(), 'ai_remove',
+  'ECO selection must not change the native GO processing contract');
+await manager.setPowerMode('medium');
+assert.equal(manager.getPowerMode(), 'medium');
+assert.equal(manager.goClient.resetCalls, 2,
+  'changing from ECO to MEDIUM must also leave the active GO stream alone');
+assert.equal(manager.streamGeneration, goGenerationBeforePowerMode,
+  'MEDIUM selection must not create a GO stream boundary');
+
+const webPowerManager = new context.AIVocalManager({ sampleRate: 44100 });
+await webPowerManager.setPowerMode('eco');
+assert.equal(webPowerManager.getProcessingProfileName(), 'balanced',
+  'ECO must reuse the shared MEDIUM browser profile');
+assert.equal(webPowerManager.getProcessingConfig().chunkSamples, 7680,
+  'ECO must use the shared 15-hop browser cadence');
+assert.equal(webPowerManager.isAdaptiveBrowserQueueEnabled(), false,
+  'ECO must retain the fixed main-branch queue behavior');
+
+const webGpuFullManager = new context.AIVocalManager({ sampleRate: 44100 });
+webGpuFullManager.engineType = 'webgl';
+webGpuFullManager.backendType = 'webgpu';
+webGpuFullManager.aiPowerMode = 'quality';
+assert.equal(webGpuFullManager.isCurrentBackendCompatibleWithPowerMode(), true,
+  'FULL WebGPU must not be reloaded just because its WebGL fallback requests F16');
 
 const webQueueManager = new context.AIVocalManager({ sampleRate: 44100 });
 webQueueManager.enqueueChunk({ chunkIndex: 10 });

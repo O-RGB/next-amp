@@ -87,6 +87,16 @@ assert.equal(profileProcessor.vocalProfile, 'balanced');
 processBlocks(profileProcessor, 60);
 assert.equal(messagesOfType(profileProcessor, 'PROCESS_CHUNK').at(-1).rawL.length, 7680,
   'switching back must restore the low-power cadence');
+profileProcessor.port.onmessage({ data: {
+  type: 'SET_PROFILE', profile: 'eco', browserChunkSize: 7680, generation: 43
+} });
+assert.equal(profileProcessor.vocalProfile, 'balanced',
+  'removed ECO profile name must resolve to the shared balanced cadence');
+assert.equal(profileProcessor.inputBufferPools[8704], undefined,
+  'removed ECO cadence must not allocate a separate 17-hop pool');
+processBlocks(profileProcessor, 60);
+assert.equal(messagesOfType(profileProcessor, 'PROCESS_CHUNK').at(-1).rawL.length, 7680,
+  'ECO must reuse the shared 15-hop cadence');
 
 // Detailed Worklet counters are debug-only. Normal status messages should
 // avoid cloning the diagnostics object; the debug switch must opt back in.

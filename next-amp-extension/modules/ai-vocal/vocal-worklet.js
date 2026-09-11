@@ -11,7 +11,7 @@
  */
 
 const GO_CHUNK_SIZE = 8192; // 16 frames * 512 hop (GO wire protocol)
-const BROWSER_CHUNK_SIZE = 7680; // 15 hops * 512 (~174.1ms), Smooth rollback profile
+const BROWSER_CHUNK_SIZE = 7680; // 15 hops * 512 (~174.1ms), ECO/MEDIUM profile
 const DEFAULT_BROWSER_CHUNK_SIZE = GO_CHUNK_SIZE; // 16 hops, Detail production profile
 const MAX_CHUNK_SIZE = GO_CHUNK_SIZE;
 const FADE_OUT_SPEED = 1.0 / 256;  // ~5.8ms fast, click-free mute
@@ -137,7 +137,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.engineType = data.engineType;
           this.setChunkSizeForEngine(this.engineType, data.browserChunkSize);
         }
-        if (data.profile === "balanced" || data.profile === "ai_remove" || data.profile === "reference") {
+        if (data.profile === "eco" || data.profile === "balanced") {
+          this.vocalProfile = "balanced";
+        } else if (data.profile === "ai_remove" || data.profile === "reference") {
           this.vocalProfile = data.profile;
         }
         if (this.targetMode !== data.mode || generationChanged) {
@@ -195,11 +197,11 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         this.maxQueueThreshold = this.engineType === "go_native"
           ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
       } else if (data.type === "SET_PROFILE") {
-        const nextProfile = data.profile === "balanced"
+        const nextProfile = data.profile === "eco" || data.profile === "balanced"
           ? "balanced"
-          : data.profile === "reference"
-            ? "reference"
-            : "ai_remove";
+            : data.profile === "reference"
+              ? "reference"
+              : "ai_remove";
         const nextGeneration = Number.isInteger(data.generation)
           ? data.generation : this.streamGeneration + 1;
         const generationChanged = nextGeneration !== this.streamGeneration;
@@ -300,7 +302,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
   setChunkSizeForEngine(engineType, browserChunkSize = DEFAULT_BROWSER_CHUNK_SIZE) {
     const requestedSize = Number(browserChunkSize);
-    const browserSize = requestedSize === GO_CHUNK_SIZE ? GO_CHUNK_SIZE : BROWSER_CHUNK_SIZE;
+    const browserSize = [BROWSER_CHUNK_SIZE, GO_CHUNK_SIZE].includes(requestedSize)
+      ? requestedSize : DEFAULT_BROWSER_CHUNK_SIZE;
     const nextSize = engineType === "go_native" ? GO_CHUNK_SIZE : browserSize;
     if (this.chunkSize === nextSize) return;
     this.chunkSize = nextSize;

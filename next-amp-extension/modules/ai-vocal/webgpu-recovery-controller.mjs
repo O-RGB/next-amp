@@ -109,6 +109,7 @@ export class WebGpuRecoveryCoordinator {
   constructor() {
     this.managers = new Set();
     this.sharedRecoveryPromise = null;
+    this.sharedBackendTransitionPromise = null;
     this.backendEpoch = 0;
   }
 
@@ -140,6 +141,27 @@ export class WebGpuRecoveryCoordinator {
     } catch (_) {
       return false;
     }
+  }
+
+  /**
+   * TensorFlow.js owns one mutable backend registry per offscreen document.
+   * Serialize deliberate provider changes as well as recovery changes so a
+   * rapid ECO/QUALITY toggle cannot call setBackend while another manager is
+   * disposing/loading the shared runtime.
+   */
+  runBackendTransition(task) {
+    if (typeof task !== "function") {
+      return Promise.reject(new TypeError("backend transition task must be a function"));
+    }
+    const previous = this.sharedBackendTransitionPromise || Promise.resolve();
+    const transition = previous.catch(() => {}).then(task);
+    const tracked = transition.finally(() => {
+      if (this.sharedBackendTransitionPromise === tracked) {
+        this.sharedBackendTransitionPromise = null;
+      }
+    });
+    this.sharedBackendTransitionPromise = tracked;
+    return tracked;
   }
 
   request(requester, reason = "unknown") {

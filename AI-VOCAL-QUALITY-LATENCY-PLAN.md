@@ -161,17 +161,17 @@ FP16 ลด memory bandwidth ครึ่งหนึ่ง GPU ย้ายข�
 
 ---
 
-#### B4. Exact Model Output Head (implement มีอยู่แล้ว ปิดอยู่)
+#### B4. Exact Model Output Head (rejected — keep disabled)
 
-`EXACT_MODEL_OUTPUT_HEAD = false` (line 30)
+`EXACT_MODEL_OUTPUT_HEAD = false` (ปิดถาวรใน baseline ปัจจุบัน)
 
 Decoder ROI specialization — ตัด output ให้เหลือเฉพาะ frames ที่ใช้จริง
 ไม่เปลี่ยน weights แต่ลด computation ใน decoder's final projection
 
-- [ ] เปิด `EXACT_MODEL_OUTPUT_HEAD = true`
-- [ ] วัด inference time ก่อนและหลัง
-- [ ] ถ้า inference ลด: ฟัง blind A/B เทียบกับ full head
-- [ ] ถ้า max error > 1e-5 จาก baseline: reject
+- [x] เปิด `EXACT_MODEL_OUTPUT_HEAD = true` เป็น B4 listening candidate
+- [x] วัด inference time ก่อนและหลัง — ไม่ได้เร็วขึ้น อยู่ประมาณ 55–60ms เท่าเดิม
+- [x] ฟัง A/B เทียบกับ full head — คุณภาพและ latency ไม่ต่างกันอย่างมีนัยสำคัญ
+- [x] reject B4 — ไม่คุ้มเพิ่มความเสี่ยง/ความซับซ้อน จึงปิดไว้
 
 **ทำแล้วดียังไง:**
 ลด decoder computation ที่ output frames ที่ไม่ได้ใช้ (frames 0–31 ถ้า sliceStart=32)

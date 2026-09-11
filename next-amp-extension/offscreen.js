@@ -4,6 +4,7 @@ import { DBManager } from "./db-manager.js";
 import { RTCServer } from "./modules/rtc-server.js";
 import { REMOTE_UI } from "./remote/remote-ui-bundle.js";
 import { AIVocalManager } from "./modules/ai-vocal/ai-vocal-manager.js";
+import { normalizeAiPowerMode } from "./modules/ai-vocal/ai-power-mode.mjs";
 import "./assets/js/peerjs.min.js";
 
 const sessions = new Map();
@@ -129,6 +130,7 @@ const createDefaultParams = () => ({
   isVocalOn: false,
   vocalMode: "bypass", // "bypass", "karaoke", "acapella"
   vocalProfile: "ai_remove", // Production default: 16-hop Detail profile
+  aiPowerMode: "quality", // "eco", "medium", or "quality"; WEB AI only
   aiEngineType: "webgl", // "webgl" or "go_native"
 });
 
@@ -144,7 +146,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       msg.mode,
       msg.initialPreset,
       sendResponse,
-      msg.sampleRate
+      msg.sampleRate,
+      msg.aiPowerMode
     );
     return true;
   } else if (msg.type === "START_RECORDING") {
@@ -255,7 +258,8 @@ async function startAudio(
   initialMode,
   initialPreset,
   sendResponse,
-  requestedSampleRate
+  requestedSampleRate,
+  initialPowerMode
 ) {
   if (sessions.has(tabId)) stopAudio(tabId);
 
@@ -288,6 +292,8 @@ async function startAudio(
 
     // NextAmp AI Vocal Separator (UVR-MDX-Net WebGL)
     const aiVocal = new AIVocalManager(audioCtx);
+    const selectedPowerMode = normalizeAiPowerMode(initialPowerMode);
+    await aiVocal.setPowerMode(selectedPowerMode);
     aiVocal.onStatusChange = (status) => {
       chrome.runtime.sendMessage({
         type: "AI_VOCAL_STATUS",
@@ -309,6 +315,7 @@ async function startAudio(
 
     const defaultP = createDefaultParams();
     defaultP.eqPreset = initialPreset;
+    defaultP.aiPowerMode = selectedPowerMode;
 
     // Initial graph:
     // source -> [aiVocalNode] -> [stretchNode] -> effectsInput
@@ -584,6 +591,32 @@ function applyParamToSession(session, key, value, index, source) {
         session.aiVocal.setVocalProfile(params.vocalProfile);
       }
       break;
+    case "aiPowerMode":
+      params.aiPowerMode = normalizeAiPowerMode(value);
+      if (session.aiVocal) {
+        session.aiVocal.setPowerMode(params.aiPowerMode).then((result) => {
+          if (!result?.reverted) return;
+          params.aiPowerMode = result.mode;
+          try { chrome.storage.local.set({ aiPowerMode: result.mode }).catch(() => {}); } catch (_) {}
+          const tId = getKeyByValue(sessions, session);
+          if (tId) {
+            chrome.runtime.sendMessage({
+              type: "PARAM_UPDATE",
+              tabId: tId,
+              key: "aiPowerMode",
+              value: result.mode
+            }).catch(() => {});
+          }
+          if (session.remoteConns?.length) {
+            session.remoteConns.forEach((conn) => {
+              if (conn.open) conn.send({ type: "UPDATE_PARAM", key: "aiPowerMode", value: result.mode });
+            });
+          }
+        }).catch((error) => {
+          console.warn("[NextAmp AI] Power mode switch failed:", error);
+        });
+      }
+      break;
     case "vocalDiff":
       // Deprecated compatibility path for older remote/popup builds.
       // DIFF is fixed at the former level 2.
@@ -791,6 +824,7 @@ function applyAllParams(session) {
   // Apply AI Vocal parameters
   if (session.aiVocal) {
     if (params.aiEngineType) session.aiVocal.setEngineType(params.aiEngineType);
+    if (params.aiPowerMode) session.aiVocal.setPowerMode(params.aiPowerMode);
     if (params.vocalProfile) session.aiVocal.setVocalProfile(params.vocalProfile);
     if (!params.isVocalOn) {
       session.aiVocal.unloadEngine();
