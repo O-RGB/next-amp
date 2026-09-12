@@ -98,27 +98,113 @@ function recordDonationUsage(session, force = false) {
 // --- PEERJS SETUP ---
 let hostPeer = null;
 let hostPeerId = null;
+let hostPeerReadyPromise = null;
 
 function initHostPeer() {
-  if (hostPeer) return;
-  hostPeer = new Peer(null, { debug: 1 });
+  if (hostPeer && hostPeer.open && !hostPeer.disconnected && hostPeerId) {
+    return Promise.resolve(hostPeerId);
+  }
+  if (hostPeerReadyPromise) return hostPeerReadyPromise;
 
-  hostPeer.on("open", (id) => {
-    console.log("[PeerJS] Host Ready. ID:", id);
-    hostPeerId = id;
-  });
+  // A PeerJS object can remain in memory after its signaling socket has
+  // disconnected. Do not keep returning its stale/null ID forever.
+  if (hostPeer && (hostPeer.disconnected || hostPeer.destroyed)) {
+    try { hostPeer.destroy(); } catch (_) {}
+    hostPeer = null;
+    hostPeerId = null;
+  }
 
-  hostPeer.on("connection", (conn) => {
-    conn.on("data", (data) => {
-      if (data.type === "HANDSHAKE" && data.token) {
-        mapConnectionToSession(conn, data.token, data.needUI);
-      } else {
-        handleRemoteCommand(conn, data);
+  hostPeerReadyPromise = new Promise((resolve, reject) => {
+    let opened = false;
+    let peer;
+    try {
+      peer = new Peer(null, { debug: 1 });
+      hostPeer = peer;
+    } catch (error) {
+      hostPeer = null;
+      hostPeerId = null;
+      hostPeerReadyPromise = null;
+      reject(error);
+      return;
+    }
+
+    peer.on("open", (id) => {
+      opened = true;
+      if (peer !== hostPeer) return;
+      console.log("[PeerJS] Host Ready. ID:", id);
+      hostPeerId = id;
+      hostPeerReadyPromise = null;
+      resolve(id);
+    });
+
+    peer.on("connection", (conn) => {
+      if (peer !== hostPeer) return;
+      conn.on("data", (data) => {
+        if (data.type === "HANDSHAKE" && data.token) {
+          mapConnectionToSession(conn, data.token, data.needUI);
+        } else {
+          handleRemoteCommand(conn, data);
+        }
+      });
+      conn.on("close", () => cleanupConnection(conn));
+      conn.on("error", () => cleanupConnection(conn));
+    });
+
+    peer.on("disconnected", () => {
+      if (peer !== hostPeer) return;
+      hostPeerId = null;
+    });
+
+    peer.on("close", () => {
+      if (peer !== hostPeer) return;
+      hostPeer = null;
+      hostPeerId = null;
+      if (!opened && hostPeerReadyPromise) {
+        const error = new Error("PeerJS host closed before becoming ready");
+        hostPeerReadyPromise = null;
+        reject(error);
       }
     });
-    conn.on("close", () => cleanupConnection(conn));
-    conn.on("error", () => cleanupConnection(conn));
+
+    peer.on("error", (error) => {
+      if (peer !== hostPeer) return;
+      if (!opened) {
+        hostPeer = null;
+        hostPeerId = null;
+        hostPeerReadyPromise = null;
+        reject(error instanceof Error ? error : new Error("PeerJS host failed"));
+      } else {
+        console.warn("[PeerJS] Host connection error:", error);
+      }
+    });
   });
+
+  return hostPeerReadyPromise;
+}
+
+async function waitForHostPeerId(timeoutMs = 8000) {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      initHostPeer(),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("Remote host timeout")), timeoutMs);
+      }),
+    ]);
+  } catch (error) {
+    // A timed-out Peer must not poison the next Remote attempt. Destroy the
+    // stale instance and clear the pending promise so a fresh host can start.
+    if (!hostPeerId) {
+      const stalePeer = hostPeer;
+      hostPeer = null;
+      hostPeerId = null;
+      hostPeerReadyPromise = null;
+      try { stalePeer?.destroy(); } catch (_) {}
+    }
+    throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 function mapConnectionToSession(conn, token, needUI = false) {
@@ -222,7 +308,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = msg.tabId;
 
   if (msg.type === "START_CAPTURE") {
-    initHostPeer();
+    initHostPeer().catch(() => {});
     startAudio(
       msg.streamId,
       tabId,
@@ -289,14 +375,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
   } else if (msg.type === "GET_REMOTE_TOKEN") {
     const session = sessions.get(tabId);
-    if (session && hostPeerId) {
+    if (!session) {
+      sendResponse({ error: "Session not ready" });
+      return true;
+    }
+
+    // PeerJS obtains the host ID asynchronously. Waiting here removes the
+    // startup race where the audio session is ready but the Remote button is
+    // clicked before the signaling connection has emitted `open`.
+    waitForHostPeerId().then((readyId) => {
+      if (!readyId || !sessions.has(tabId)) {
+        sendResponse({ error: "Session not ready" });
+        return;
+      }
       if (!session.remoteToken) {
         session.remoteToken = `tab-${tabId}-${Date.now().toString(36)}`;
       }
-      sendResponse({ hostId: hostPeerId, token: session.remoteToken });
-    } else {
-      sendResponse({ error: "Session not ready" });
-    }
+      sendResponse({ hostId: readyId, token: session.remoteToken });
+    }).catch((error) => {
+      console.warn("[PeerJS] Remote host is not ready:", error);
+      sendResponse({ error: "Remote host unavailable" });
+    });
     return true;
   } else if (msg.type === "START_WEBRTC_STREAM") {
     startWebRTC(msg.sourceTabId, msg.playerTabId);
