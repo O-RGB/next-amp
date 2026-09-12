@@ -25,7 +25,10 @@ async function ensureVideoContentScripts(tabId) {
 
     try {
       await chrome.scripting.executeScript({
-        target: { tabId: numericTabId, allFrames: true },
+        // The notification and normal video controls live in the top frame.
+        // Injecting the fallback into every frame can fail on pages with a
+        // restricted/embed frame even when the main page is scriptable.
+        target: { tabId: numericTabId, allFrames: false },
         files: ["video-delay.js", "video-zoom.js"],
       });
       return { success: true, injected: true };
@@ -162,7 +165,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   } else if (msg.type === "BG_RELAY_TO_TAB") {
     // New handler for Remote Control to Content Script Relay
     if (msg.tabId && msg.payload) {
-      chrome.tabs.sendMessage(Number(msg.tabId), msg.payload).catch(() => {});
+      ensureVideoContentScripts(msg.tabId)
+        .catch(() => {})
+        .finally(() => {
+          chrome.tabs.sendMessage(Number(msg.tabId), msg.payload).catch(() => {});
+        });
     }
   } else if (
     msg.type === "RTC_OFFER" ||

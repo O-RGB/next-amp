@@ -70,6 +70,8 @@ let db = new DBManager();
 let isTabReady = true;
 let currentTabId = null;
 let captureRequestId = 0;
+let videoContentScriptsReadyTabId = null;
+let videoContentScriptsReadyPromise = null;
 
 let sessionManager;
 let settingsModal;
@@ -83,12 +85,18 @@ function showActionNotification(message, { source = "local", tone = "success", i
   // Notifications live on the media page, not inside this popup. Remote
   // commands are relayed by the offscreen host when the popup is closed.
   if (source !== "remote" && currentTabId) {
-    chrome.tabs.sendMessage(currentTabId, {
+    const tabId = currentTabId;
+    const payload = {
       type: "SHOW_ACTION_NOTIFICATION",
       message,
       icon,
       tone,
-    }).catch(() => {});
+    };
+    ensureVideoContentScripts(tabId)
+      .catch(() => false)
+      .finally(() => {
+        chrome.tabs.sendMessage(tabId, payload).catch(() => {});
+      });
   }
 }
 
@@ -506,11 +514,19 @@ async function finalizeInitialization() {
 
 async function ensureVideoContentScripts(tabId) {
   if (!Number.isInteger(tabId) || tabId < 0) return false;
-  const result = await sendMessageWithRetry({
+  if (
+    videoContentScriptsReadyTabId === tabId &&
+    videoContentScriptsReadyPromise
+  ) {
+    return videoContentScriptsReadyPromise;
+  }
+
+  videoContentScriptsReadyTabId = tabId;
+  videoContentScriptsReadyPromise = sendMessageWithRetry({
     type: "ENSURE_VIDEO_CONTENT_SCRIPTS",
     tabId,
-  });
-  return result?.success === true;
+  }).then((result) => result?.success === true);
+  return videoContentScriptsReadyPromise;
 }
 
 function setupStorageListener() {
