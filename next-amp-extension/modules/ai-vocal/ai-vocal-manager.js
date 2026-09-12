@@ -4,7 +4,13 @@
  * Non-blocking async architecture: Worklet connects instantly in 2ms, model streams in background.
  */
 
-import { GoEngineClient } from "./go-engine-client.js";
+import { GO_ENGINE_ENABLED } from "./build-feature-flags.js";
+import {
+  EngineClient,
+  ENGINE_TYPE,
+  ENGINE_DISPLAY_NAME,
+  ENGINE_API,
+} from "./engine-client-runtime.js";
 import { createVocalModelLoader } from "./model-optimizer.mjs";
 import { applyOverlapConsensusToMask } from "./overlap-consensus.mjs";
 import { createProtectedModelSource, loadProtectedAsset } from "./web-protected-assets.mjs";
@@ -176,7 +182,7 @@ function describeWebHardware(renderer, backendType) {
 
 function compactNativeHardwareLabel(device) {
   const raw = String(device || "").trim();
-  if (!raw) return "Go Native Core";
+  if (!raw) return ENGINE_DISPLAY_NAME;
   return raw.replace(/\s*\(DirectML\s+Device\s+#\d+\)\s*$/i, "").trim() || raw;
 }
 
@@ -296,11 +302,11 @@ export class AIVocalManager {
     this.aiPowerMode = DEFAULT_AI_POWER_MODE;
     this.strength = 1.0;
 
-    // Engine Selection: "webgl" (Browser in-app) or "go_native" (Desktop engine)
+    // Engine Selection: browser AI or the optional internal native engine.
     this.engineType = "webgl";
-    this.goClient = new GoEngineClient();
+    this.goClient = new EngineClient();
     this.goClient.onStatusChange = (status) => {
-      if (this.engineType === "go_native") {
+      if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
         this.setStatus(status);
       }
     };
@@ -532,21 +538,21 @@ export class AIVocalManager {
   }
 
   getHardwareDevice() {
-    if (this.engineType === "go_native") {
+    if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
       return compactNativeHardwareLabel(this.goClient.deviceInfo);
     }
     return this.hardwareDevice || this.backendName || "Detecting GPU...";
   }
 
   getHardwareDeviceRaw() {
-    if (this.engineType === "go_native") {
-      return this.goClient.deviceInfo || "Go Native Core";
+    if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
+      return this.goClient.deviceInfo || ENGINE_DISPLAY_NAME;
     }
     return this.hardwareDeviceRaw || this.getHardwareDevice();
   }
 
   getHardwareApi() {
-    if (this.engineType === "go_native") return "DIRECTML";
+    if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) return ENGINE_API;
     const api = this.hardwareApi || String(this.backendType || "WEBGL").toUpperCase();
     const precision = this.getTexturePrecision();
     return api.includes(precision) ? api : `${api} • ${precision}`;
@@ -672,7 +678,7 @@ export class AIVocalManager {
   }
 
   isCurrentBackendCompatibleWithPowerMode() {
-    if (this.engineType !== "webgl") return true;
+    if (GO_ENGINE_ENABLED && this.engineType !== "webgl") return true;
     // F16 is a WebGL texture policy, not a WebGPU model precision. Comparing
     // it while WebGPU is active caused a needless model/backend reload when
     // switching ECO -> FULL even though the active provider was valid.
@@ -712,7 +718,7 @@ export class AIVocalManager {
   }
 
   async reloadBrowserEngineForPowerMode() {
-    if (this.destroyed || this.engineType !== "webgl" || this.currentMode === "bypass") {
+    if (this.destroyed || GO_ENGINE_ENABLED && this.engineType !== "webgl" || this.currentMode === "bypass") {
       return { ok: false, skipped: true };
     }
 
@@ -770,8 +776,8 @@ export class AIVocalManager {
 
     // GO owns its native processing settings. Keep the selected WEB preset
     // for the next WEB session without resetting the active GO stream.
-    if (this.engineType === "go_native") {
-      return Promise.resolve({ changed: true, mode: this.aiPowerMode, engine: "go_native" });
+    if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
+      return Promise.resolve({ changed: true, mode: this.aiPowerMode, engine: ENGINE_TYPE });
     }
 
     this.applyBackendPowerModeConfig();
@@ -901,7 +907,7 @@ export class AIVocalManager {
     this.goLatencySamples[this.goLatencySamplePos] = rttMs;
     this.goLatencySamplePos = (this.goLatencySamplePos + 1) % GO_LATENCY_SAMPLE_CAPACITY;
     if (this.goLatencySampleCount < GO_LATENCY_SAMPLE_CAPACITY) this.goLatencySampleCount++;
-    if (this.goLatencySampleCount < 8 || this.engineType !== "go_native" || !this.workletNode) return;
+    if (this.goLatencySampleCount < 8 || !GO_ENGINE_ENABLED || this.engineType !== ENGINE_TYPE || !this.workletNode) return;
 
     const sampleCount = this.getSortedGoLatencyCount();
     const p95 = this.goLatencySortBuffer[Math.min(sampleCount - 1, Math.ceil(sampleCount * 0.95) - 1)];
@@ -916,7 +922,7 @@ export class AIVocalManager {
     this.goBufferTarget = target;
     this.workletNode.port.postMessage({
       type: "SET_QUEUE_TARGET",
-      engineType: "go_native",
+      engineType: ENGINE_TYPE,
       readyThreshold,
       maxQueueThreshold,
       p95Ms: Math.round(p95 * 10) / 10
@@ -955,7 +961,7 @@ export class AIVocalManager {
 
   sendBrowserQueueTarget() {
     if (!this.isAdaptiveBrowserQueueEnabled() ||
-        this.engineType !== "webgl" || !this.workletNode) return;
+        GO_ENGINE_ENABLED && this.engineType !== "webgl" || !this.workletNode) return;
     const readyThreshold = Math.max(
       MIN_BROWSER_QUEUE_TARGET,
       Math.min(MAX_BROWSER_QUEUE_TARGET, Math.floor(this.browserQueueTarget))
@@ -985,7 +991,7 @@ export class AIVocalManager {
   }
 
   raiseBrowserQueueTarget() {
-    if (!this.isAdaptiveBrowserQueueEnabled() || this.engineType !== "webgl") return;
+    if (!this.isAdaptiveBrowserQueueEnabled() || GO_ENGINE_ENABLED && this.engineType !== "webgl") return;
     this.browserQueueStableSince = performance.now();
     if (this.browserQueueTarget < MAX_BROWSER_QUEUE_TARGET) {
       this.setBrowserQueueTarget(this.browserQueueTarget + 1);
@@ -993,7 +999,7 @@ export class AIVocalManager {
   }
 
   observeBrowserUnderrun(underrunBlocks) {
-    if (!this.isAdaptiveBrowserQueueEnabled() || this.engineType !== "webgl") return;
+    if (!this.isAdaptiveBrowserQueueEnabled() || GO_ENGINE_ENABLED && this.engineType !== "webgl") return;
     const count = Number(underrunBlocks);
     if (!Number.isFinite(count) || count < 0) return;
     if (this.browserLastUnderrunBlocks === null) {
@@ -1015,7 +1021,7 @@ export class AIVocalManager {
 
   observeBrowserLatency(elapsedMs) {
     if (!this.isAdaptiveBrowserQueueEnabled() ||
-        this.engineType !== "webgl" || !this.workletNode ||
+        GO_ENGINE_ENABLED && this.engineType !== "webgl" || !this.workletNode ||
         !Number.isFinite(elapsedMs) || elapsedMs <= 0) return;
 
     this.browserLatencySamples[this.browserLatencySamplePos] = elapsedMs;
@@ -1139,7 +1145,7 @@ export class AIVocalManager {
     // Worklet flush alone is not enough: native STFT/lookahead state and
     // in-flight responses must cross the same boundary or Smooth/Detail can
     // start with mismatched chunks and temporarily produce silence.
-    if (this.engineType === "go_native") {
+    if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
       this.goClient.resetStream();
     }
     if (this.workletNode) {
@@ -1279,7 +1285,7 @@ export class AIVocalManager {
           this.diagnostics.inputChunks++;
           this.diagnostics.lastInputChunkIndex = data.chunkIndex;
 
-          if (this.engineType === "go_native") {
+          if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
             this.diagnostics.goChunks++;
             // DIFF is fixed at its proven former level 2: one chunk of
             // lookahead. Profile selection only changes the browser path.
@@ -1383,7 +1389,7 @@ export class AIVocalManager {
           this.clearChunkQueue();
           this.queueNeedsResync = false;
           this.resyncChunkIndex = null;
-          if (this.engineType === "go_native") {
+          if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
             this.goClient.resetStream();
           } else {
             this.resetState();
@@ -1558,7 +1564,7 @@ export class AIVocalManager {
   }
 
   requestWebGpuRecovery(reason) {
-    if (this.destroyed || this.engineType !== "webgl") {
+    if (this.destroyed || GO_ENGINE_ENABLED && this.engineType !== "webgl") {
       return Promise.resolve([{ ok: false, skipped: true }]);
     }
     if (this.recoveryPromise) return this.recoveryPromise;
@@ -1571,7 +1577,7 @@ export class AIVocalManager {
   }
 
   beginWebGpuRecovery(reason) {
-    if (this.destroyed || this.engineType !== "webgl") return;
+    if (this.destroyed || GO_ENGINE_ENABLED && this.engineType !== "webgl") return;
 
     const now = performance.now();
     this.recoveryAttemptTimes = this.recoveryAttemptTimes.filter(
@@ -1624,7 +1630,7 @@ export class AIVocalManager {
   }
 
   async finishWebGpuRecovery({ reason } = {}) {
-    if (this.destroyed || this.engineType !== "webgl" || this.currentMode === "bypass") {
+    if (this.destroyed || GO_ENGINE_ENABLED && this.engineType !== "webgl" || this.currentMode === "bypass") {
       this.recoveryState = "idle";
       this.queueFaulted = false;
       return { ok: false, skipped: true };
@@ -2643,7 +2649,7 @@ export class AIVocalManager {
   }
 
   setEngineType(type) {
-    const valid = (type === "go_native") ? "go_native" : "webgl";
+    const valid = (GO_ENGINE_ENABLED && type === ENGINE_TYPE) ? ENGINE_TYPE : "webgl";
     if (this.engineType !== valid) {
       this.streamGeneration++;
       this.resetState();
@@ -2663,7 +2669,7 @@ export class AIVocalManager {
       this.sendBrowserQueueTarget();
     }
 
-    if (this.engineType === "go_native") {
+    if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
       this.goClient.enable();
       if (this.currentMode !== "bypass") {
         this.setStatus("⚡ GO ENGINE (Active)");
@@ -2693,11 +2699,11 @@ export class AIVocalManager {
     this.resetState();
     // Start native DSP and the Worklet on the same stream boundary. This is
     // important for the first bypass -> Karaoke click and for mode changes.
-    if (this.engineType === "go_native") {
+    if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
       this.goClient.resetStream();
     }
     if (mode !== "bypass") {
-      if (this.engineType === "go_native") {
+      if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
         this.goClient.enable();
         this.setStatus("⚡ GO ENGINE (Loopback)");
         if (this.workletNode) {
@@ -2719,7 +2725,7 @@ export class AIVocalManager {
         }
       }
     } else {
-      if (this.engineType === "go_native") {
+      if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
         this.setStatus(this.goClient.isConnected ? "⚡ GO (Ready)" : "ORIGINAL");
       } else {
         this.setStatus(this.isReady ? (this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "ORIGINAL (AI Ready)") : "ORIGINAL");
@@ -2779,7 +2785,7 @@ export class AIVocalManager {
         : null;
     } catch (_) {}
     const processing = this.getProcessingConfig();
-    const chunkSamples = this.engineType === "go_native" ? 8192 : processing.chunkSamples;
+    const chunkSamples = GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE ? 8192 : processing.chunkSamples;
     const sampleRate = this.audioCtx?.sampleRate || 44100;
     let goAdaptiveP95Ms = null;
     if (this.goLatencySampleCount > 0) {
@@ -2804,7 +2810,7 @@ export class AIVocalManager {
       enabled: this.diagnostics.enabled,
       engine: this.engineType,
       backendType: this.backendType,
-      backend: this.engineType === "go_native" ? this.goClient.deviceInfo : this.backendName,
+      backend: GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE ? this.goClient.deviceInfo : this.backendName,
       hardwareDevice: this.getHardwareDevice(),
       hardwareDeviceRaw: this.getHardwareDeviceRaw(),
       api: this.getHardwareApi(),
@@ -2819,10 +2825,10 @@ export class AIVocalManager {
       modelGraphExplicitPads: this.modelGraphExplicitPads,
       cadence: {
         chunkSamples,
-        frames: this.engineType === "go_native" ? 16 : processing.frames,
-        analysisFrames: this.engineType === "go_native"
+        frames: GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE ? 16 : processing.frames,
+        analysisFrames: GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE
           ? 16 : (processing.analysisFrames || processing.frames),
-        maskFrames: this.engineType === "go_native"
+        maskFrames: GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE
           ? 16 : (processing.maskFrames || processing.frames),
         hopSamples: 512,
         chunkMs: Number((chunkSamples / sampleRate * 1000).toFixed(2))

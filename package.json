@@ -3,10 +3,16 @@
   "version": "1.0.0",
   "description": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
   "scripts": {
-    "build": "npm run build:web && npm run build:extension",
+    "build": "npm run build:web && npm run build:extension:store",
     "build:web": "node scripts/build-web.js",
-    "build:extension": "node scripts/build-prod.js",
-    "build:public-site": "node scripts/build-public-site.js"
+    "build:extension": "npm run build:extension:store",
+    "build:extension:store": "node scripts/build-prod.js --profile=store",
+    "build:extension:go-dev": "node scripts/build-prod.js --profile=go-dev",
+    "verify:extension:store": "node scripts/verify-extension-artifact.js --profile=store",
+    "verify:extension:go-dev": "node scripts/verify-extension-artifact.js --profile=go-dev",
+    "build:go": "bash nextstudio-engine-go/build.sh",
+    "build:public-site": "node scripts/build-public-site.js",
+    "build:all-internal": "npm run build:web && npm run build:extension:store && npm run build:extension:go-dev && npm run build:public-site"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",

@@ -5,6 +5,8 @@ import { RTCServer } from "./modules/rtc-server.js";
 import { REMOTE_UI } from "./remote/remote-ui-bundle.js";
 import { AIVocalManager } from "./modules/ai-vocal/ai-vocal-manager.js";
 import { normalizeAiPowerMode } from "./modules/ai-vocal/ai-power-mode.mjs";
+import { GO_ENGINE_ENABLED } from "./modules/ai-vocal/build-feature-flags.js";
+import { ENGINE_TYPE } from "./modules/ai-vocal/engine-client-runtime.js";
 import "./assets/js/peerjs.min.js";
 
 const sessions = new Map();
@@ -213,7 +215,7 @@ const createDefaultParams = () => ({
   vocalMode: "bypass", // "bypass", "karaoke", "acapella"
   vocalProfile: "ai_remove", // Production default: 16-hop Detail profile
   aiPowerMode: "eco", // "eco" or "quality"; WEB AI only
-  aiEngineType: "webgl", // "webgl" or "go_native"
+  aiEngineType: "webgl",
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -645,7 +647,7 @@ function getPageActionNotification(key, value, params) {
     case "aiPowerMode":
       return { message: `AI ${String(value).toUpperCase()}`, icon: "ai" };
     case "aiEngineType":
-      return { message: `AI ENGINE ${value === "go_native" ? "GO" : "WEB"}`, icon: "engine" };
+      return { message: `AI ENGINE ${GO_ENGINE_ENABLED && value === ENGINE_TYPE ? "GO" : "WEB"}`, icon: "engine" };
     case "videoQuality":
       return { message: `VIDEO ${String(value).toUpperCase()}`, icon: "video" };
     case "videoDelay":
@@ -838,9 +840,12 @@ function applyParamToSession(session, key, value, index, source) {
       if (session.aiVocal) session.aiVocal.setDiffLevel(2);
       break;
     case "aiEngineType":
-      params.aiEngineType = value;
+      // Store builds accept legacy persisted messages but always normalize to
+      // the browser engine because the optional native provider is not part of
+      // that artifact.
+      params.aiEngineType = GO_ENGINE_ENABLED && value === ENGINE_TYPE ? value : "webgl";
       if (session.aiVocal) {
-        session.aiVocal.setEngineType(value);
+        session.aiVocal.setEngineType(params.aiEngineType);
       }
       break;
     case "volume":

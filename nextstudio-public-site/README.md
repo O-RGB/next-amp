@@ -10,33 +10,35 @@ the AI model, Extension package, source maps, certificates or private keys.
 - `/remote/` — data-only Remote Controller
 - `/privacy/` — English-first Privacy Policy with Thai translation
 
+## Direct deployment
+
+This folder is already a static production site. It does not require a build
+step or runtime server. Deploy the contents of `nextstudio-public-site/`
+directly to `https://studio.nextfeeder.com`.
+
+The production origin is already written into the canonical tags, Open Graph
+metadata, `robots.txt` and `sitemap.xml`.
+
 ## Local preview
 
 From the repository root:
 
 ```sh
-npm run build:public-site
-python3 -m http.server 5500 --directory dist/nextstudio-public-site
+python3 -m http.server 5500 --directory nextstudio-public-site
 ```
 
-The default build origin is `http://localhost:5500`. The Remote page accepts a
-session in the URL fragment as `#host=PEER_ID&token=SESSION_TOKEN`, keeps it only
-in memory, and clears it from the visible address bar. A refresh therefore needs
-a newly generated Remote link.
+The Remote page accepts a session in the URL fragment as
+`#host=PEER_ID&token=SESSION_TOKEN`, keeps it only in memory, and clears it from
+the visible address bar. A refresh therefore needs a newly generated Remote
+link.
 
-## Production build
+## Optional generated copy
 
-Set the public HTTPS origin before building:
+When needed, a clean generated copy can still be created under `dist/`:
 
 ```sh
-PUBLIC_SITE_ORIGIN=https://your-domain.example npm run build:public-site
+PUBLIC_SITE_ORIGIN=https://studio.nextfeeder.com npm run build:public-site
 ```
 
-Deploy only `dist/nextstudio-public-site/` to the chosen static host. Do not
-deploy the repository root. The build writes `build-inventory.json` and fails if
-known secret, model, archive, certificate or source-map filenames enter the
-output.
-
-The Chrome Web Store URL, production domain and Extension integration are
-deliberately not hardcoded yet. Update them only after the local pages and
-Remote protocol have been reviewed.
+The generated copy includes `build-inventory.json`; it is not required when
+deploying this folder directly.

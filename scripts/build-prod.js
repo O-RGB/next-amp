@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * NextStudio Extension - Production Hardened Build Pipeline
+ * NextStudio Extension - Production Build Pipeline
  *
  * Features:
  * 1. 100% File Name Mangling / Content Hashing (Every file except .html and manifest.json)
  * 2. WebAssembly (WASM) Security Core (compiled from C via emcc)
  * 3. Extension ID Lock verification inside WASM bytecode
- * 4. Anti-Tamper Prototype Integrity Guard & Anti-Debugging Watchdog
- * 5. esbuild bundling + Full javascript-obfuscator protection
+ * 4. Profile-specific bundling for Store and Go development builds
+ * 5. esbuild bundling + asset packaging
  * 6. Automated cross-reference URL rewriting for audio DSP, AI models, workers, fonts & styles
  * 7. Complete HTML & CSS minification (.min) + inline script/style minification
- * 8. Store-ready ZIP package generation
- * 9. Native GO engine + self-contained macOS and Windows binaries
+ * 8. ZIP package generation
+ * 9. Optional native GO engine for the internal Go development profile
  */
 
 const { execSync } = require('child_process');
@@ -21,10 +21,22 @@ const path = require('path');
 const esbuild = require('esbuild');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
-const SRC_DIR = path.join(ROOT_DIR, 'next-amp-extension');
-const DIST_DIR = path.join(ROOT_DIR, 'dist', 'nextstudio-extension-prod');
+const ORIGINAL_SRC_DIR = path.join(ROOT_DIR, 'next-amp-extension');
+let SRC_DIR = ORIGINAL_SRC_DIR;
+const profileArg = process.argv.find((arg) => arg.startsWith('--profile='));
+const BUILD_PROFILE = (profileArg ? profileArg.split('=')[1] : 'store').trim().toLowerCase();
+if (!['store', 'go-dev'].includes(BUILD_PROFILE)) {
+  console.error(`[-] Unknown extension build profile: ${BUILD_PROFILE}`);
+  console.error('    Use --profile=store or --profile=go-dev.');
+  process.exit(1);
+}
+const GO_ENGINE_ENABLED = BUILD_PROFILE === 'go-dev';
+const OUTPUT_NAME = BUILD_PROFILE === 'store'
+  ? 'nextstudio-extension-store'
+  : 'nextstudio-extension-go-dev';
+const DIST_DIR = path.join(ROOT_DIR, 'dist', OUTPUT_NAME);
 const TEMP_DIR = path.join(ROOT_DIR, 'dist', 'temp');
-const ZIP_FILE = path.join(ROOT_DIR, 'dist', 'nextstudio-extension-prod.zip');
+const ZIP_FILE = path.join(ROOT_DIR, 'dist', `${OUTPUT_NAME}.zip`);
 const WEB_ASSET_KEY_PLACEHOLDER = '__NEXTSTUDIO_WEB_ASSET_KEY__';
 const WEB_ASSET_MAGIC = Buffer.from('NAMPWEB1', 'ascii');
 const WEB_ASSET_HEADER_BYTES = 20;
@@ -32,7 +44,7 @@ const webAssetKey = crypto.randomBytes(32);
 const webAssetKeyB64 = webAssetKey.toString('base64');
 
 console.log('====================================================');
-console.log('NEXTSTUDIO PRODUCTION BUILD & COMPLETE HARDENING');
+console.log(`NEXTSTUDIO EXTENSION BUILD [${BUILD_PROFILE.toUpperCase()}]`);
 console.log('====================================================');
 
 // Deterministic hashing helper
@@ -78,7 +90,7 @@ const FILE_NAMES = {
   logo: getMangledName('logo', '.png')
 };
 
-console.log('100% Obfuscated File Mapping Table:');
+console.log('Profile-specific hashed file mapping table:');
 Object.entries(FILE_NAMES).forEach(([k, v]) => {
   console.log(`  • ${k.padEnd(18)} -> ${v}`);
 });
@@ -130,15 +142,18 @@ function createProtectedModelPayload(modelJson, weightData) {
   return Buffer.concat([header, modelBytes, weightData]);
 }
 
-// Build the native engine before packaging the extension so the shipped
-// release is always produced alongside the current GO AI implementation.
-// The script creates both nextstudio-engine and nextstudio-engine.exe using the
-// embedded model/runtime assets in nextstudio-engine-go/.
-console.log('\n[0/9] Building native GO engine binaries...');
-run(
-  'bash "' + path.join(ROOT_DIR, 'nextstudio-engine-go', 'build.sh') + '"',
-  'Building macOS + Windows GO engine binaries'
-);
+// The native engine is an optional internal companion. Never build it as part
+// of the Store release path, so a Store build cannot accidentally imply that
+// the unfinished native feature is shipped or supported.
+if (GO_ENGINE_ENABLED) {
+  console.log('\n[0/9] Building native GO engine binaries...');
+  run(
+    'bash "' + path.join(ROOT_DIR, 'nextstudio-engine-go', 'build.sh') + '"',
+    'Building macOS + Windows GO engine binaries'
+  );
+} else {
+  console.log('\n[0/9] Store profile: skipping native GO engine build');
+}
 
 // 1. Prepare Output Directories
 console.log('\n[1/9] Cleaning and preparing output directories...');
@@ -146,6 +161,31 @@ fs.rmSync(TEMP_DIR, { recursive: true, force: true });
 fs.rmSync(DIST_DIR, { recursive: true, force: true });
 fs.mkdirSync(TEMP_DIR, { recursive: true });
 fs.mkdirSync(DIST_DIR, { recursive: true });
+
+// Build from an isolated source snapshot. For the Store profile only the
+// stable engine-client import point is replaced with a no-op adapter; the
+// working tree is never modified and the Go development profile keeps the
+// real adapter unchanged.
+const PROFILE_SRC_DIR = path.join(TEMP_DIR, 'source');
+fs.cpSync(ORIGINAL_SRC_DIR, PROFILE_SRC_DIR, { recursive: true });
+SRC_DIR = PROFILE_SRC_DIR;
+if (!GO_ENGINE_ENABLED) {
+  fs.copyFileSync(
+    path.join(ORIGINAL_SRC_DIR, 'modules', 'ai-vocal', 'engine-client-store-stub.js'),
+    path.join(SRC_DIR, 'modules', 'ai-vocal', 'engine-client-runtime.js')
+  );
+  fs.writeFileSync(
+    path.join(SRC_DIR, 'modules', 'ai-vocal', 'build-feature-flags.js'),
+    'export const GO_ENGINE_ENABLED = false;\n',
+    'utf8'
+  );
+} else {
+  fs.writeFileSync(
+    path.join(SRC_DIR, 'modules', 'ai-vocal', 'build-feature-flags.js'),
+    'export const GO_ENGINE_ENABLED = true;\n',
+    'utf8'
+  );
+}
 
 // 2. Compile WASM Security Core
 console.log('\n[2/9] Compiling WebAssembly Security Core...');
@@ -177,10 +217,26 @@ const bundles = [
 bundles.forEach((b) => {
   const srcFile = path.join(SRC_DIR, b.in);
   const tempFile = path.join(TEMP_DIR, b.temp);
-  run(
-    'npx esbuild "' + srcFile + '" --bundle --format=' + b.format + ' --target=chrome110 --outfile="' + tempFile + '"',
-    'Bundling ' + b.in + ' -> ' + b.temp
-  );
+  if (b.in === 'popup.js' || b.in === 'offscreen.js') {
+    console.log('[+] Bundling ' + b.in + ' -> ' + b.temp + '...');
+  }
+  try {
+    esbuild.buildSync({
+      entryPoints: [srcFile],
+      bundle: true,
+      format: b.format,
+      target: 'chrome110',
+      outfile: tempFile,
+      define: { __NEXTSTUDIO_GO_ENGINE_ENABLED__: GO_ENGINE_ENABLED ? 'true' : 'false' },
+      minifySyntax: true,
+      treeShaking: true,
+      logLevel: 'silent'
+    });
+  } catch (error) {
+    console.error('[-] Error during: Bundling ' + b.in + ' -> ' + b.temp);
+    console.error(error.message || error);
+    process.exit(1);
+  }
 });
 
 // 4. Cross-Reference Rewriting in JS Bundles
@@ -222,7 +278,7 @@ guardCode = guardCode
 });
 
 // 5. Code Obfuscation
-console.log('\n[5/9] Applying Advanced Code Obfuscation & Anti-Tamper Protection...');
+console.log('\n[5/9] Applying production JavaScript transforms...');
 
 bundles.forEach((b) => {
   const tempFile = path.join(TEMP_DIR, b.temp);
@@ -277,11 +333,35 @@ bundles.forEach((b) => {
   }
 });
 
+// Resolve the worklet's profile-specific native engine token before protecting
+// it. The Store worklet therefore contains only the browser token and cannot
+// switch into the internal native protocol even if it receives stale state.
+const vocalWorkletSource = path.join(SRC_DIR, 'modules', 'ai-vocal', 'vocal-worklet.js');
+const vocalWorkletTemp = path.join(TEMP_DIR, 'vocal-worklet.tmp.js');
+try {
+  const vocalWorkletCode = esbuild.transformSync(
+    fs.readFileSync(vocalWorkletSource, 'utf8'),
+    {
+      loader: 'js',
+      target: 'chrome110',
+      minifySyntax: true,
+      define: {
+        __NEXTSTUDIO_GO_ENGINE_TYPE__: JSON.stringify(GO_ENGINE_ENABLED ? 'go_native' : 'webgl')
+      }
+    }
+  ).code;
+  fs.writeFileSync(vocalWorkletTemp, vocalWorkletCode, 'utf8');
+} catch (error) {
+  console.error('[-] Error during: Preparing profile-specific AudioWorklet');
+  console.error(error.message || error);
+  process.exit(1);
+}
+
 // Protect vocal-worklet.js while keeping the AudioWorklet runtime surface
 // unchanged. Avoid control-flow/dead-code transforms here: a live audio
 // callback must stay as lean and predictable as the tested source path.
 run(
-  'npx javascript-obfuscator "' + path.join(SRC_DIR, 'modules', 'ai-vocal', 'vocal-worklet.js') + '" ' +
+  'npx javascript-obfuscator "' + vocalWorkletTemp + '" ' +
     '--output "' + path.join(DIST_DIR, FILE_NAMES.vocalWorklet) + '" ' +
     '--target browser-no-eval ' +
     '--compact true ' +
@@ -388,8 +468,16 @@ function minifyHtml(html) {
   return html.trim();
 }
 
+function stripProfileSections(html) {
+  if (GO_ENGINE_ENABLED) return html;
+  return html.replace(
+    /\s*<!--\s*NEXTSTUDIO_GO_ENGINE_BEGIN\s*-->[\s\S]*?<!--\s*NEXTSTUDIO_GO_ENGINE_END\s*-->/gi,
+    ''
+  );
+}
+
 // 1. popup.html
-let popupHtml = fs.readFileSync(path.join(SRC_DIR, 'popup.html'), 'utf8');
+let popupHtml = stripProfileSections(fs.readFileSync(path.join(SRC_DIR, 'popup.html'), 'utf8'));
 popupHtml = popupHtml.replace('./assets/js/tailwindcss.js', './' + FILE_NAMES.tailwind);
 popupHtml = popupHtml.replace('./assets/js/config.js', './' + FILE_NAMES.config);
 popupHtml = popupHtml.replace('./assets/css/phosphor.css', './' + FILE_NAMES.phosphorCss);
@@ -456,7 +544,30 @@ manifest.web_accessible_resources = [
   }
 ];
 
+if (manifest.content_security_policy?.extension_pages) {
+  manifest.content_security_policy.extension_pages = manifest.content_security_policy.extension_pages
+    .replace(/\s(?:ws|http):\/\/(?:127\.0\.0\.1|localhost):\*/g, '');
+  if (GO_ENGINE_ENABLED) {
+    manifest.content_security_policy.extension_pages = manifest.content_security_policy.extension_pages.replace(
+      "connect-src 'self'",
+      "connect-src 'self' ws://127.0.0.1:41919 http://127.0.0.1:41919"
+    );
+  }
+}
+
+if (GO_ENGINE_ENABLED) {
+  manifest.description = `${manifest.description} (Internal Go development build)`;
+}
+
 fs.writeFileSync(path.join(DIST_DIR, 'manifest.json'), JSON.stringify(manifest), 'utf8');
+
+if (GO_ENGINE_ENABLED) {
+  fs.writeFileSync(
+    path.join(DIST_DIR, 'INTERNAL-GO-DEV-BUILD.txt'),
+    'Internal NextStudio Go development build. Do not upload this artifact to the Chrome Web Store.\n',
+    'utf8'
+  );
+}
 
 // Cleanup Temp Dir
 fs.rmSync(TEMP_DIR, { recursive: true, force: true });
@@ -468,13 +579,18 @@ jsFiles.forEach((f) => {
   run('node -c "' + path.join(DIST_DIR, f) + '"', 'Syntax check: ' + f);
 });
 
-// 9. Generate Store-ready ZIP Archive
-console.log('\n[9/9] Generating store-ready ZIP archive...');
+// 9. Generate profile-specific ZIP archive
+console.log(`\n[9/9] Generating ${BUILD_PROFILE} extension ZIP archive...`);
 if (fs.existsSync(ZIP_FILE)) fs.unlinkSync(ZIP_FILE);
 run('cd "' + DIST_DIR + '" && zip -rq "' + ZIP_FILE + '" .', 'Compressing extension package');
 
+run(
+  'node "' + path.join(ROOT_DIR, 'scripts', 'verify-extension-artifact.js') + '" --profile=' + BUILD_PROFILE,
+  `Verifying ${BUILD_PROFILE} artifact boundary`
+);
+
 console.log('\n====================================================');
-console.log('✅ 100% PRODUCTION BUILD & HARDENING SUCCESSFUL!');
-console.log('📁 Distribution folder: dist/nextstudio-extension-prod/');
-console.log('📦 Store Ready ZIP:     dist/nextstudio-extension-prod.zip');
+console.log(`✅ NEXTSTUDIO ${BUILD_PROFILE.toUpperCase()} BUILD SUCCESSFUL!`);
+console.log(`📁 Distribution folder: dist/${OUTPUT_NAME}/`);
+console.log(`📦 ZIP:                 dist/${OUTPUT_NAME}.zip`);
 console.log('====================================================');
