@@ -762,16 +762,6 @@
           <i class="ph-bold ph-microphone-stage"></i>
           <span>AI VOCAL</span>
         </div>
-        <div class="flex items-center gap-1 overflow-hidden min-w-0">
-          <div class="flex items-center gap-0.5" role="group" aria-label="AI power mode">
-            <button id="btn-ai-mode-eco" class="win-btn ai-mode-btn ai-mode-active pressed h-3 px-1.5 text-[7px] font-bold" type="button" aria-label="Use ECO AI mode" aria-pressed="true" title="ECO: lower GPU power">
-              <i class="ph-bold ph-leaf text-[8px]"></i><span>ECO</span>
-            </button>
-            <button id="btn-ai-mode-full" class="win-btn ai-mode-btn h-3 px-1.5 text-[7px] font-bold" type="button" aria-label="Use FULL AI mode" aria-pressed="false" title="FULL: highest AI quality">
-              <i class="ph-bold ph-sparkle text-[8px]"></i><span>FULL</span>
-            </button>
-          </div>
-        </div>
       </div>
       <div class="p-1 flex flex-col gap-1 bg-[#222]" id="vocal-controls-area" style="opacity: 0.4; filter: grayscale(100%); pointer-events: none;">
         <!-- Modes & active accelerator -->
@@ -791,6 +781,36 @@
               <span id="txt-vocal-api" class="max-w-[72px] truncate text-[6px] font-pixel text-gray-500" title="Active AI API">API: WEBGL</span>
             </span>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- First-use AI Vocal information -->
+    <div id="ai-vocal-info-overlay" class="z-[175000]" role="dialog" aria-modal="true" aria-labelledby="ai-vocal-info-title">
+      <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">
+        <div class="theme-bar justify-between mb-2">
+          <span class="flex items-center gap-1 font-bold">
+            <i class="ph-bold ph-sparkle text-emerald-300"></i>
+            <span id="ai-vocal-info-title">ABOUT AI VOCAL</span>
+          </span>
+          <button id="btn-close-ai-vocal-info" class="win-btn text-red-900 font-bold bg-[#e0e0e0]" aria-label="Close">X</button>
+        </div>
+        <div class="bg-[#222] p-3 flex flex-col gap-2.5 items-center text-center">
+          <div class="w-10 h-10 rounded-full border border-emerald-500/60 bg-emerald-500/10 flex items-center justify-center text-emerald-300 text-xl">
+            <i class="ph-bold ph-waveform"></i>
+          </div>
+          <span class="text-[10px] font-bold text-emerald-300 font-pixel uppercase tracking-wide">
+            REAL-TIME VOCAL SEPARATION
+          </span>
+          <p class="text-gray-300 text-[8.5px] font-pixel leading-relaxed text-left">
+            AI Vocal uses a compact model designed for real-time processing. Vocal reduction depends on the song and the quality of its source audio, so results may vary between tracks and are not guaranteed to be perfect in every situation.
+          </p>
+          <p class="text-gray-300 text-[8.5px] font-pixel leading-relaxed text-left">
+            Use the available audio controls to fine-tune the result.
+          </p>
+          <button id="btn-confirm-ai-vocal-info" class="win-btn h-7 w-full bg-emerald-900 text-emerald-100 border-emerald-400 hover:bg-emerald-800 font-bold font-pixel text-[8.5px]">
+            GOT IT
+          </button>
         </div>
       </div>
     </div>

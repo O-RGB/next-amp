@@ -1,4 +1,50 @@
 let creating;
+const videoContentScriptTasks = new Map();
+
+async function ensureVideoContentScripts(tabId) {
+  const numericTabId = Number(tabId);
+  if (!Number.isInteger(numericTabId) || numericTabId < 0) {
+    return { success: false, error: "Invalid tab" };
+  }
+
+  const existingTask = videoContentScriptTasks.get(numericTabId);
+  if (existingTask) return existingTask;
+
+  const task = (async () => {
+    // Content scripts are not retroactively injected into a tab that was
+    // already open when the extension was installed. Check the main frame
+    // first so reopening the popup never creates duplicate handlers.
+    try {
+      const response = await chrome.tabs.sendMessage(numericTabId, {
+        type: "PING",
+      });
+      if (response?.pong) return { success: true, injected: false };
+    } catch (_) {
+      // No video content script is present yet. Inject it below.
+    }
+
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: numericTabId, allFrames: true },
+        files: ["video-delay.js", "video-zoom.js"],
+      });
+      return { success: true, injected: true };
+    } catch (error) {
+      // Restricted pages (for example chrome:// pages) cannot accept scripts.
+      // Audio capture can still work there when Chrome permits it, so this is
+      // a non-fatal video capability result.
+      console.warn("NextStudio: video content script injection failed", error);
+      return { success: false, error: error?.message || "Injection failed" };
+    }
+  })();
+
+  videoContentScriptTasks.set(numericTabId, task);
+  try {
+    return await task;
+  } finally {
+    videoContentScriptTasks.delete(numericTabId);
+  }
+}
 
 // Open a small first-run welcome page after a real installation. Chrome only
 // emits reason="install" once for an extension install, so normal popup use,
@@ -67,7 +113,10 @@ async function setupOffscreenDocument(path) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === "CHECK_OFFSCREEN") {
+  if (msg.type === "ENSURE_VIDEO_CONTENT_SCRIPTS") {
+    ensureVideoContentScripts(msg.tabId).then(sendResponse);
+    return true;
+  } else if (msg.type === "CHECK_OFFSCREEN") {
     checkOffscreenDocument().then((has) => sendResponse(has));
     return true;
   } else if (msg.type === "INIT_OFFSCREEN") {

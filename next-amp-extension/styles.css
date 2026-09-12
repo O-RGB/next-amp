@@ -267,6 +267,7 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 #first-launch-overlay,
 #usage-donate-overlay,
 #ai-slow-overlay,
+#ai-vocal-info-overlay,
 #go-engine-overlay {
   position: fixed;
   inset: 0;
@@ -283,6 +284,7 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 #first-launch-overlay.active,
 #usage-donate-overlay.active,
 #ai-slow-overlay.active,
+#ai-vocal-info-overlay.active,
 #go-engine-overlay.active {
   display: flex;
 }

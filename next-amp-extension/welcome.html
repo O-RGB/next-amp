@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync</title>
+    <title>Welcome to NextStudio</title>
     <style>
       :root {
         color-scheme: dark;
@@ -30,7 +30,7 @@
           radial-gradient(circle at 12% 90%, rgba(38, 91, 126, .12), transparent 35%),
           var(--bg);
         color: var(--text);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       }
 
       .shell { width: min(920px, 100%); margin: 0 auto; }
@@ -70,7 +70,7 @@
       .eyebrow { color: var(--green); font-size: 11px; font-weight: 700; letter-spacing: .18em; }
       h1 { max-width: 670px; margin: 13px 0 15px; font-size: clamp(30px, 5vw, 52px); line-height: 1.06; letter-spacing: -.055em; }
       h1 span { color: var(--green); }
-      .hero-copy p { max-width: 620px; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.8; }
+      .hero-copy p { max-width: 620px; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.75; }
 
       .ready {
         display: inline-flex;
@@ -124,13 +124,13 @@
       .step:last-child { border-right: 0; }
       .step-number { color: var(--green); font-size: 12px; }
       .step h2 { margin: 15px 0 9px; color: var(--text); font-size: 14px; letter-spacing: .03em; }
-      .step p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.75; }
+      .step p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
       .step code { color: var(--amber); font-size: 10px; }
 
       .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
       .feature { padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: rgba(12, 17, 20, .76); }
       .feature-label { margin-bottom: 10px; color: var(--green); font-size: 10px; font-weight: 700; letter-spacing: .11em; }
-      .feature p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.7; }
+      .feature p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
 
       .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
       .button {
@@ -153,7 +153,7 @@
       .button.secondary { border-color: var(--line); background: var(--panel); color: #b4c2c3; }
       .button.secondary:hover { border-color: #53676b; background: #172125; }
 
-      footer { padding-top: 30px; color: #5e7072; font-size: 10px; line-height: 1.7; }
+      footer { padding-top: 30px; color: #5e7072; font-size: 11px; line-height: 1.7; }
 
       @media (max-width: 680px) {
         body { padding: 20px 14px; }
@@ -174,7 +174,7 @@
           <img src="./assets/logo.png" alt="NextStudio" />
           <div>
             <div class="brand-name">NEXTSTUDIO</div>
-            <div class="brand-sub">NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync</div>
+            <div class="brand-sub">Pitch Shifter · AI Vocal · Video Sync</div>
           </div>
         </div>
         <div class="version">INSTALL COMPLETE</div>
@@ -183,12 +183,12 @@
       <main>
         <section class="hero">
           <div class="hero-copy">
-            <div class="eyebrow">THANK YOU FOR INSTALLING</div>
-            <h1>Welcome to <span>NextStudio.</span></h1>
+            <div class="eyebrow">THANK YOU FOR INSTALLING NEXTSTUDIO</div>
+            <h1>Welcome to <span>NextStudio</span></h1>
             <p>
-              Thanks for giving NextStudio a place in your browser. Your audio tools are ready — with real-time vocal control, pitch, effects, and remote control in one lightweight extension.
+              NextStudio is ready to enhance audio in your browser with real-time pitch shifting, audio effects, AI vocal separation, video sync, and remote control.
             </p>
-            <div class="ready"><span class="dot"></span><strong>READY</strong><span>NextStudio is installed and waiting</span></div>
+            <div class="ready"><span class="dot"></span><strong>READY</strong><span>NextStudio is installed and ready to use</span></div>
           </div>
           <div class="hero-mark" aria-hidden="true">♪</div>
         </section>
@@ -198,8 +198,8 @@
           <div class="steps">
             <article class="step">
               <div class="step-number">01 //</div>
-              <h2>Open a video</h2>
-              <p>Go to YouTube or another supported media page. Refresh the tab once after installing if it was already open.</p>
+              <h2>Open a media page</h2>
+              <p>Open a music or video website in a browser tab. NextStudio works with supported media pages, not just YouTube.</p>
             </article>
             <article class="step">
               <div class="step-number">02 //</div>
@@ -208,25 +208,25 @@
             </article>
             <article class="step">
               <div class="step-number">03 //</div>
-              <h2>Choose your mode</h2>
-              <p>Open AI Vocal and choose <code>KARAOKE</code> to remove vocals in real time.</p>
+              <h2>Choose a feature</h2>
+              <p>Open AI Vocal and choose <code>KARAOKE</code> to reduce vocals in real time, or explore the other audio tools.</p>
             </article>
           </div>
         </section>
 
         <section class="feature-grid" aria-label="NextStudio features">
-          <article class="feature"><div class="feature-label">AI VOCAL</div><p>Karaoke and Acapella modes with ECO and FULL processing profiles.</p></article>
-          <article class="feature"><div class="feature-label">AUDIO FX</div><p>Adjust key, reverb, EQ, dynamics, pan, and volume while you listen.</p></article>
-          <article class="feature"><div class="feature-label">REMOTE</div><p>Connect a second device with the built-in remote control when you need it.</p></article>
+          <article class="feature"><div class="feature-label">AI VOCAL</div><p>Reduce vocals for karaoke or isolate them with configurable ECO and FULL processing modes.</p></article>
+          <article class="feature"><div class="feature-label">AUDIO FX</div><p>Adjust key, reverb, EQ, dynamics, stereo balance, and volume while you listen.</p></article>
+          <article class="feature"><div class="feature-label">REMOTE</div><p>Control audio settings from a second device with the built-in Remote feature.</p></article>
         </section>
 
         <div class="actions">
-          <a class="button" href="https://www.youtube.com/" target="_blank" rel="noopener">OPEN YOUTUBE&nbsp; →</a>
-          <a class="button secondary" href="https://ganknow.com/nextfeederlabs/tip" target="_blank" rel="noopener">SUPPORT DEVELOPMENT&nbsp; ↗</a>
+          <a class="button" href="https://www.youtube.com/" target="_blank" rel="noopener">OPEN A MEDIA PAGE&nbsp; →</a>
+          <a class="button secondary" href="https://ganknow.com/nextfeederlabs/tip" target="_blank" rel="noopener">SUPPORT NEXTSTUDIO&nbsp; ↗</a>
         </div>
 
         <footer>
-          NextStudio is built for people who care about how audio feels. Thank you for trying it — this welcome page appears only after installation.
+          Thanks for installing NextStudio. You can return to this page anytime from the extension if you need these steps again.
         </footer>
       </main>
     </div>

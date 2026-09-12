@@ -252,6 +252,13 @@ function replaceInFile(filePath, search, replacement) {
 const popupTemp = path.join(TEMP_DIR, 'popup.tmp.js');
 replaceInFile(popupTemp, 'assets/libs/mjs/SignalsmithStretch.mjs', FILE_NAMES.signalsmith);
 
+// Rewrite dynamically injected video content scripts. The source build uses
+// stable names for readability, while the production manifest uses hashed
+// names, so runtime injection must receive the same hashed files.
+const backgroundTemp = path.join(TEMP_DIR, 'background.tmp.js');
+replaceInFile(backgroundTemp, 'video-delay.js', FILE_NAMES.videoDelay);
+replaceInFile(backgroundTemp, 'video-zoom.js', FILE_NAMES.videoZoom);
+
 // Rewrite in offscreen bundle
 const offscreenTemp = path.join(TEMP_DIR, 'offscreen.tmp.js');
 replaceInFile(offscreenTemp, 'modules/ai-vocal/vocal-worklet.js', FILE_NAMES.vocalWorklet);
