@@ -172,7 +172,7 @@ Build scripts bundle dependency ของ `offscreen.js` และ Web adapter �
 
 ไฟล์ที่ไม่ควรแก้ในแผนนี้:
 
-- `nextamp-engine-go/**`
+- `nextstudio-engine-go/**`
 - `ai-vocal-engine` ส่วน model/DSP ยกเว้นไฟล์ test ใหม่
 - model weights และ encrypted production model
 - build security/obfuscation เว้นแต่ build ล้มเพราะ import ใหม่จริง ๆ
@@ -727,9 +727,9 @@ S4 เป็นการทดสอบและปรับ threshold เท่
 
 หลัง `npm run build` ต้องมีอย่างน้อย:
 
-- [x] `dist/next-amp-extension-prod/`
+- [x] `dist/nextstudio-extension-prod/`
 - [x] Extension zip จาก build script
-- [x] `dist/next-amp-web-prod/`
+- [x] `dist/nextstudio-web-prod/`
 - [x] Go artifacts ที่ `npm run build` สร้างตาม workflow ปัจจุบัน
 
 ห้ามแก้ไฟล์ใน dist ด้วยมือ ให้แก้ source แล้ว build ใหม่เท่านั้น
@@ -866,4 +866,4 @@ test(ai-vocal): validate long-running webgpu recovery
 - TensorFlow.js WebGPU backend: <https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgpu/README.md>
 - ตัวอย่างต้นทุน GPU-to-CPU tensor readback ใน TensorFlow.js: <https://github.com/tensorflow/tfjs/issues/6683>
 
-อย่าคัดลอก code จาก issue โดยตรง ให้อ่านเพื่อเข้าใจว่า GPU readback เป็น synchronization point แล้วเขียน implementation ให้เข้ากับ lifecycle ของ NextAmp เท่านั้น
+อย่าคัดลอก code จาก issue โดยตรง ให้อ่านเพื่อเข้าใจว่า GPU readback เป็น synchronization point แล้วเขียน implementation ให้เข้ากับ lifecycle ของ NextStudio เท่านั้น

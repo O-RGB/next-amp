@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	ort "github.com/yalue/onnxruntime_go"
-	"nextamp-engine-go/dsp"
+	"nextstudio-engine-go/dsp"
 )
 
 func TestRewriteONNXOutputWindow(t *testing.T) {
@@ -90,8 +90,8 @@ func TestRewriteONNXOutputWindow(t *testing.T) {
 }
 
 func TestCompactONNXOutputRuntime(t *testing.T) {
-	if os.Getenv("NEXTAMP_RUN_COMPACT_ONNX") != "1" {
-		t.Skip("set NEXTAMP_RUN_COMPACT_ONNX=1 to run the native compact-output session")
+	if os.Getenv("NEXTSTUDIO_RUN_COMPACT_ONNX") != "1" {
+		t.Skip("set NEXTSTUDIO_RUN_COMPACT_ONNX=1 to run the native compact-output session")
 	}
 	if !CompactModelOutputEnabled {
 		t.Skip("compact-output candidate is disabled in the production quality-baseline profile")

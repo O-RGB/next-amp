@@ -22,7 +22,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	ort "github.com/yalue/onnxruntime_go"
-	"nextamp-engine-go/dsp"
+	"nextstudio-engine-go/dsp"
 )
 
 const (

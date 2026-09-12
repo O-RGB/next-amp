@@ -1,4 +1,4 @@
-module nextamp-engine-go
+module nextstudio-engine-go
 
 go 1.26.2
 

@@ -743,4 +743,4 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor("nextamp-ai-vocal-processor", AIVocalWorkletProcessor);
+registerProcessor("nextstudio-ai-vocal-processor", AIVocalWorkletProcessor);

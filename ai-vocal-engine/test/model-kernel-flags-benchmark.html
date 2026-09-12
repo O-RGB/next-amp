@@ -104,7 +104,7 @@ async function run() {
       output.timing.minMs, output.timing.maxMs,
       encodeURIComponent(renderer || 'unknown')
     ].join('|');
-    if (parent !== window) parent.postMessage({ type: 'NEXTAMP_KERNEL_BENCH', output }, location.origin);
+    if (parent !== window) parent.postMessage({ type: 'NEXTSTUDIO_KERNEL_BENCH', output }, location.origin);
   } finally {
     input.dispose();
     model.dispose();
@@ -116,7 +116,7 @@ run().catch(error => {
   document.title = `ERROR|${candidate}|${encodeURIComponent(error?.message || String(error))}`;
   if (parent !== window) {
     parent.postMessage({
-      type: 'NEXTAMP_KERNEL_BENCH',
+      type: 'NEXTSTUDIO_KERNEL_BENCH',
       output: { candidate, error: error?.stack || String(error) }
     }, location.origin);
   }

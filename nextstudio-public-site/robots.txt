@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /remote/
+
+Sitemap: __PUBLIC_SITE_ORIGIN__/sitemap.xml

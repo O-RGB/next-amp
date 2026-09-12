@@ -20,7 +20,7 @@ function runCandidate(candidate) {
     frame.src = `model-kernel-flags-benchmark.html?candidate=${candidate}&rounds=10`;
     const onMessage = event => {
       if (event.origin !== location.origin ||
-          event.data?.type !== 'NEXTAMP_KERNEL_BENCH' ||
+          event.data?.type !== 'NEXTSTUDIO_KERNEL_BENCH' ||
           event.data?.output?.candidate !== candidate) return;
       window.removeEventListener('message', onMessage);
       frame.remove();

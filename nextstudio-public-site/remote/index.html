@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071411" />
+    <meta name="description" content="NextStudio Remote Controller — control an active NextStudio session from another device." />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="canonical" href="__PUBLIC_SITE_ORIGIN__/remote/" />
+    <link rel="icon" href="../assets/images/logo.png" type="image/png" />
+    <link rel="stylesheet" href="../assets/css/remote.css" />
+    <title>Remote Controller — NextStudio</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#remote-main" data-i18n="remote.skip">Skip to controls</a>
+    <main id="remote-main" class="remote-shell">
+      <header class="remote-header">
+        <a class="remote-brand" href="../"><img src="../assets/images/logo.png" width="38" height="38" alt="NextStudio logo" /><span>NextStudio <small data-i18n="remote.brand">REMOTE</small></span></a>
+        <div class="remote-header-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" class="language-button is-active" data-language="en" aria-pressed="true">EN</button><button type="button" class="language-button" data-language="th" aria-pressed="false">TH</button></div><div class="connection-badge is-loading" id="connection-badge" role="status" aria-live="polite"><i></i><span id="connection-label">Initializing</span></div></div>
+      </header>
+      <section class="remote-intro"><div><p class="remote-eyebrow" data-i18n="remote.eyebrow">SESSION CONTROL</p><h1 id="page-title" data-i18n="remote.title">Your session, within reach.</h1><p id="page-description" data-i18n="remote.description">Connect to an active NextStudio session to control the sound and picture from another device.</p></div><div class="session-card"><span data-i18n="remote.session">SESSION</span><strong id="session-label" data-i18n="remote.waiting">Waiting for link</strong><small id="session-detail" data-i18n="remote.tokenHint">The secure session token stays in this page.</small></div></section>
+      <section class="remote-error" id="remote-error" hidden><strong id="error-title" data-i18n="remote.errorTitle">Unable to connect</strong><span id="error-message" data-i18n="remote.errorMessage">Check the Remote link and try again.</span><button type="button" class="remote-button remote-button-quiet" id="retry-button" data-i18n="remote.retry">Try again</button></section>
+      <section class="control-layout" aria-label="Remote controls">
+        <article class="control-panel panel-vocal">
+          <div class="panel-heading"><div><p class="panel-kicker">01 / AI VOCAL</p><h2 data-i18n="remote.voiceMode">Voice mode</h2></div><span class="panel-state" id="vocal-state">ORIGINAL</span></div>
+          <div class="segmented vocal-modes" role="group" aria-label="Vocal mode"><button type="button" data-param="vocalMode" data-value="bypass" data-i18n="remote.original">Original</button><button type="button" data-param="vocalMode" data-value="karaoke" data-i18n="remote.karaoke">Karaoke</button><button type="button" data-param="vocalMode" data-value="acapella" data-i18n="remote.acapella">Acapella</button></div>
+          <div class="panel-row"><div><strong data-i18n="remote.aiVocal">AI vocal</strong><small data-i18n="remote.aiVocalHint">Enable processing on the active session</small></div><button type="button" class="toggle" data-param="isVocalOn" aria-pressed="false"><span></span><b>OFF</b></button></div>
+          <div class="panel-row"><div><strong data-i18n="remote.aiProfile">AI profile</strong><small data-i18n="remote.aiProfileHint">Use the active Extension profile</small></div><span class="readout" id="vocal-profile">ECO</span></div>
+        </article>
+        <article class="control-panel">
+          <div class="panel-heading"><div><p class="panel-kicker">02 / AUDIO</p><h2 data-i18n="remote.shapeSound">Shape the sound</h2></div><span class="panel-state" id="audio-state">READY</span></div>
+          <div class="range-control"><div class="range-label"><span data-i18n="remote.volume">Volume</span><output id="volume-output">100%</output></div><input id="volume-range" data-param="volume" type="range" min="0" max="1" step="0.01" value="1" disabled /></div>
+          <div class="range-control"><div class="range-label"><span data-i18n="remote.balance">Balance</span><output id="pan-output">CENTER</output></div><input id="pan-range" data-param="pan" type="range" min="-1" max="1" step="0.01" value="0" disabled /></div>
+          <div class="range-control"><div class="range-label"><span data-i18n="remote.pitch">Pitch</span><output id="pitch-output">0</output></div><input id="pitch-range" data-param="pitch" type="range" min="-12" max="12" step="1" value="0" disabled /></div>
+          <div class="range-control"><div class="range-label"><span data-i18n="remote.reverb">Reverb</span><output id="reverb-output">0.0</output></div><input id="reverb-range" data-param="reverb" type="range" min="0" max="2" step="0.1" value="0" disabled /></div>
+        </article>
+        <article class="control-panel">
+          <div class="panel-heading"><div><p class="panel-kicker">03 / VIDEO</p><h2 data-i18n="remote.keepSync">Keep it in sync</h2></div><button type="button" class="small-switch" data-param="isVideoMasterOn" aria-pressed="true">VIDEO ON</button></div>
+          <div class="range-control"><div class="range-label"><span data-i18n="remote.delay">Delay</span><output id="delay-output">0.00 s</output></div><input id="delay-range" data-param="videoDelay" type="range" min="0" max="5" step="0.01" value="0" disabled /></div>
+          <div class="range-control"><div class="range-label"><span data-i18n="remote.zoom">Zoom</span><output id="zoom-output">100%</output></div><input id="zoom-range" data-param="videoZoom" type="range" min="1" max="3" step="0.01" value="1" disabled /></div>
+          <div class="range-control"><div class="range-label"><span data-i18n="remote.rotation">Rotation</span><output id="rotate-output">0°</output></div><input id="rotate-range" data-param="videoRotate" type="range" min="0" max="360" step="1" value="0" disabled /></div>
+          <div class="panel-row compact-row"><div><strong data-i18n="remote.videoQuality">Video quality</strong><small data-i18n="remote.videoQualityHint">Leave the active quality unchanged</small></div><select id="quality-select" data-param="videoQuality" disabled><option value="max">Max</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+        </article>
+        <article class="control-panel panel-status">
+          <div class="panel-heading"><div><p class="panel-kicker">04 / LINK</p><h2 data-i18n="remote.connection">Connection</h2></div><span class="connection-mark" id="connection-mark">—</span></div>
+          <div class="status-metrics"><div><span data-i18n="remote.state">STATE</span><strong id="status-state">Loading</strong></div><div><span data-i18n="remote.roundTrip">ROUND TRIP</span><strong id="rtt-value">—</strong></div><div><span data-i18n="remote.protocol">PROTOCOL</span><strong>DATA ONLY</strong></div></div>
+          <p class="privacy-hint" data-i18n="remote.privacyHint">Remote sends control values only. Audio stays with the active NextStudio session.</p>
+          <div class="status-actions"><button type="button" class="remote-button remote-button-quiet" id="disconnect-button" data-i18n="remote.disconnect">Disconnect</button><a class="remote-button remote-button-link" href="../privacy/" data-i18n="remote.privacy">Privacy</a></div>
+        </article>
+      </section>
+      <footer class="remote-footer"><span>NextFeeder Labs</span><span data-i18n="remote.footer">NextStudio Remote · No audio stream</span><a href="mailto:nextfeeder.ts@gmail.com" data-i18n="remote.support">Support</a></footer>
+    </main>
+    <script src="../assets/vendor/peerjs.min.js" defer></script>
+    <script src="../assets/js/remote-protocol.js" defer></script>
+    <script src="../assets/js/remote.js" defer></script>
+  </body>
+</html>

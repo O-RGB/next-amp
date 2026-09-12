@@ -3,7 +3,7 @@
  * NextStudio standalone Web production build.
  *
  * The source Web player stays readable/development-friendly. This pipeline
- * creates a deployable static tree in dist/next-amp-web-prod where:
+ * creates a deployable static tree in dist/nextstudio-web-prod where:
  *   - proprietary AI model/WASM files exist only as authenticated ciphertext;
  *   - application/AI/worklet code is bundled and obfuscated;
  *   - shipped asset names are mangled, so source paths are not reusable;
@@ -22,8 +22,8 @@ const esbuild = require("esbuild");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const SRC_DIR = ROOT_DIR;
-const DIST_DIR = path.join(ROOT_DIR, "dist", "next-amp-web-prod");
-const TEMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "nextamp-web-build-"));
+const DIST_DIR = path.join(ROOT_DIR, "dist", "nextstudio-web-prod");
+const TEMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "nextstudio-web-build-"));
 const OBFUSCATOR_BIN = path.join(
   ROOT_DIR,
   "node_modules",
@@ -37,14 +37,14 @@ const WEB_ASSET_KEY = crypto.randomBytes(32);
 const WEB_ASSET_KEY_B64 = WEB_ASSET_KEY.toString("base64");
 
 const unauthorizedCopyDisabled =
-  process.env.NEXTAMP_DISABLE_UNAUTHORIZED_COPY === "true";
+  process.env.NEXTSTUDIO_DISABLE_UNAUTHORIZED_COPY === "true";
 const serviceWorkerDisabled =
-  process.env.NEXTAMP_DISABLE_SERVICE_WORKER === "true";
+  process.env.NEXTSTUDIO_DISABLE_SERVICE_WORKER === "true";
 
 function getMangledName(key, ext) {
   const hash = crypto
     .createHash("md5")
-    .update("nextamp_web_" + key)
+    .update("nextstudio_web_" + key)
     .digest("hex")
     .slice(0, 10);
   return `${hash}${ext}`;
@@ -197,7 +197,7 @@ function buildApplicationSource() {
   const guardValue = unauthorizedCopyDisabled ? "true" : "false";
   source = replaceRequired(
     source,
-    '"__NEXTAMP_DISABLE_UNAUTHORIZED_COPY__"',
+    '"__NEXTSTUDIO_DISABLE_UNAUTHORIZED_COPY__"',
     JSON.stringify(guardValue),
     "Unauthorized Copy env marker"
   );
@@ -242,7 +242,7 @@ function buildAIManager() {
   let bundled = read(bundledFile, "utf8");
   bundled = replaceRequired(
     bundled,
-    '"__NEXTAMP_WEB_ASSET_KEY__"',
+    '"__NEXTSTUDIO_WEB_ASSET_KEY__"',
     JSON.stringify(WEB_ASSET_KEY_B64),
     "Web asset key placeholder"
   );
@@ -261,7 +261,7 @@ function replaceWebAssetReferences(content) {
     content = replaceAll(content, search, replacement);
   }
   // Keep the whole static output relocatable. This matters when a simple
-  // server exposes it under /dist/next-amp-web-prod/ during testing.
+  // server exposes it under /dist/nextstudio-web-prod/ during testing.
   content = content.replace(/(["'])\/assets\//g, "$1assets/");
   return content;
 }

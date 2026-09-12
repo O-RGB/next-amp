@@ -8,10 +8,10 @@
   const groupTimers = new Map();
 
   function getHost() {
-    let host = document.getElementById("nextamp-action-notification");
+    let host = document.getElementById("nextstudio-action-notification");
     if (host) return host;
     host = document.createElement("div");
-    host.id = "nextamp-action-notification";
+    host.id = "nextstudio-action-notification";
     host.style.cssText = "position:fixed;top:18px;right:18px;z-index:2147483647;pointer-events:none";
     const root = host.attachShadow ? host.attachShadow({ mode: "open" }) : host;
     root.innerHTML = `

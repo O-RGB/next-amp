@@ -38,16 +38,16 @@ fi
 
 # 2. Build macOS standalone binary
 echo "[*] Step 2: Compiling macOS standalone binary (Apple Silicon & Intel)..."
-go build -ldflags="-s -w" -o nextamp-engine .
+go build -ldflags="-s -w" -o nextstudio-engine .
 
 # 3. Build Windows standalone binary
 echo "[*] Step 3: Cross-compiling Windows standalone executable (x64)..."
-CC="zig cc -target x86_64-windows-gnu" CXX="zig c++ -target x86_64-windows-gnu" GOOS=windows GOARCH=amd64 CGO_ENABLED=1 go build -ldflags="-s -w" -o nextamp-engine.exe .
+CC="zig cc -target x86_64-windows-gnu" CXX="zig c++ -target x86_64-windows-gnu" GOOS=windows GOARCH=amd64 CGO_ENABLED=1 go build -ldflags="-s -w" -o nextstudio-engine.exe .
 
 echo ""
 echo "=================================================="
 echo "    BUILD SUCCESSFUL! STANDALONE BINARIES CREATED:"
 echo "=================================================="
-ls -lh nextamp-engine nextamp-engine.exe
+ls -lh nextstudio-engine nextstudio-engine.exe
 echo ""
 echo "[✔] Done! Both executables are 100% self-contained."

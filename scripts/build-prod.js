@@ -22,10 +22,10 @@ const esbuild = require('esbuild');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const SRC_DIR = path.join(ROOT_DIR, 'next-amp-extension');
-const DIST_DIR = path.join(ROOT_DIR, 'dist', 'next-amp-extension-prod');
+const DIST_DIR = path.join(ROOT_DIR, 'dist', 'nextstudio-extension-prod');
 const TEMP_DIR = path.join(ROOT_DIR, 'dist', 'temp');
-const ZIP_FILE = path.join(ROOT_DIR, 'dist', 'next-amp-extension-prod.zip');
-const WEB_ASSET_KEY_PLACEHOLDER = '__NEXTAMP_WEB_ASSET_KEY__';
+const ZIP_FILE = path.join(ROOT_DIR, 'dist', 'nextstudio-extension-prod.zip');
+const WEB_ASSET_KEY_PLACEHOLDER = '__NEXTSTUDIO_WEB_ASSET_KEY__';
 const WEB_ASSET_MAGIC = Buffer.from('NAMPWEB1', 'ascii');
 const WEB_ASSET_HEADER_BYTES = 20;
 const webAssetKey = crypto.randomBytes(32);
@@ -37,7 +37,7 @@ console.log('====================================================');
 
 // Deterministic hashing helper
 function getMangledName(key, ext = '.js') {
-  const hash = crypto.createHash('md5').update('nextamp_' + key).digest('hex').slice(0, 10);
+  const hash = crypto.createHash('md5').update('nextstudio_' + key).digest('hex').slice(0, 10);
   return `${hash}${ext}`;
 }
 
@@ -132,11 +132,11 @@ function createProtectedModelPayload(modelJson, weightData) {
 
 // Build the native engine before packaging the extension so the shipped
 // release is always produced alongside the current GO AI implementation.
-// The script creates both nextamp-engine and nextamp-engine.exe using the
-// embedded model/runtime assets in nextamp-engine-go/.
+// The script creates both nextstudio-engine and nextstudio-engine.exe using the
+// embedded model/runtime assets in nextstudio-engine-go/.
 console.log('\n[0/9] Building native GO engine binaries...');
 run(
-  'bash "' + path.join(ROOT_DIR, 'nextamp-engine-go', 'build.sh') + '"',
+  'bash "' + path.join(ROOT_DIR, 'nextstudio-engine-go', 'build.sh') + '"',
   'Building macOS + Windows GO engine binaries'
 );
 
@@ -475,6 +475,6 @@ run('cd "' + DIST_DIR + '" && zip -rq "' + ZIP_FILE + '" .', 'Compressing extens
 
 console.log('\n====================================================');
 console.log('✅ 100% PRODUCTION BUILD & HARDENING SUCCESSFUL!');
-console.log('📁 Distribution folder: dist/next-amp-extension-prod/');
-console.log('📦 Store Ready ZIP:     dist/next-amp-extension-prod.zip');
+console.log('📁 Distribution folder: dist/nextstudio-extension-prod/');
+console.log('📦 Store Ready ZIP:     dist/nextstudio-extension-prod.zip');
 console.log('====================================================');

@@ -133,9 +133,9 @@ for (const mode of [0, 1]) {
 assert.ok(cases.mode0Mask0.rms <= 1e-12, 'reference mode 0 must multiply by the mask');
 assert.ok(cases.mode1Mask1.rms <= 1e-12, 'reference mode 1 must multiply by the inverse mask');
 assert.ok(cases.mode0Mask1.vsOwnBypass.maxError <= 2e-6,
-  'NextAmp bypass reconstruction must match reference direct-mask reconstruction');
+  'NextStudio bypass reconstruction must match reference direct-mask reconstruction');
 assert.ok(cases.mode1Mask0.vsOwnBypass.maxError <= 2e-6,
-  'reference inverse-mask bypass must match NextAmp reconstruction');
+  'reference inverse-mask bypass must match NextStudio reconstruction');
 
 function makeChunk(chunk, channel) {
   const output = new Float32Array(RAW_SAMPLES);
@@ -218,7 +218,7 @@ async function compareDelayedTimeline() {
       fillMask(ownMask, chunk, channel);
     }
 
-    // Reference mode 0 and NextAmp mode 1 are both direct-mask modes.
+    // Reference mode 0 and NextStudio mode 1 are both direct-mask modes.
     reference.exp.p(0);
     reference.exp.q();
     ownExp.stft_backward_masked(1, FRAMES, 1, 1);

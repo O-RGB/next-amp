@@ -1257,7 +1257,7 @@ export class AIVocalManager {
       await this.audioCtx.audioWorklet.addModule(workletUrl);
       if (this.destroyed) return null;
 
-      this.workletNode = new AudioWorkletNode(this.audioCtx, "nextamp-ai-vocal-processor", {
+      this.workletNode = new AudioWorkletNode(this.audioCtx, "nextstudio-ai-vocal-processor", {
         numberOfInputs: 1,
         numberOfOutputs: 1,
         outputChannelCount: [2]

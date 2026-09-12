@@ -1,10 +1,10 @@
 const WEB_ASSET_MAGIC = "NAMPWEB1";
-const WEB_ASSET_KEY_B64 = "__NEXTAMP_WEB_ASSET_KEY__";
+const WEB_ASSET_KEY_B64 = "__NEXTSTUDIO_WEB_ASSET_KEY__";
 const WEB_ASSET_HEADER_BYTES = 20;
 let webAssetCryptoKeyPromise = null;
 
 function hasEmbeddedWebAssetKey() {
-  return WEB_ASSET_KEY_B64 && !WEB_ASSET_KEY_B64.startsWith("__NEXTAMP_");
+  return WEB_ASSET_KEY_B64 && !WEB_ASSET_KEY_B64.startsWith("__NEXTSTUDIO_");
 }
 
 function decodeBase64(value) {

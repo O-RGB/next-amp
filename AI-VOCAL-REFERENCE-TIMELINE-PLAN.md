@@ -1,6 +1,6 @@
 # AI Vocal Reference Timeline & Quality Recovery Plan
 
-สถานะ: **R1 rejected — DSP ตรงกับ oracle แล้ว แต่ timeline ไม่เข้ากับ NextAmp model weights; คืน Detail เป็น production**
+สถานะ: **R1 rejected — DSP ตรงกับ oracle แล้ว แต่ timeline ไม่เข้ากับ NextStudio model weights; คืน Detail เป็น production**
 
 เป้าหมายของแผนนี้คือทำให้ Karaoke ตัดเสียงร้องได้เนียนและนิ่งขึ้น ลดเสียงร้องแบบหุ่นยนต์ ลดอาการดนตรีวูบวาบ และรักษารายละเอียดเครื่องดนตรี โดยยังใช้โมเดลขนาดเดิมและรักษาความลื่นบน Apple Silicon, GTX 1050 Ti และ GPU รุ่นเก่าให้มากที่สุด
 
@@ -29,7 +29,7 @@
 - [x] AI Remove depth 2 อ่าน mask 18 frames เริ่มที่ frame 31 และใช้ spectrum จาก one-chunk lookahead
 - [x] AI Remove ทำ iSTFT 18 frames แล้วส่งเฉพาะช่วงกลาง 7,680 samples โดย crop ขอบ 1,536 samples
 - [x] AI Remove บังคับ WebGL F16 แต่ยังไม่มีหลักฐานว่า F16 เป็นสาเหตุที่คุณภาพดีกว่า
-- [x] โฟลเดอร์ AI Remove ไม่มี model weights จึงยังพิสูจน์ไม่ได้ว่าใช้ weights เดียวกับ NextAmp
+- [x] โฟลเดอร์ AI Remove ไม่มี model weights จึงยังพิสูจน์ไม่ได้ว่าใช้ weights เดียวกับ NextStudio
 
 ## 3. สมมติฐานหลัก
 
@@ -132,7 +132,7 @@ Gate R1:
 - mask layout จาก model output ใช้ transpose/reshape/sigmoid ลำดับเดียวกับ reference
 
 ดังนั้นความผิดพลาดไม่ได้อยู่ที่ FFT, queue, crop หรือ mask layout อีกแล้ว แต่เกิดจาก
-สมมติฐานว่า reference timeline สามารถใช้กับ model weights ของ NextAmp ได้ ทั้งที่
+สมมติฐานว่า reference timeline สามารถใช้กับ model weights ของ NextStudio ได้ ทั้งที่
 artifact อ้างอิงไม่มี weights ให้ยืนยันว่าเป็นโมเดลเดียวกัน Candidate นี้จึงถูกปิดจาก
 production และคืน 16-hop Detail ซึ่งผ่านการฟังจริงเป็นค่าเริ่มต้น โดยเก็บโค้ด reference
 ไว้เฉพาะงานวิจัย/feature flag เท่านั้น

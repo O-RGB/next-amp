@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 async function runTest() {
-  console.log("=== NEXTAMP AI VOCAL ENGINE: WASM DSP UNIT TEST ===");
+  console.log("=== NEXTSTUDIO AI VOCAL ENGINE: WASM DSP UNIT TEST ===");
 
   const wasmPath = path.join(__dirname, "../dist/stft_simd.wasm");
   const wasmBytes = fs.readFileSync(wasmPath);

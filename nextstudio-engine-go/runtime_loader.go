@@ -10,27 +10,27 @@ import (
 	"runtime"
 )
 
-// getNextAmpCacheDir returns the OS-specific cache directory for NextAmp
-func getNextAmpCacheDir() string {
+// getNextStudioCacheDir returns the OS-specific cache directory for NextStudio
+func getNextStudioCacheDir() string {
 	switch runtime.GOOS {
 	case "windows":
 		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
-			return filepath.Join(localAppData, "NextAmp")
+			return filepath.Join(localAppData, "NextStudio")
 		}
-		return filepath.Join(os.TempDir(), "NextAmp")
+		return filepath.Join(os.TempDir(), "NextStudio")
 	case "darwin":
 		if home := os.Getenv("HOME"); home != "" {
-			return filepath.Join(home, "Library", "Caches", "NextAmp")
+			return filepath.Join(home, "Library", "Caches", "NextStudio")
 		}
-		return filepath.Join(os.TempDir(), "NextAmp")
+		return filepath.Join(os.TempDir(), "NextStudio")
 	default:
 		if xdgCache := os.Getenv("XDG_CACHE_HOME"); xdgCache != "" {
-			return filepath.Join(xdgCache, "NextAmp")
+			return filepath.Join(xdgCache, "NextStudio")
 		}
 		if home := os.Getenv("HOME"); home != "" {
-			return filepath.Join(home, ".cache", "NextAmp")
+			return filepath.Join(home, ".cache", "NextStudio")
 		}
-		return filepath.Join(os.TempDir(), "NextAmp")
+		return filepath.Join(os.TempDir(), "NextStudio")
 	}
 }
 
@@ -68,7 +68,7 @@ func findOrExtractLibrary() (string, error) {
 	}
 
 	// 3. Check cached extracted library in user's cache dir
-	cacheDir := getNextAmpCacheDir()
+	cacheDir := getNextStudioCacheDir()
 	cachedLibPath := filepath.Join(cacheDir, embeddedRuntimeName)
 
 	if fi, err := os.Stat(cachedLibPath); err == nil && !fi.IsDir() {

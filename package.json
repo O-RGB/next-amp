@@ -1,11 +1,12 @@
 {
-  "name": "next-amp",
+  "name": "nextstudio",
   "version": "1.0.0",
   "description": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
   "scripts": {
     "build": "npm run build:web && npm run build:extension",
     "build:web": "node scripts/build-web.js",
-    "build:extension": "node scripts/build-prod.js"
+    "build:extension": "node scripts/build-prod.js",
+    "build:public-site": "node scripts/build-public-site.js"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",

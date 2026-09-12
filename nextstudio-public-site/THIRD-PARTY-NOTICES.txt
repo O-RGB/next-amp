@@ -1,0 +1,17 @@
+NextStudio Public Site — Third-party notices
+
+PeerJS
+-------
+The Remote page bundles the PeerJS browser client locally so it does not load
+remote JavaScript from a CDN. The bundled file is copied from:
+  next-amp-extension/assets/js/peerjs.min.js
+
+Before production publication, verify and preserve the upstream PeerJS license
+notice/version that applies to the bundled file. The public site does not
+execute JavaScript, HTML, CSS or WASM received from an Extension session.
+
+External services
+-----------------
+The Remote data connection may use PeerJS-compatible signaling infrastructure.
+The landing and privacy pages do not load analytics, advertising, font or icon
+resources from third-party CDNs.

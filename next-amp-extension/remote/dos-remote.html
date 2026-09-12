@@ -140,8 +140,8 @@ function getParam(key) {
   return val || "";
 }
 
-let initId = "__NEXTAMP_HOST_ID__";
-let initTok = "__NEXTAMP_TOKEN__";
+let initId = "__NEXTSTUDIO_HOST_ID__";
+let initTok = "__NEXTSTUDIO_TOKEN__";
 if (!initId || initId.startsWith("__")) initId = getParam("id") || safeGet("na_hid");
 if (!initTok || initTok.startsWith("__")) initTok = getParam("token") || safeGet("na_tok");
 G("hid").value = initId;

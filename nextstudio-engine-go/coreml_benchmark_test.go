@@ -14,7 +14,7 @@ import (
 
 // Run with:
 //
-//	NEXTAMP_RUN_COREML_BENCH=1 go test -run TestCoreMLComputeUnits -v
+//	NEXTSTUDIO_RUN_COREML_BENCH=1 go test -run TestCoreMLComputeUnits -v
 //
 // This is deliberately opt-in because it compiles several CoreML sessions and
 // can take a few seconds. It compares the same FP32 graph and exact input shape
@@ -23,8 +23,8 @@ func TestCoreMLComputeUnits(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("CoreML is only available on macOS")
 	}
-	if os.Getenv("NEXTAMP_RUN_COREML_BENCH") != "1" {
-		t.Skip("set NEXTAMP_RUN_COREML_BENCH=1 to run the opt-in provider benchmark")
+	if os.Getenv("NEXTSTUDIO_RUN_COREML_BENCH") != "1" {
+		t.Skip("set NEXTSTUDIO_RUN_COREML_BENCH=1 to run the opt-in provider benchmark")
 	}
 
 	libPath, err := findOrExtractLibrary()

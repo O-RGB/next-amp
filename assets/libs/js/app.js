@@ -6,10 +6,10 @@
 import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 
 (function () {
-  // The Web build replaces this marker from NEXTAMP_DISABLE_UNAUTHORIZED_COPY.
+  // The Web build replaces this marker from NEXTSTUDIO_DISABLE_UNAUTHORIZED_COPY.
   // Source/dev execution keeps the guard enabled by default.
   const unauthorizedCopyGuardEnabled =
-    "__NEXTAMP_DISABLE_UNAUTHORIZED_COPY__" !== "true";
+    "__NEXTSTUDIO_DISABLE_UNAUTHORIZED_COPY__" !== "true";
   const allowedDomains = [
     "next-amp-player.vercel.app",
     "localhost",
@@ -65,7 +65,7 @@ document.addEventListener("contextmenu", (event) => event.preventDefault());
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
-const STORAGE_KEY = "nextamp_settings_v9_stable";
+const STORAGE_KEY = "nextstudio_settings_v9_stable";
 
 const savedSettingsRaw = localStorage.getItem(STORAGE_KEY);
 let savedSettings = savedSettingsRaw ? JSON.parse(savedSettingsRaw) : {};
@@ -1105,7 +1105,7 @@ let LIBRARY = [],
   currentTrackIndex = -1,
   selectedIndices = new Set(),
   lastSelectedIndex = -1;
-const DB_NAME = "NextampUltimateDB",
+const DB_NAME = "NextStudioUltimateDB",
   dbReq = indexedDB.open(DB_NAME, 8);
 dbReq.onupgradeneeded = (e) => {
   const db = e.target.result;
