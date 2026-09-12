@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Next-Amp Extension - Production Hardened Build Pipeline
+ * NextStudio Extension - Production Hardened Build Pipeline
  *
  * Features:
  * 1. 100% File Name Mangling / Content Hashing (Every file except .html and manifest.json)
@@ -32,7 +32,7 @@ const webAssetKey = crypto.randomBytes(32);
 const webAssetKeyB64 = webAssetKey.toString('base64');
 
 console.log('====================================================');
-console.log('NEXT-AMP PRODUCTION BUILD & COMPLETE HARDENING');
+console.log('NEXTSTUDIO PRODUCTION BUILD & COMPLETE HARDENING');
 console.log('====================================================');
 
 // Deterministic hashing helper

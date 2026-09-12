@@ -115,7 +115,8 @@ const MODAL_HTML = `
             <img src="./assets/logo.png" alt="Logo" class="w-full h-full object-contain" />
           </div>
           <div>
-            <div class="text-[10px] font-bold text-white">NEXTAMP EXTENSION</div>
+            <div class="text-[10px] font-bold text-white">NEXTSTUDIO EXTENSION</div>
+            <div class="text-[7px] text-cyan-300">NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync</div>
             <div class="text-[8px] text-gray-400">Version 4.5.1</div>
           </div>
           <p class="text-[8px] text-gray-500 px-4">Advanced audio processing, real-time visualizer, and in-browser audio recording.</p>

@@ -384,7 +384,7 @@ async function startAudio(
     audioCtx = new AudioContext(ctxOptions);
     const source = audioCtx.createMediaStreamSource(stream);
 
-    // NextAmp AI Vocal Separator (UVR-MDX-Net WebGL)
+    // NextStudio AI Vocal Separator (UVR-MDX-Net WebGL)
     aiVocal = new AIVocalManager(audioCtx);
     const selectedPowerMode = normalizeAiPowerMode(initialPowerMode);
     await aiVocal.setPowerMode(selectedPowerMode);
@@ -818,7 +818,7 @@ function applyParamToSession(session, key, value, index, source) {
             });
           }
         }).catch((error) => {
-          console.warn("[NextAmp AI] Power mode switch failed:", error);
+          console.warn("[NextStudio AI] Power mode switch failed:", error);
         });
       }
       break;

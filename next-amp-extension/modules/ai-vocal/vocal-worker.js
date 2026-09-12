@@ -1,5 +1,5 @@
 /**
- * NextAmp AI Vocal Engine - Hyper-Optimized Extension Worker
+ * NextStudio AI Vocal Engine - Hyper-Optimized Extension Worker
  * 
  * 4 Major Optimizations:
  * 1. 100% Zero-Copy C/WASM Ring Buffer (stft_apply_mask_delayed - zero JS allocations)
@@ -17,7 +17,7 @@ try {
     }
   }
 } catch (e) {
-  console.error("[NextAmp Worker] Failed to load tf.min.js:", e);
+  console.error("[NextStudio Worker] Failed to load tf.min.js:", e);
   self.postMessage({ type: "ERROR", error: "TFJS Load Failed: " + (e.message || e) });
   self.postMessage({ type: "STATUS", status: "ERR: TFJS" });
 }
@@ -107,7 +107,7 @@ async function init(wasmUrl, modelUrl) {
         tf.env().set("WEBGL_CPU_FORWARD", false);
         tf.env().set("PROD", true);
       } catch (webglErr) {
-        console.warn("[NextAmp AI] WebGL failed in worker, falling back to CPU:", webglErr);
+        console.warn("[NextStudio AI] WebGL failed in worker, falling back to CPU:", webglErr);
         await tf.setBackend("cpu");
         activeBackend = "cpu";
       }
@@ -143,11 +143,11 @@ async function init(wasmUrl, modelUrl) {
       wOut.dispose();
     } catch (_) {}
 
-    console.log(`[NextAmp AI] Initialized successfully with backend: ${activeBackend.toUpperCase()}`);
+    console.log(`[NextStudio AI] Initialized successfully with backend: ${activeBackend.toUpperCase()}`);
     self.postMessage({ type: "READY", backend: activeBackend });
     self.postMessage({ type: "STATUS", status: "READY" });
   } catch (err) {
-    console.error("[NextAmp Worker] Init error:", err);
+    console.error("[NextStudio Worker] Init error:", err);
     self.postMessage({ type: "ERROR", error: err.message || err.toString() });
     self.postMessage({ type: "STATUS", status: "ERR: " + (err.message || err.toString()).substring(0, 18) });
   }
@@ -280,7 +280,7 @@ async function processChunk(chunkIndex, rawL, rawR, mode, strength = 1.0, genera
       [outL.buffer, outR.buffer]
     );
   } catch (err) {
-    console.error("[NextAmp Worker] processChunk error:", err);
+    console.error("[NextStudio Worker] processChunk error:", err);
     self.postMessage({
       type: "CHUNK_PROCESSED",
       chunkIndex,

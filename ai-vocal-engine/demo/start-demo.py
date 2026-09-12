@@ -31,7 +31,7 @@ def main():
     with http.server.ThreadingHTTPServer(("", PORT), CustomHandler) as httpd:
         url = f"http://localhost:{PORT}/index.html"
         print("=" * 60)
-        print("⚡ NEXTAMP AI VOCAL ENGINE: DEMO PLAYER RUNNING ⚡")
+        print("⚡ NEXTSTUDIO AI VOCAL ENGINE: DEMO PLAYER RUNNING ⚡")
         print(f"👉 URL: {url}")
         print(f"📁 Serving Directory: {DIRECTORY}")
         print("Press Ctrl+C to stop the server.")

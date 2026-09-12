@@ -195,7 +195,7 @@ func (d *Dashboard) Start() {
 		if isOutputTerminal() {
 			os.Stdout.WriteString("\033[?25h\033[0m\n")
 		}
-		fmt.Println("[*] Next-Amp Engine closed. Goodbye!")
+		fmt.Println("[*] NextStudio Engine closed. Goodbye!")
 		os.Exit(0)
 	}()
 
@@ -244,7 +244,7 @@ func (d *Dashboard) renderLogLine() {
 		status = "CONNECTED"
 	}
 	totalMB := float64(metrics.TotalBytes) / 1024 / 1024
-	fmt.Printf("[⚡ Next-Amp Engine] Dev: %s | Status: %s | Mode: %s | Chunks: #%d (%.1f MB) | Latency: %.1f ms\n",
+	fmt.Printf("[⚡ NextStudio Engine] Dev: %s | Status: %s | Mode: %s | Chunks: #%d (%.1f MB) | Latency: %.1f ms\n",
 		d.deviceDesc, status, metrics.ModeName, metrics.ChunkNumber, totalMB, metrics.TotalMs)
 }
 
@@ -297,7 +297,7 @@ func (d *Dashboard) renderFrame() {
 	b.WriteString("\033[H")
 
 	// TITLE
-	b.WriteString(fmt.Sprintf("\033[1;36m  ⚡ Next-Amp Audio Engine\033[0m  \033[90mv%s\033[0m\n", Version))
+	b.WriteString(fmt.Sprintf("\033[1;36m  ⚡ NextStudio Audio Engine\033[0m  \033[90mv%s\033[0m\n", Version))
 	b.WriteString("\033[90m  ──────────────────────────────────────────────────────────\033[0m\n")
 
 	// PANE 1: HARDWARE & SYSTEM STATUS

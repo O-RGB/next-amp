@@ -1,7 +1,7 @@
 {
-  "name": "Nextamp Player",
-  "short_name": "Nextamp",
-  "description": "Nextamp – โปรแกรมเล่นเพลงผ่านเว็บไซต์ ปรับ Pitch, Speed และ EQ ได้ทันที",
+  "name": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
+  "short_name": "NextStudio",
+  "description": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
   "start_url": "index.html",
   "display": "standalone",
   "background_color": "#000000",

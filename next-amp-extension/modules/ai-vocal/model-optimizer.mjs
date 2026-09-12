@@ -464,7 +464,7 @@ export function createVocalModelLoader(tf, source, options = {}) {
         foldedCount = 0;
         explicitPadCount = 0;
         outputHead = null;
-        console.warn("[NextAmp AI] Optimized model load failed; loading original graph", error);
+        console.warn("[NextStudio AI] Optimized model load failed; loading original graph", error);
         return tf.loadGraphModel(source);
       }
     }

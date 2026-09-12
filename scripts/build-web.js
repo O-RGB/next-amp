@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Next-Amp standalone Web production build.
+ * NextStudio standalone Web production build.
  *
  * The source Web player stays readable/development-friendly. This pipeline
  * creates a deployable static tree in dist/next-amp-web-prod where:
@@ -392,7 +392,7 @@ function verifyOutput() {
 
 function main() {
   console.log("====================================================");
-  console.log("NEXT-AMP STANDALONE WEB PRODUCTION BUILD");
+  console.log("NEXTSTUDIO STANDALONE WEB PRODUCTION BUILD");
   console.log("====================================================");
   console.log(`Unauthorized Copy guard: ${unauthorizedCopyDisabled ? "DISABLED (env)" : "ENABLED"}`);
   console.log(`Service Worker: ${serviceWorkerDisabled ? "DISABLED (env)" : "ENABLED"}`);

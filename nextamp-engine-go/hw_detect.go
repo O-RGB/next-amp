@@ -256,7 +256,7 @@ func PromptDeviceSelection(hw *HardwareInfo, forcedDevice string, autoSelectTime
 	}
 
 	fmt.Println()
-	fmt.Println("  \033[1;36m⚡ Next-Amp Engine - Acceleration Device Selector\033[0m")
+	fmt.Println("  \033[1;36m⚡ NextStudio Engine - Acceleration Device Selector\033[0m")
 	fmt.Println("  \033[90m──────────────────────────────────────────────────────────\033[0m")
 	fmt.Printf("  • System    : %s (%s, %d Cores)\n", hw.OSName, hw.Arch, hw.CPUCores)
 	fmt.Printf("  • Processor : %s\n", hw.CPUModel)

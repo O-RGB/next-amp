@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# NEXTAMP AI VOCAL ENGINE: AUTOMATED BUILD PIPELINE
+# NEXTSTUDIO AI VOCAL ENGINE: AUTOMATED BUILD PIPELINE
 # Compiles high-performance C DSP into WASM SIMD128 and copies to extension.
 # ==============================================================================
 
@@ -11,7 +11,7 @@ DIST_DIR="${SCRIPT_DIR}/dist"
 EXT_MODULES_DIR="${SCRIPT_DIR}/../next-amp-extension/modules/ai-vocal"
 
 echo "============================================================"
-echo "⚡ BUILDING NEXTAMP AI VOCAL ENGINE (WASM SIMD128 DSP) ⚡"
+echo "⚡ BUILDING NEXTSTUDIO AI VOCAL ENGINE (WASM SIMD128 DSP) ⚡"
 echo "============================================================"
 
 # Check if emcc is installed
@@ -47,7 +47,7 @@ emcc -O3 -flto --no-entry \
     "${SCRIPT_DIR}/src/dsp/stft_core.c"
 
 # 3. Copy artifacts directly into next-amp-extension/modules/ai-vocal
-echo "3. Synchronizing artifacts to NextAmp Extension modules..."
+echo "3. Synchronizing artifacts to NextStudio Extension modules..."
 cp -v "${DIST_DIR}/stft_simd.wasm" "${EXT_MODULES_DIR}/"
 cp -v "${DIST_DIR}/stft_scalar.wasm" "${EXT_MODULES_DIR}/"
 cp -v "${DIST_DIR}/stft_simd.wasm" "${SCRIPT_DIR}/demo/"

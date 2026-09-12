@@ -1,5 +1,5 @@
 /**
- * NextAmp AI Vocal Separator - Real-time AudioWorkletProcessor
+ * NextStudio AI Vocal Separator - Real-time AudioWorkletProcessor
  * 
  * Clean Mute-Until-Ready Architecture:
  * - When switching to Karaoke / Acapella, output mutes immediately (smooth ~5.8ms micro-fade).

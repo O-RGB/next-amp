@@ -1,7 +1,7 @@
 /**
- * NextAmp Go Native Engine Client
+ * NextStudio Go Native Engine Client
  * 
- * High-performance WebSocket bridge connecting Next-Amp Extension
+ * High-performance WebSocket bridge connecting NextStudio Extension
  * to the standalone Go Native Desktop Engine (ws://127.0.0.1:41919/ws).
  */
 
@@ -95,7 +95,7 @@ export class GoEngineClient {
           clearTimeout(this.reconnectTimer);
           this.reconnectTimer = null;
         }
-        console.log("[NextAmp Go Engine] Connected to", this.url);
+        console.log("[NextStudio Go Engine] Connected to", this.url);
         if (this.onStatusChange) {
           this.onStatusChange("⚡ GO ENGINE (Connected)");
         }
@@ -148,7 +148,7 @@ export class GoEngineClient {
         const msg = JSON.parse(e.data);
         if (msg.type === "READY") {
           this.deviceInfo = msg.device || "Go Native Core";
-          console.log("[NextAmp Go Engine] Handshake READY:", msg);
+          console.log("[NextStudio Go Engine] Handshake READY:", msg);
           if (this.onStatusChange) {
             if (msg.ai_enabled === false) {
               const reason = msg.error ? `: ${String(msg.error).slice(0, 80)}` : "";

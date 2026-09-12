@@ -21,7 +21,7 @@ def main():
     )
     b64_data = base64.b64encode(compressed).decode("ascii")
 
-    title = "NextAmp-DOS"
+    title = "NextStudio-DOS"
     # Format according to itty.bitty.site specs:
     # https://itty.bitty.site/#<title>/data:text/html;charset=utf-8;bxze64,<base64>
     url = f"https://itty.bitty.site/#{title}/data:text/html;charset=utf-8;bxze64,{b64_data}"

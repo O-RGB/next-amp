@@ -5,7 +5,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd "$DIR"
 
 echo "=================================================="
-echo "    NEXT-AMP ENGINE STANDALONE SINGLE-BINARY BUILDER"
+echo "    NEXTSTUDIO ENGINE STANDALONE SINGLE-BINARY BUILDER"
 echo "=================================================="
 
 # 1. Pack & Encrypt model + libraries only when a source asset is newer.

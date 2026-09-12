@@ -483,7 +483,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(HealthResponse{
 		Status:    "running",
-		Engine:    "Next-Amp Go Native Engine (Eco AI)",
+		Engine:    "NextStudio Go Native Engine (Eco AI)",
 		Version:   Version,
 		AIEnabled: aiActive,
 		Device:    dev,
@@ -600,8 +600,8 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		globalDashboard.SetClient(clientAddr, true)
 		defer globalDashboard.SetClient("", false)
 	} else {
-		fmt.Printf("\n[+] \033[1;32mNext-Amp Connected!\033[0m (%s)\n", clientAddr)
-		defer fmt.Println("\n[-] Next-Amp Client Disconnected")
+		fmt.Printf("\n[+] \033[1;32mNextStudio Connected!\033[0m (%s)\n", clientAddr)
+		defer fmt.Println("\n[-] NextStudio Client Disconnected")
 	}
 
 	devInfo := "Go Native Core (Loopback)"
@@ -614,7 +614,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Send Welcome Handshake
 	welcomeMsg := map[string]interface{}{
 		"type":       "READY",
-		"engine":     "Next-Amp Go Native Engine (Eco AI)",
+		"engine":     "NextStudio Go Native Engine (Eco AI)",
 		"version":    Version,
 		"device":     devInfo,
 		"ai_enabled": globalAI != nil && globalAI.enabled,

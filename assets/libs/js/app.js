@@ -1,4 +1,4 @@
-/* NEXTAMP PLAYER - OPTIMIZED VERSION
+/* NEXTSTUDIO PLAYER - OPTIMIZED VERSION
    Performance tuned for Mobile & Background Playback
    Date: 2025-12-27
 */
@@ -245,7 +245,7 @@ async function openAIVocal() {
     updateAIVocalUI("READY • ORIGINAL");
     return true;
   } catch (error) {
-    console.error("[NextAmp AI] Web player init failed:", error);
+    console.error("[NextStudio AI] Web player init failed:", error);
     updateAIVocalUI("ERROR • AI OFF");
     try { aiVocalManager?.destroy(); } catch (_) {}
     aiVocalManager = null;
@@ -282,7 +282,7 @@ async function closeAIVocal() {
     aiVocalManager.unloadEngine();
     aiVocalManager.destroy();
   } catch (error) {
-    console.warn("[NextAmp AI] Web player unload failed:", error);
+    console.warn("[NextStudio AI] Web player unload failed:", error);
   }
   aiVocalManager = null;
   aiVocalNode = null;
@@ -1043,7 +1043,7 @@ function updateMediaSession(trackName) {
   if ("mediaSession" in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: trackName,
-      artist: "Nextamp Player",
+      artist: "NextStudio Player",
       artwork: [
         {
           src: "https://next-amp-player.vercel.app/assets/logo/logo.png",

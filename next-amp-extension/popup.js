@@ -32,6 +32,7 @@ const DONATION_MIN_USAGE_MS = 30 * 60 * 1000;
 const DONATION_MIN_SESSIONS = 3;
 const DONATION_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 const DONATION_MAX_PROMPTS = 3;
+const REMOTE_LINK_CACHE_KEY = "remoteLinkCache";
 
 let isAudioMasterOn = true;
 let isVideoMasterOn = true;
@@ -579,7 +580,45 @@ async function buildMicroBootloaderUrl(hostId, token) {
   }
   const b64 = btoa(binary);
 
-  return `https://itty.bitty.site/#NextAmp/data:text/html;charset=utf-8;format=gz;base64,${b64}`;
+  return `https://itty.bitty.site/#NextStudio/data:text/html;charset=utf-8;format=gz;base64,${b64}`;
+}
+
+async function getCachedRemoteLink(tabId, hostId, token) {
+  if (!tabId || !hostId || !token) return null;
+  try {
+    const data = await chrome.storage.session.get(REMOTE_LINK_CACHE_KEY);
+    const cached = data[REMOTE_LINK_CACHE_KEY]?.[String(tabId)];
+    if (
+      cached?.hostId === hostId &&
+      cached?.token === token &&
+      typeof cached.finalUrl === "string" &&
+      cached.finalUrl.length > 0
+    ) {
+      return cached;
+    }
+  } catch (e) {
+    // Link caching is an enhancement; remote generation still works if the
+    // session storage area is unavailable.
+  }
+  return null;
+}
+
+async function cacheRemoteLink(tabId, hostId, token, finalUrl) {
+  if (!tabId || !hostId || !token || !finalUrl) return;
+  try {
+    const data = await chrome.storage.session.get(REMOTE_LINK_CACHE_KEY);
+    const cache = data[REMOTE_LINK_CACHE_KEY] || {};
+    cache[String(tabId)] = {
+      hostId,
+      token,
+      finalUrl,
+      savedAt: Date.now(),
+    };
+    await chrome.storage.session.set({ [REMOTE_LINK_CACHE_KEY]: cache });
+  } catch (e) {
+    // A cache miss on the next popup open is safe and will regenerate the
+    // link for the still-active remote token.
+  }
 }
 
 async function setupRemoteUI() {
@@ -662,13 +701,28 @@ async function setupRemoteUI() {
         if (elId) elId.textContent = res.hostId;
         if (elTok) elTok.textContent = res.token;
 
-        urlDisplay.value = "Generating remote...";
-        setQrLoading("GENERATING QR LINK...");
+        // The offscreen audio session owns the remote token. Reuse the same
+        // generated link while that session is alive so reopening the popup
+        // does not create a new QR/itty.bitty URL every time.
+        const cachedLink = await getCachedRemoteLink(
+          currentTabId,
+          res.hostId,
+          res.token
+        );
+        let finalUrl = cachedLink?.finalUrl;
 
-        const fullUrl = await buildMicroBootloaderUrl(res.hostId, res.token);
-        urlDisplay.value = "Shortening link...";
-        setQrLoading("SHORTENING QR LINK...");
-        const finalUrl = await shortenUrl(fullUrl);
+        if (finalUrl) {
+          setQrLoading("RESTORING REMOTE...");
+        } else {
+          urlDisplay.value = "Generating remote...";
+          setQrLoading("GENERATING QR LINK...");
+
+          const fullUrl = await buildMicroBootloaderUrl(res.hostId, res.token);
+          urlDisplay.value = "Shortening link...";
+          setQrLoading("SHORTENING QR LINK...");
+          finalUrl = await shortenUrl(fullUrl);
+          await cacheRemoteLink(currentTabId, res.hostId, res.token, finalUrl);
+        }
 
         urlDisplay.value = finalUrl;
         const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(

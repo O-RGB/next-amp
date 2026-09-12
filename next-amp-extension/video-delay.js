@@ -29,7 +29,7 @@
         .toast.remote .source { color:#eadcf8 }
         .toast.loading .source { color:#ffcc00 }
       </style>
-      <div class="toast" role="status" aria-live="polite"><div class="bar"><span class="title"><span class="led">●</span><span>NEXT-AMP</span></span><span class="source">ACTION</span></div><div class="body"><span class="icon">✓</span><span class="text"></span></div></div>`;
+      <div class="toast" role="status" aria-live="polite"><div class="bar"><span class="title"><span class="led">●</span><span>NEXTSTUDIO</span></span><span class="source">ACTION</span></div><div class="body"><span class="icon">✓</span><span class="text"></span></div></div>`;
     (document.body || document.documentElement).appendChild(host);
     return host;
   }

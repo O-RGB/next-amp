@@ -1,5 +1,5 @@
 /**
- * NextAmp AI Vocal Engine - Direct Offscreen Orchestrator
+ * NextStudio AI Vocal Engine - Direct Offscreen Orchestrator
  * Runs directly in offscreen.html context with hardware-accelerated WebGL/WebGPU.
  * Non-blocking async architecture: Worklet connects instantly in 2ms, model streams in background.
  */
@@ -27,7 +27,7 @@ const MAX_INPUT_HISTORY = 2048;
 const MAX_BROWSER_FRAMES = 18;
 // Detail is the listening-tested production baseline. The reference timeline
 // remains available only as an internal candidate because exact DSP parity
-// did not make it compatible with the model weights used by NextAmp.
+// did not make it compatible with the model weights used by NextStudio.
 const DEFAULT_VOCAL_PROFILE = "ai_remove";
 // Isolated Web listening candidate: compare two predictions of the same
 // absolute frames from the existing full model output. This does not enable
@@ -508,7 +508,7 @@ export class AIVocalManager {
           return description;
         }
       } catch (error) {
-        console.debug("[NextAmp AI] WebGPU adapter details unavailable:", error);
+        console.debug("[NextStudio AI] WebGPU adapter details unavailable:", error);
       }
     }
 
@@ -1398,14 +1398,14 @@ export class AIVocalManager {
       // Truly Lazy: DO NOT load 15MB model or start GPU on startup if in bypass (OFF)!
       if (this.currentMode !== "bypass") {
         this.loadEngine().catch((err) => {
-          console.error("[NextAmp AI] Background engine load error:", err);
+          console.error("[NextStudio AI] Background engine load error:", err);
         });
       }
 
       return this.workletNode;
     } catch (err) {
       if (this.destroyed) return null;
-      console.error("[NextAmp AI] Worklet creation failed:", err);
+      console.error("[NextStudio AI] Worklet creation failed:", err);
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: Worklet");
       return null;
@@ -1459,14 +1459,14 @@ export class AIVocalManager {
           ? "readback-timeout" : "webgpu-processing-error";
         this.diagnostics.lastRecoveryReason = reason;
         this.setStatus("Recovering AI...");
-        console.warn("[NextAmp AI] Recoverable GPU processing fault:", err);
+        console.warn("[NextStudio AI] Recoverable GPU processing fault:", err);
         try {
           await this.requestWebGpuRecovery(reason);
         } catch (recoveryError) {
-          console.error("[NextAmp AI] WebGPU recovery failed:", recoveryError);
+          console.error("[NextStudio AI] WebGPU recovery failed:", recoveryError);
         }
       } else {
-        console.error("[NextAmp AI] Queue processing error:", err);
+        console.error("[NextStudio AI] Queue processing error:", err);
       }
     } finally {
       this.isBusy = false;
@@ -1698,16 +1698,16 @@ export class AIVocalManager {
       this.diagnostics.webGpuDeviceLosses++;
       this.diagnostics.lastRecoveryReason = "device-lost";
       this.diagnostics.lastRecoveryStartedAt = Date.now();
-      console.warn("[NextAmp AI] WebGPU device lost:", info?.reason || info?.message || info);
+      console.warn("[NextStudio AI] WebGPU device lost:", info?.reason || info?.message || info);
       this.requestWebGpuRecovery("device-lost").catch(error => {
-        console.error("[NextAmp AI] Device-loss recovery failed:", error);
+        console.error("[NextStudio AI] Device-loss recovery failed:", error);
       });
     }).catch(error => {
       // A rejected lost promise is still a provider failure, but do not let
       // the diagnostic watcher create an unhandled rejection.
       if (this.destroyed || watchedEpoch !== this.engineEpoch) return;
       this.diagnostics.webGpuDeviceLosses++;
-      console.warn("[NextAmp AI] WebGPU device-loss watcher rejected:", error);
+      console.warn("[NextStudio AI] WebGPU device-loss watcher rejected:", error);
     });
   }
 
@@ -1759,14 +1759,14 @@ export class AIVocalManager {
         const wasmBuf = await loadProtectedAsset(simdUrl);
         const instantiated = await WebAssembly.instantiate(wasmBuf, { env: {} });
         instance = instantiated.instance;
-        console.log("[NextAmp AI] Loaded SIMD STFT WASM");
+        console.log("[NextStudio AI] Loaded SIMD STFT WASM");
       } catch (simdErr) {
-        console.warn("[NextAmp AI] SIMD WASM failed, falling back to scalar:", simdErr);
+        console.warn("[NextStudio AI] SIMD WASM failed, falling back to scalar:", simdErr);
         const scalarUrl = chrome.runtime.getURL("modules/ai-vocal/stft_scalar.wasm");
         const wasmBuf = await loadProtectedAsset(scalarUrl);
         const instantiated = await WebAssembly.instantiate(wasmBuf, { env: {} });
         instance = instantiated.instance;
-        console.log("[NextAmp AI] Loaded Scalar STFT WASM fallback");
+        console.log("[NextStudio AI] Loaded Scalar STFT WASM fallback");
       }
       this.wasmInstance = instance;
       this.exp = instance.exports;
@@ -1835,7 +1835,7 @@ export class AIVocalManager {
             return "webgpu";
           }
         } catch (webgpuErr) {
-          console.warn("[NextAmp AI] WebGPU unavailable:", webgpuErr);
+          console.warn("[NextStudio AI] WebGPU unavailable:", webgpuErr);
         }
         return "";
       };
@@ -1871,14 +1871,14 @@ export class AIVocalManager {
             if (!selected || tf.getBackend() !== "webgl") throw new Error("WebGL 2 backend was not selected");
             await tf.ready();
           } catch (e2) {
-            console.warn("[NextAmp AI] WebGL 2 failed, falling back to WebGL 1:", e2);
+            console.warn("[NextStudio AI] WebGL 2 failed, falling back to WebGL 1:", e2);
             tf.env().set("WEBGL_VERSION", 1);
             const selected = await tf.setBackend("webgl");
             if (!selected || tf.getBackend() !== "webgl") throw new Error("WebGL 1 backend was not selected");
             await tf.ready();
           }
         } catch (webglErr) {
-          console.warn("[NextAmp AI] WebGL failed completely, falling back to CPU:", webglErr);
+          console.warn("[NextStudio AI] WebGL failed completely, falling back to CPU:", webglErr);
           await tf.setBackend("cpu");
           await tf.ready();
         }
@@ -1909,7 +1909,7 @@ export class AIVocalManager {
       // Early fast check before loading model. A cached benchmark is only a
       // historical hint and must never become a live warning by itself.
       if (currentBackend === "cpu" || deviceLabel.includes("SwiftShader")) {
-        console.warn("[NextAmp AI] Software rendering detected (CPU / SwiftShader)");
+        console.warn("[NextStudio AI] Software rendering detected (CPU / SwiftShader)");
         this.isHardwareSlow = true;
         this.benchmarkMs = 2500;
         this.startupBenchmarkSlow = true;
@@ -1933,7 +1933,7 @@ export class AIVocalManager {
             // Keep the number for diagnostics, but wait for the current
             // session's live samples before showing GPU Slow.
             this.benchmarkMs = cached.benchmarkMs;
-            console.log("[NextAmp AI] Cached GPU benchmark retained as history only");
+            console.log("[NextStudio AI] Cached GPU benchmark retained as history only");
           }
         } catch (_) {}
       }
@@ -1999,7 +1999,7 @@ export class AIVocalManager {
           await runWarmup();
         } catch (error) {
           if (!modelLoader.foldedCount) throw error;
-          console.warn("[NextAmp AI] Native dilation warmup failed; retrying original graph", error);
+          console.warn("[NextStudio AI] Native dilation warmup failed; retrying original graph", error);
           if (this.model) this.model.dispose();
           this.model = null;
           modelLoader.disableOptimization();
@@ -2013,7 +2013,7 @@ export class AIVocalManager {
 
       const fallbackToWebGL = async () => {
         if (currentBackend !== "webgpu") return false;
-        console.warn("[NextAmp AI] WebGPU model path failed; retrying with WebGL");
+        console.warn("[NextStudio AI] WebGPU model path failed; retrying with WebGL");
         if (this.model) {
           try { this.model.dispose(); } catch (_) {}
           this.model = null;
@@ -2038,7 +2038,7 @@ export class AIVocalManager {
 
       const fallbackToWebGPU = async () => {
         if (currentBackend !== "webgl" || !preferWebGlForPowerMode) return false;
-        console.warn("[NextAmp AI] WebGL model path failed; retrying with WebGPU");
+        console.warn("[NextStudio AI] WebGL model path failed; retrying with WebGPU");
         if (this.model) {
           try { this.model.dispose(); } catch (_) {}
           this.model = null;
@@ -2064,7 +2064,7 @@ export class AIVocalManager {
       this.modelGraphExplicitPads = modelLoader.explicitPadCount;
       this.modelOutputHead = modelLoader.outputHead;
       if (modelLoader.foldedCount || modelLoader.explicitPadCount) {
-        console.log(`[NextAmp AI] Optimized model graph: removed ${modelLoader.foldedCount * 2} data-reordering nodes and ${modelLoader.explicitPadCount} standalone padding nodes (unchanged weights)`);
+        console.log(`[NextStudio AI] Optimized model graph: removed ${modelLoader.foldedCount * 2} data-reordering nodes and ${modelLoader.explicitPadCount} standalone padding nodes (unchanged weights)`);
       }
 
       // Check if cancelled/unloaded while downloading/loading model
@@ -2088,7 +2088,7 @@ export class AIVocalManager {
         if (loadEpoch !== this.engineEpoch || this.destroyed) {
           throw new Error("AI engine load was superseded");
         }
-        console.log(`[NextAmp AI] ${currentBackend.toUpperCase()} pipeline pre-warmed`);
+        console.log(`[NextStudio AI] ${currentBackend.toUpperCase()} pipeline pre-warmed`);
       } catch (warmErr) {
         if (loadEpoch !== this.engineEpoch || this.destroyed) throw warmErr;
         if (!(await fallbackToWebGL()) && !(await fallbackToWebGPU())) {
@@ -2110,7 +2110,7 @@ export class AIVocalManager {
         benchMask.dispose();
         benchmarkMs = Math.round(performance.now() - tBench0);
         this.benchmarkMs = benchmarkMs;
-        console.log(`[NextAmp AI] Hardware benchmark 1-chunk: ${benchmarkMs}ms on ${this.backendName}`);
+        console.log(`[NextStudio AI] Hardware benchmark 1-chunk: ${benchmarkMs}ms on ${this.backendName}`);
 
         this.startupBenchmarkSlow = benchmarkMs > 185;
         this.isHardwareSlow = this.startupBenchmarkSlow;
@@ -2134,7 +2134,7 @@ export class AIVocalManager {
           }).catch(() => {});
         } catch (_) {}
       } catch (benchErr) {
-        console.warn("[NextAmp AI] Benchmark test error:", benchErr);
+        console.warn("[NextStudio AI] Benchmark test error:", benchErr);
       }
 
       if (loadEpoch !== this.engineEpoch || this.destroyed || !this.engineLoading) {
@@ -2145,7 +2145,7 @@ export class AIVocalManager {
         return;
       }
 
-      console.log(`[NextAmp AI] Engine ready with hardware: ${this.backendName}`);
+      console.log(`[NextStudio AI] Engine ready with hardware: ${this.backendName}`);
       this.lastError = null;
       this.isReady = true;
       this.queueFaulted = false;
@@ -2164,7 +2164,7 @@ export class AIVocalManager {
         this.postPowerModeBoundary();
         if (!this.powerModeSwitchPromise) {
           this.requestPowerModeReload().catch((error) => {
-            console.warn("[NextAmp AI] Deferred power mode reload failed:", error);
+            console.warn("[NextStudio AI] Deferred power mode reload failed:", error);
           });
         }
         return;
@@ -2186,7 +2186,7 @@ export class AIVocalManager {
     } catch (err) {
       if (this.destroyed || loadEpoch !== this.engineEpoch) return;
       this.engineLoading = false;
-      console.error("[NextAmp AI] Engine load failed:", err);
+      console.error("[NextStudio AI] Engine load failed:", err);
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: " + this.lastError.substring(0, 18));
     }
@@ -2556,7 +2556,7 @@ export class AIVocalManager {
       if (err?.recoverable === true) {
         throw err;
       }
-      console.error("[NextAmp AI] processChunk error:", err);
+      console.error("[NextStudio AI] processChunk error:", err);
       this.lastError = err.message || err.toString();
       this.setStatus("ERR: " + this.lastError.substring(0, 16));
     }
@@ -2639,7 +2639,7 @@ export class AIVocalManager {
       });
     }
     webGpuRecoveryCoordinator.releaseBackendIfUnused();
-    console.log("[NextAmp AI] Model unloaded & GPU memory freed");
+    console.log("[NextStudio AI] Model unloaded & GPU memory freed");
   }
 
   setEngineType(type) {
@@ -2652,7 +2652,7 @@ export class AIVocalManager {
     this.engineType = valid;
     this.resetGoBufferTuning();
     this.streamChunkFloor = null;
-    console.log("[NextAmp AI] Switched engine to:", this.engineType);
+    console.log("[NextStudio AI] Switched engine to:", this.engineType);
     if (this.workletNode) {
       this.workletNode.port.postMessage({
         type: "SET_ENGINE",
@@ -2711,7 +2711,7 @@ export class AIVocalManager {
           this.setStatus("Loading Model (15MB)...");
           if (!this.engineLoading) {
             this.loadEngine().catch((err) => {
-              console.error("[NextAmp AI] Lazy engine load error:", err);
+              console.error("[NextStudio AI] Lazy engine load error:", err);
             });
           }
         } else {
