@@ -1,5 +1,13 @@
 let creating;
 
+// Open a small first-run welcome page after a real installation. Chrome only
+// emits reason="install" once for an extension install, so normal popup use,
+// service-worker wakeups, and extension reloads do not interrupt the user.
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason !== "install") return;
+  chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
+});
+
 async function setMap(playerTabId, sourceTabId) {
   const data = await chrome.storage.session.get("playerMap");
   const map = data.playerMap || {};

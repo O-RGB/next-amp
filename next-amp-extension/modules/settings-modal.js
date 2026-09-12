@@ -222,7 +222,7 @@ export class SettingsModal {
     const donateAboutBtn = $("#btn-donate-about");
     if (donateAboutBtn) {
       donateAboutBtn.onclick = () => {
-        chrome.tabs.create({ url: "https://ganknow.com/nextfeeder/tip" });
+        chrome.tabs.create({ url: "https://ganknow.com/nextfeederlabs/tip" });
       };
     }
 

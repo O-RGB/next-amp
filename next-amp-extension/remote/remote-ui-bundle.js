@@ -676,7 +676,7 @@ select {
 
   <!-- DONATE BUTTON (FULL WIDTH, NO HEADER PANEL) -->
   <a
-    href="https://ganknow.com/nextfeeder/tip"
+    href="https://ganknow.com/nextfeederlabs/tip"
     target="_blank"
     rel="noopener noreferrer"
     id="btn-donate-remote"

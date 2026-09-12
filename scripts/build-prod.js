@@ -414,6 +414,12 @@ playerHtml = playerHtml.replace('src="player.js"', `src="${FILE_NAMES.player}"`)
 fs.writeFileSync(path.join(DIST_DIR, 'player.html'), minifyHtml(playerHtml), 'utf8');
 console.log('    ✓ player.html minified (1-line .min)');
 
+// 4. welcome.html — static first-run page opened by runtime.onInstalled.
+let welcomeHtml = fs.readFileSync(path.join(SRC_DIR, 'welcome.html'), 'utf8');
+welcomeHtml = welcomeHtml.replace('./assets/logo.png', './' + FILE_NAMES.logo);
+fs.writeFileSync(path.join(DIST_DIR, 'welcome.html'), minifyHtml(welcomeHtml), 'utf8');
+console.log('    ✓ welcome.html minified');
+
 // Process Manifest.json
 const manifest = JSON.parse(fs.readFileSync(path.join(SRC_DIR, 'manifest.json'), 'utf8'));
 manifest.action.default_popup = 'popup.html';

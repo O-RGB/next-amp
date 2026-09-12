@@ -27,7 +27,7 @@ const PRESETS = {
   voice: [-2, -1, 0, 2, 4, 4, 3, 1, 0, 0],
 };
 const AI_WARNING_MAX_AGE_MS = 10 * 60 * 1000;
-const DONATION_URL = "https://ganknow.com/nextfeeder/tip";
+const DONATION_URL = "https://ganknow.com/nextfeederlabs/tip";
 const DONATION_MIN_USAGE_MS = 30 * 60 * 1000;
 const DONATION_MIN_SESSIONS = 3;
 const DONATION_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
@@ -160,121 +160,6 @@ function notifyAction(key, value, { source = "local", immediate = false, groupOv
   }
 }
 
-async function checkTabStatus(tab) {
-  if (!tab || !tab.id) {
-    return { ok: false, reason: "no_tab" };
-  }
-
-  if (!tab.url) {
-    return { ok: false, reason: "unsupported", tabId: tab.id };
-  }
-
-  let parsedUrl;
-  try {
-    parsedUrl = new URL(tab.url);
-  } catch (e) {
-    return { ok: false, reason: "unsupported", tabId: tab.id };
-  }
-
-  const isHttpOrHttps =
-    parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
-  const isRestricted =
-    parsedUrl.hostname === "chrome.google.com" ||
-    parsedUrl.hostname === "chromewebstore.google.com" ||
-    parsedUrl.protocol.startsWith("chrome") ||
-    parsedUrl.protocol.startsWith("edge") ||
-    parsedUrl.protocol.startsWith("about");
-
-  if (!isHttpOrHttps || isRestricted) {
-    return { ok: false, reason: "unsupported", tabId: tab.id, url: tab.url };
-  }
-
-  // Ping content script to verify if tab was loaded before extension was installed/reloaded
-  const hasContentScript = await new Promise((resolve) => {
-    try {
-      chrome.tabs.sendMessage(tab.id, { type: "PING" }, (response) => {
-        if (chrome.runtime.lastError || !response || !response.pong) {
-          resolve(false);
-        } else {
-          resolve(true);
-        }
-      });
-      setTimeout(() => resolve(false), 300);
-    } catch (e) {
-      resolve(false);
-    }
-  });
-
-  if (!hasContentScript) {
-    return { ok: false, reason: "needs_reload", tabId: tab.id };
-  }
-
-  return { ok: true, tabId: tab.id };
-}
-
-function showTabStatusModal(status, tab) {
-  const overlay = $("#tab-status-overlay");
-  if (!overlay) return;
-
-  const titleText = $("#tab-status-title-text");
-  const titleIcon = $("#tab-status-title-icon");
-  const icon = $("#tab-status-icon");
-  const desc = $("#tab-status-desc");
-  const btnAction = $("#btn-tab-status-action");
-  const btnActionText = $("#btn-tab-status-action-text");
-  const btnActionIcon = $("#btn-tab-status-action-icon");
-  const btnDismiss = $("#btn-tab-status-dismiss");
-  const btnClose = $("#btn-close-tab-status");
-
-  if (status.reason === "unsupported") {
-    if (titleText) titleText.textContent = "OPEN A MEDIA TAB";
-    if (titleIcon)
-      titleIcon.className = "ph-bold ph-monitor-play text-yellow-400";
-    if (icon) icon.className = "ph-bold ph-monitor-play";
-    if (desc)
-      desc.textContent =
-        "To get started with Next-Amp, please open a music or video website like YouTube.";
-    if (btnActionText) btnActionText.textContent = "OPEN YOUTUBE";
-    if (btnActionIcon) btnActionIcon.className = "ph-bold ph-monitor-play";
-    if (btnAction) {
-      btnAction.onclick = () => {
-        chrome.tabs.create({ url: "https://www.youtube.com/" });
-        window.close();
-      };
-    }
-  } else {
-    if (titleText) titleText.textContent = "TAB RELOAD REQUIRED";
-    if (titleIcon)
-      titleIcon.className = "ph-bold ph-arrows-clockwise text-yellow-400";
-    if (icon) icon.className = "ph-bold ph-arrows-clockwise";
-    if (desc)
-      desc.textContent =
-        "Kindly refresh the tab after installation to ensure Next-Amp audio capture and video controls work smoothly.";
-    if (btnActionText) btnActionText.textContent = "REFRESH THE TAB";
-    if (btnActionIcon) btnActionIcon.className = "ph-bold ph-arrows-clockwise";
-    if (btnAction) {
-      btnAction.onclick = () => {
-        if (tab && tab.id) chrome.tabs.reload(tab.id);
-        window.close();
-      };
-    }
-  }
-
-  const dismissModal = () => {
-    overlay.classList.remove("active");
-    isTabReady = true;
-    if (isAudioMasterOn && currentTabId) {
-      initCapture(sessionManager.sessionMode);
-    }
-    checkFirstLaunchModal();
-  };
-
-  if (btnDismiss) btnDismiss.onclick = dismissModal;
-  if (btnClose) btnClose.onclick = dismissModal;
-
-  overlay.classList.add("active");
-}
-
 async function checkFirstLaunchModal() {
   const data = await chrome.storage.local.get(["hasSeenWelcomeDonateModal"]);
   if (!data.hasSeenWelcomeDonateModal) {
@@ -289,7 +174,7 @@ async function checkFirstLaunchModal() {
       chrome.storage.local.set({ hasSeenWelcomeDonateModal: true });
       overlay.classList.remove("active");
       if (openLink) {
-        chrome.tabs.create({ url: "https://ganknow.com/nextfeeder/tip" });
+        chrome.tabs.create({ url: DONATION_URL });
       }
     };
 
@@ -370,15 +255,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) currentTabId = tab.id;
 
-  // Check tab status (Tab reload check like in ai remove)
-  const tabStatus = await checkTabStatus(tab);
-  if (!tabStatus.ok) {
-    isTabReady = false;
-    showTabStatusModal(tabStatus, tab);
-  } else {
-    isTabReady = true;
-    checkFirstLaunchModal();
-  }
+  // Audio capture is not limited to media websites. Let the capture request
+  // decide whether the current tab is supported instead of blocking on a
+  // YouTube/media-tab gate or requiring a content-script ping.
+  isTabReady = true;
+  checkFirstLaunchModal();
 
   sessionManager = new SessionManager(currentTabId);
   settingsModal = new SettingsModal(db, {

@@ -264,7 +264,6 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 /* Modal and other styles remain same ... */
 #modal-overlay,
 #session-mode-overlay,
-#tab-status-overlay,
 #first-launch-overlay,
 #usage-donate-overlay,
 #ai-slow-overlay,
@@ -281,7 +280,6 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 
 #modal-overlay.active,
 #session-mode-overlay.active,
-#tab-status-overlay.active,
 #first-launch-overlay.active,
 #usage-donate-overlay.active,
 #ai-slow-overlay.active,

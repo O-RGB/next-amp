@@ -767,12 +767,12 @@ function applyParamToSession(session, key, value, index, source) {
       if (session.aiVocal) {
         if (!params.isVocalOn) {
           session.aiVocal.unloadEngine();
+        } else if (params.vocalMode && params.vocalMode !== "bypass") {
+          session.aiVocal.setMode(params.vocalMode);
         } else {
-          if (params.vocalMode && params.vocalMode !== "bypass") {
-            session.aiVocal.setMode(params.vocalMode);
-          } else {
-            session.aiVocal.preloadEngine();
-          }
+          // ORIGINAL is a true lazy state. Keep the master toggle ON, but do
+          // not load the 15MB model until Karaoke/Acapella is selected.
+          session.aiVocal.unloadEngine();
         }
       }
       break;
@@ -1034,12 +1034,12 @@ function applyAllParams(session) {
     if (params.vocalProfile) session.aiVocal.setVocalProfile(params.vocalProfile);
     if (!params.isVocalOn) {
       session.aiVocal.unloadEngine();
+    } else if (params.vocalMode && params.vocalMode !== "bypass") {
+      session.aiVocal.setMode(params.vocalMode);
     } else {
-      if (params.vocalMode && params.vocalMode !== "bypass") {
-        session.aiVocal.setMode(params.vocalMode);
-      } else {
-        session.aiVocal.preloadEngine();
-      }
+      // Preserve ON | ORIGINAL without starting a needless model load during
+      // popup/session restoration. AI starts when a processing mode is chosen.
+      session.aiVocal.unloadEngine();
     }
   }
 }
