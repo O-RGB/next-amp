@@ -441,7 +441,7 @@
               UTILITIES
             </div>
             <div class="flex flex-col gap-1 mt-0.5">
-              <div class="flex items-center gap-1">
+              <div class="hidden flex items-center gap-1">
                 <span class="text-[8px] text-gray-500 w-8">ID:</span
                 ><input
                   type="text"
@@ -509,7 +509,7 @@
                 <div class="text-[10px] font-bold text-white">
                   NEXTSTUDIO EXTENSION
                 </div>
-                <div class="text-[8px] text-gray-400">Version 4.5.1</div>
+                <div class="text-[8px] text-gray-400">Version 1.0</div>
               </div>
               <p class="text-[8px] text-gray-500 px-4">
                 Advanced audio processing & real-time visualizer.
@@ -530,6 +530,25 @@
                   <span>BUY ME A COFFEE</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="record-delete-overlay" class="record-delete-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="record-delete-title">
+        <div class="win-border-out session-dialog shadow-2xl">
+          <div class="theme-bar">
+            <span class="flex items-center gap-1" id="record-delete-title">
+              <i class="ph-bold ph-trash text-red-400"></i>
+              <span>DELETE RECORDING</span>
+            </span>
+            <button id="btn-record-delete-close" class="win-btn text-red-900 font-bold bg-[#e0e0e0]" aria-label="Close">X</button>
+          </div>
+          <div class="bg-[#222] p-3 flex flex-col gap-3 items-center text-center">
+            <p id="record-delete-message" class="text-[9px] text-gray-300 leading-tight m-0"></p>
+            <div class="flex gap-2 w-full">
+              <button id="btn-record-delete-cancel" class="win-btn flex-1 h-5 text-[8px] font-bold">CANCEL</button>
+              <button id="btn-record-delete-confirm" class="win-btn flex-1 h-5 text-[8px] font-bold text-white bg-red-800">DELETE</button>
             </div>
           </div>
         </div>

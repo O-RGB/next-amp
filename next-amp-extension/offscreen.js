@@ -559,6 +559,16 @@ async function stopAudio(tabId) {
   session.donationUsageClosed = true;
   if (session.remoteConns) session.remoteConns.forEach((c) => c.close());
 
+  // Finish an active recording before the session is torn down. Closing the
+  // popup normally does not reach here, but an explicit audio shutdown should
+  // never discard the chunks that have already been captured.
+  if (
+    session.mediaRecorder &&
+    session.mediaRecorder.state === "recording"
+  ) {
+    try { session.mediaRecorder.stop(); } catch (_) {}
+  }
+
   chrome.runtime
     .sendMessage({ type: "BG_RESET_DELAY", tabId: tabId })
     .catch(() => {});

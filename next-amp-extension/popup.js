@@ -454,7 +454,13 @@ async function finalizeInitialization() {
   if (state && state.isAudioActive) {
     loadAudioState(state);
     isAudioMasterOn = true;
+    // The popup is recreated every time it is reopened. Restore the recorder
+    // state from the offscreen session instead of trusting the new popup's
+    // default (false) value. Otherwise a still-recording MediaRecorder looks
+    // like REC locally, and the next START_RECORDING is rejected as busy.
+    syncRecordingUI(state.isRecording === true);
   } else {
+    syncRecordingUI(false);
     if (isAudioMasterOn && isTabReady) {
       initCapture(sessionManager.sessionMode);
     }
@@ -1250,49 +1256,52 @@ function sendParam(key, value, index = null) {
 }
 
 async function toggleRecording() {
-  const btnRecTop = $("#btn-rec-top");
-  const recIndicator = $("#rec-indicator");
   if (!isRecording) {
     const success = await sendMessageWithRetry({
       type: "START_RECORDING",
       tabId: currentTabId,
     });
     if (success) {
-      isRecording = true;
-      settingsModal.updateRecordStatus(true);
-      btnRecTop.textContent = "STOP";
-      btnRecTop.classList.remove("text-red-900");
-      btnRecTop.classList.add("bg-red-600", "text-white");
-      if (recIndicator) recIndicator.classList.remove("hidden");
+      syncRecordingUI(true);
+    } else {
+      // Recover from a stale popup state (for example, the popup was closed
+      // while recording). If the offscreen recorder is still active, switch
+      // this popup to STOP instead of issuing more START requests.
+      const state = await sendMessageWithRetry({
+        type: "GET_STATE",
+        tabId: currentTabId,
+      });
+      if (state?.isRecording === true) syncRecordingUI(true);
     }
   } else {
-    isRecording = false;
-    settingsModal.updateRecordStatus(false);
-    if (recIndicator) recIndicator.classList.add("hidden");
-
+    syncRecordingUI(false);
     await sendMessageWithRetry({
       type: "STOP_RECORDING",
       tabId: currentTabId,
     });
-    btnRecTop.textContent = "REC";
-    btnRecTop.classList.remove("bg-red-600", "text-white");
-    btnRecTop.classList.add("text-red-900");
   }
 }
 
-async function handleRecordingSaved() {
+function syncRecordingUI(active) {
+  isRecording = Boolean(active);
+  settingsModal?.updateRecordStatus(isRecording);
+
   const btnRecTop = $("#btn-rec-top");
   const recIndicator = $("#rec-indicator");
-  settingsModal.updateRecordStatus(false);
   if (btnRecTop) {
-    btnRecTop.textContent = "REC";
-    btnRecTop.classList.remove("bg-red-600", "text-white");
-    btnRecTop.classList.add("text-red-900");
+    btnRecTop.textContent = isRecording ? "STOP" : "REC";
+    btnRecTop.classList.toggle("bg-red-600", isRecording);
+    btnRecTop.classList.toggle("text-white", isRecording);
+    btnRecTop.classList.toggle("text-red-900", !isRecording);
+    btnRecTop.setAttribute("aria-label", isRecording ? "Stop recording" : "Start recording");
   }
-  if (recIndicator) recIndicator.classList.add("hidden");
+  if (recIndicator) recIndicator.classList.toggle("hidden", !isRecording);
+}
+
+async function handleRecordingSaved() {
+  syncRecordingUI(false);
   await settingsModal.renderRecordingList();
   settingsModal.showRecordingSaved();
-  isRecording = false;
 }
 
 function setupListeners() {

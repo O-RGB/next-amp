@@ -372,6 +372,16 @@ input[type="range"].h-slider::-webkit-slider-thumb {
   margin-bottom: 2px;
 }
 
+.rec-item.is-playing {
+  border-color: var(--theme-text-sec);
+  background: #171717;
+  box-shadow: inset 2px 0 0 var(--theme-text-sec);
+}
+
+.rec-item.is-playing .rec-icon {
+  color: var(--theme-text-sec);
+}
+
 .rec-icon {
   color: var(--theme-text-sec);
 }
@@ -380,6 +390,21 @@ input[type="range"].h-slider::-webkit-slider-thumb {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.record-delete-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.record-delete-overlay.hidden {
+  display: none;
 }
 
 .tab-content::-webkit-scrollbar {

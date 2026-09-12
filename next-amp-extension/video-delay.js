@@ -124,7 +124,7 @@ class Monitor {
         this.quality = message.value;
         this.delayedVideos.forEach((dv) => dv.updateQuality(this.quality));
       } else if (message.type === "PING") {
-        sendResponse({ pong: true, version: "4.6" });
+        sendResponse({ pong: true, version: "1.0" });
       }
       return true;
     });
