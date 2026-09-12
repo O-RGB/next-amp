@@ -4,52 +4,207 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#071411" />
-    <meta name="description" content="NextStudio Remote Controller — control an active NextStudio session from another device." />
+    <meta name="description" content="NextStudio Remote controller for audio, equalizer, vocal mode and video sync." />
     <meta name="robots" content="noindex, nofollow" />
     <link rel="canonical" href="https://studio.nextfeeder.com/remote/" />
     <link rel="icon" href="../assets/images/logo.png" type="image/png" />
     <link rel="stylesheet" href="../assets/css/remote.css" />
-    <title>Remote Controller — NextStudio</title>
+    <title>NextStudio Remote</title>
   </head>
   <body>
     <a class="skip-link" href="#remote-main" data-i18n="remote.skip">Skip to controls</a>
+
     <main id="remote-main" class="remote-shell">
-      <header class="remote-header">
-        <a class="remote-brand" href="../"><img src="../assets/images/logo.png" width="38" height="38" alt="NextStudio logo" /><span>NextStudio <small data-i18n="remote.brand">REMOTE</small></span></a>
-        <div class="remote-header-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" class="language-button is-active" data-language="en" aria-pressed="true">EN</button><button type="button" class="language-button" data-language="th" aria-pressed="false">TH</button></div><div class="connection-badge is-loading" id="connection-badge" role="status" aria-live="polite"><i></i><span id="connection-label">Initializing</span></div></div>
-      </header>
-      <section class="remote-intro"><div><p class="remote-eyebrow" data-i18n="remote.eyebrow">SESSION CONTROL</p><h1 id="page-title" data-i18n="remote.title">Your session, within reach.</h1><p id="page-description" data-i18n="remote.description">Connect to an active NextStudio session to control the sound and picture from another device.</p></div><div class="session-card"><span data-i18n="remote.session">SESSION</span><strong id="session-label" data-i18n="remote.waiting">Waiting for link</strong><small id="session-detail" data-i18n="remote.tokenHint">The secure session token stays in this page.</small></div></section>
-      <section class="remote-error" id="remote-error" hidden><strong id="error-title" data-i18n="remote.errorTitle">Unable to connect</strong><span id="error-message" data-i18n="remote.errorMessage">Check the Remote link and try again.</span><button type="button" class="remote-button remote-button-quiet" id="retry-button" data-i18n="remote.retry">Try again</button></section>
-      <section class="control-layout" aria-label="Remote controls">
-        <article class="control-panel panel-vocal">
-          <div class="panel-heading"><div><p class="panel-kicker">01 / AI VOCAL</p><h2 data-i18n="remote.voiceMode">Voice mode</h2></div><span class="panel-state" id="vocal-state">ORIGINAL</span></div>
-          <div class="segmented vocal-modes" role="group" aria-label="Vocal mode"><button type="button" data-param="vocalMode" data-value="bypass" data-i18n="remote.original">Original</button><button type="button" data-param="vocalMode" data-value="karaoke" data-i18n="remote.karaoke">Karaoke</button><button type="button" data-param="vocalMode" data-value="acapella" data-i18n="remote.acapella">Acapella</button></div>
-          <div class="panel-row"><div><strong data-i18n="remote.aiVocal">AI vocal</strong><small data-i18n="remote.aiVocalHint">Enable processing on the active session</small></div><button type="button" class="toggle" data-param="isVocalOn" aria-pressed="false"><span></span><b>OFF</b></button></div>
-          <div class="panel-row"><div><strong data-i18n="remote.aiProfile">AI profile</strong><small data-i18n="remote.aiProfileHint">Use the active Extension profile</small></div><span class="readout" id="vocal-profile">ECO</span></div>
-        </article>
-        <article class="control-panel">
-          <div class="panel-heading"><div><p class="panel-kicker">02 / AUDIO</p><h2 data-i18n="remote.shapeSound">Shape the sound</h2></div><span class="panel-state" id="audio-state">READY</span></div>
-          <div class="range-control"><div class="range-label"><span data-i18n="remote.volume">Volume</span><output id="volume-output">100%</output></div><input id="volume-range" data-param="volume" type="range" min="0" max="1" step="0.01" value="1" disabled /></div>
-          <div class="range-control"><div class="range-label"><span data-i18n="remote.balance">Balance</span><output id="pan-output">CENTER</output></div><input id="pan-range" data-param="pan" type="range" min="-1" max="1" step="0.01" value="0" disabled /></div>
-          <div class="range-control"><div class="range-label"><span data-i18n="remote.pitch">Pitch</span><output id="pitch-output">0</output></div><input id="pitch-range" data-param="pitch" type="range" min="-12" max="12" step="1" value="0" disabled /></div>
-          <div class="range-control"><div class="range-label"><span data-i18n="remote.reverb">Reverb</span><output id="reverb-output">0.0</output></div><input id="reverb-range" data-param="reverb" type="range" min="0" max="2" step="0.1" value="0" disabled /></div>
-        </article>
-        <article class="control-panel">
-          <div class="panel-heading"><div><p class="panel-kicker">03 / VIDEO</p><h2 data-i18n="remote.keepSync">Keep it in sync</h2></div><button type="button" class="small-switch" data-param="isVideoMasterOn" aria-pressed="true">VIDEO ON</button></div>
-          <div class="range-control"><div class="range-label"><span data-i18n="remote.delay">Delay</span><output id="delay-output">0.00 s</output></div><input id="delay-range" data-param="videoDelay" type="range" min="0" max="5" step="0.01" value="0" disabled /></div>
-          <div class="range-control"><div class="range-label"><span data-i18n="remote.zoom">Zoom</span><output id="zoom-output">100%</output></div><input id="zoom-range" data-param="videoZoom" type="range" min="1" max="3" step="0.01" value="1" disabled /></div>
-          <div class="range-control"><div class="range-label"><span data-i18n="remote.rotation">Rotation</span><output id="rotate-output">0°</output></div><input id="rotate-range" data-param="videoRotate" type="range" min="0" max="360" step="1" value="0" disabled /></div>
-          <div class="panel-row compact-row"><div><strong data-i18n="remote.videoQuality">Video quality</strong><small data-i18n="remote.videoQualityHint">Leave the active quality unchanged</small></div><select id="quality-select" data-param="videoQuality" disabled><option value="max">Max</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
-        </article>
-        <article class="control-panel panel-status">
-          <div class="panel-heading"><div><p class="panel-kicker">04 / LINK</p><h2 data-i18n="remote.connection">Connection</h2></div><span class="connection-mark" id="connection-mark">—</span></div>
-          <div class="status-metrics"><div><span data-i18n="remote.state">STATE</span><strong id="status-state">Loading</strong></div><div><span data-i18n="remote.roundTrip">ROUND TRIP</span><strong id="rtt-value">—</strong></div><div><span data-i18n="remote.protocol">PROTOCOL</span><strong>DATA ONLY</strong></div></div>
-          <p class="privacy-hint" data-i18n="remote.privacyHint">Remote sends control values only. Audio stays with the active NextStudio session.</p>
-          <div class="status-actions"><button type="button" class="remote-button remote-button-quiet" id="disconnect-button" data-i18n="remote.disconnect">Disconnect</button><a class="remote-button remote-button-link" href="../privacy/" data-i18n="remote.privacy">Privacy</a></div>
-        </article>
-      </section>
-      <footer class="remote-footer"><span>NextFeeder Labs</span><span data-i18n="remote.footer">NextStudio Remote · No audio stream</span><a href="mailto:nextfeeder.ts@gmail.com" data-i18n="remote.support">Support</a></footer>
+      <div class="remote-app" aria-label="NextStudio Remote controls">
+        <div class="reconnect-banner" id="recon-bar" role="status" aria-live="polite" hidden>
+          <span class="reconnect-message"><span class="status-dot is-warning" aria-hidden="true"></span><span id="recon-msg">Contacting host...</span></span>
+          <button class="site-button site-button-small" id="retry-button" type="button" data-i18n="remote.retry">Retry</button>
+        </div>
+
+        <!-- BLOCK 1: AUDIO MASTER -->
+        <section class="remote-block" id="block-audio" aria-labelledby="audio-title">
+          <header class="panel-header" id="bar-audio">
+            <div class="panel-header-start">
+              <button class="site-button site-button-small state-button is-active" id="btn-toggle-audio" type="button" data-param="isAudioMasterOn" aria-pressed="true">ON</button>
+              <h2 id="audio-title"><span class="header-icon" aria-hidden="true">◖</span><span data-i18n="remote.masterAudio">MASTER AUDIO</span></h2>
+            </div>
+            <div class="panel-header-end">
+              <span class="ping-readout" id="txt-ping" aria-label="Round-trip latency">— ms</span>
+              <button class="site-button site-button-small status-button is-active" id="badge-status" type="button">OFFLINE</button>
+            </div>
+          </header>
+
+          <div class="panel-body audio-body" id="body-audio">
+            <div class="control-card">
+              <div class="control-item">
+                <div class="control-heading">
+                  <div class="control-name"><span class="control-icon" aria-hidden="true">◖</span><span data-i18n="remote.volumeShort">VOL</span></div>
+                  <div class="control-actions">
+                    <button class="site-button site-button-small utility-button" id="btn-normalize" type="button" data-param="normalize" aria-pressed="false"><span data-i18n="remote.dyn">DYN</span><span class="state-dot" id="norm-indicator" aria-hidden="true"></span></button>
+                    <button class="site-button site-button-small utility-button" id="btn-mute" type="button" data-param="isAudioMasterOn" aria-pressed="true" data-i18n="remote.mute">MUTE</button>
+                  </div>
+                  <output class="control-value" id="txt-vol" for="main-vol">100%</output>
+                </div>
+                <input class="h-slider" id="main-vol" data-param="volume" type="range" min="0" max="1" step="0.02" value="1" disabled aria-label="Volume" />
+              </div>
+
+              <div class="control-item separated-control">
+                <div class="control-heading">
+                  <div class="control-name"><span class="control-icon" aria-hidden="true">↔</span><span data-i18n="remote.balanceShort">BAL</span></div>
+                  <output class="control-value control-value-secondary" id="txt-pan" for="main-pan">CENTER</output>
+                </div>
+                <input class="h-slider" id="main-pan" data-param="pan" type="range" min="-1" max="1" step="0.1" value="0" disabled aria-label="Balance" />
+              </div>
+            </div>
+
+            <div class="control-card">
+              <div class="control-item">
+                <div class="control-heading">
+                  <div class="control-name"><span class="control-icon" aria-hidden="true">♪</span><span data-i18n="remote.pitchShort">PITCH</span></div>
+                  <output class="control-value control-value-secondary" id="txt-pitch" for="main-pitch">0 ST (Normal)</output>
+                </div>
+                <input class="h-slider" id="main-pitch" data-param="pitch" type="range" min="-12" max="12" step="1" value="0" disabled aria-label="Pitch" />
+              </div>
+
+              <div class="control-item separated-control">
+                <div class="control-heading">
+                  <div class="control-name"><span class="control-icon" aria-hidden="true">∿</span><span data-i18n="remote.reverbShort">REVERB</span></div>
+                  <output class="control-value control-value-secondary" id="txt-verb" for="main-verb">0.0s</output>
+                </div>
+                <input class="h-slider" id="main-verb" data-param="reverb" type="range" min="0" max="2" step="0.1" value="0" disabled aria-label="Reverb" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- DONATE: same position as the Extension Remote -->
+        <a class="donate-strip" id="btn-donate-remote" href="https://ganknow.com/nextfeederlabs/tip" target="_blank" rel="noopener noreferrer">
+          <span aria-hidden="true">☕</span><span data-i18n="remote.donate">Support NextStudio</span><span aria-hidden="true">↗</span>
+        </a>
+
+        <!-- BLOCK 2: EQUALIZER -->
+        <section class="remote-block" id="block-eq" aria-labelledby="eq-title">
+          <header class="panel-header" id="bar-eq">
+            <div class="panel-header-start">
+              <button class="site-button site-button-small state-button is-active" id="btn-eq-toggle" type="button" data-param="isEqOn" aria-pressed="true">ON</button>
+              <h2 id="eq-title"><span class="header-icon" aria-hidden="true">≋</span><span data-i18n="remote.equalizer">EQUALIZER</span></h2>
+            </div>
+            <select class="site-select header-select" id="eq-preset" aria-label="Equalizer preset" disabled>
+              <option value="flat">FLAT</option>
+              <option value="bass">BASS</option>
+              <option value="rock">ROCK</option>
+              <option value="pop">POP</option>
+              <option value="voice">VOICE</option>
+              <option value="custom">USER</option>
+            </select>
+          </header>
+          <div class="panel-body" id="body-eq">
+            <div class="eq-container" id="eq-container" aria-label="10-band equalizer"></div>
+          </div>
+        </section>
+
+        <!-- BLOCK 3: AI VOCAL -->
+        <section class="remote-block" id="block-vocal" aria-labelledby="vocal-title">
+          <header class="panel-header" id="bar-vocal">
+            <div class="panel-header-start">
+              <button class="site-button site-button-small state-button is-active" id="btn-toggle-vocal" type="button" data-param="isVocalOn" aria-pressed="true">ON</button>
+              <h2 id="vocal-title"><span class="header-icon" aria-hidden="true">♩</span><span data-i18n="remote.aiVocalTitle">AI VOCAL</span></h2>
+            </div>
+            <span class="panel-state state-original" id="txt-vocal-status">ORIGINAL</span>
+          </header>
+          <div class="panel-body" id="body-vocal">
+            <div class="control-card vocal-card">
+              <div class="control-name vocal-label"><span class="control-icon" aria-hidden="true">∿</span><span data-i18n="remote.mode">MODE</span></div>
+              <div class="segmented vocal-modes" role="group" aria-label="Vocal mode">
+                <button class="site-button mode-button is-active is-original" id="btn-vocal-bypass" type="button" data-param="vocalMode" data-value="bypass" data-i18n="remote.origShort">ORIG</button>
+                <button class="site-button mode-button" id="btn-vocal-karaoke" type="button" data-param="vocalMode" data-value="karaoke" data-i18n="remote.karaokeShort">KARAOKE</button>
+                <button class="site-button mode-button" id="btn-vocal-acapella" type="button" data-param="vocalMode" data-value="acapella" data-i18n="remote.acapellaShort">ACAPELLA</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- BLOCK 4: VIDEO & SYNC -->
+        <section class="remote-block" id="block-video" aria-labelledby="video-title">
+          <header class="panel-header" id="bar-video">
+            <div class="panel-header-start">
+              <button class="site-button site-button-small state-button is-active" id="btn-toggle-video" type="button" data-param="isVideoMasterOn" aria-pressed="true">ON</button>
+              <h2 id="video-title"><span class="header-icon" aria-hidden="true">▣</span><span data-i18n="remote.videoSync">VIDEO &amp; SYNC</span></h2>
+            </div>
+            <div class="panel-header-end">
+              <select class="site-select header-select" id="video-quality" data-param="videoQuality" aria-label="Video quality" disabled>
+                <option value="max">ORIGINAL (MAX)</option>
+                <option value="high">1080P HD</option>
+                <option value="mid">720P HD</option>
+                <option value="low">320P SAVER</option>
+              </select>
+              <button class="site-button site-button-small reset-button" id="btn-video-reset" type="button" title="Reset video settings" aria-label="Reset video settings">↺</button>
+            </div>
+          </header>
+
+          <div class="panel-body video-body" id="body-video">
+            <div class="control-card delay-card">
+              <div class="control-heading">
+                <div class="control-name delay-label"><span class="control-icon" aria-hidden="true">◷</span><span data-i18n="remote.btDelay">BT AUDIO DELAY</span></div>
+                <span class="micro-label" data-i18n="remote.lipSync">LIP-SYNC TIMECODE</span>
+              </div>
+              <div class="delay-display"><span class="micro-label" data-i18n="remote.offset">OFFSET</span><output class="delay-value" id="txt-video-delay" for="video-delay">0.00s</output></div>
+              <input class="h-slider" id="video-delay" data-param="videoDelay" type="range" min="0" max="5" step="0.05" value="0" disabled aria-label="Bluetooth audio delay" />
+              <div class="delay-actions" role="group" aria-label="Delay adjustments">
+                <button class="site-button site-button-small" id="delay-minus-005" type="button">-0.05s</button>
+                <button class="site-button site-button-small" id="delay-minus-001" type="button">-0.01s</button>
+                <button class="site-button site-button-small is-reset" id="delay-reset" type="button">↺ 0s</button>
+                <button class="site-button site-button-small" id="delay-plus-001" type="button">+0.01s</button>
+                <button class="site-button site-button-small" id="delay-plus-005" type="button">+0.05s</button>
+              </div>
+            </div>
+
+            <div class="video-grid">
+              <div class="control-card video-control-card">
+                <div class="control-heading">
+                  <div class="control-name zoom-label"><span class="control-icon" aria-hidden="true">⌕</span><span data-i18n="remote.zoom">ZOOM</span></div>
+                  <output class="control-value" id="txt-video-zoom" for="video-zoom">100%</output>
+                </div>
+                <div class="micro-label" data-i18n="remote.aspectRatio">ASPECT RATIO</div>
+                <div class="preset-row" role="group" aria-label="Zoom preset">
+                  <button class="site-button site-button-small preset-button is-active" id="btn-zoom-1" type="button">1:1</button>
+                  <button class="site-button site-button-small preset-button" id="btn-zoom-wide" type="button">21:9</button>
+                  <button class="site-button site-button-small preset-button" id="btn-zoom-fill" type="button" data-i18n="remote.fill">FILL</button>
+                </div>
+                <div class="sub-control separated-control">
+                  <div class="micro-label" data-i18n="remote.magnify">MAGNIFY</div>
+                  <input class="h-slider" id="video-zoom" data-param="videoZoom" type="range" min="1" max="3" step="0.05" value="1" disabled aria-label="Video zoom" />
+                </div>
+              </div>
+
+              <div class="control-card video-control-card">
+                <div class="control-heading">
+                  <div class="control-name rotation-label"><span class="control-icon" aria-hidden="true">⟳</span><span data-i18n="remote.rotation">ROTATION</span></div>
+                  <output class="control-value" id="txt-video-rotate" for="video-rotate">0°</output>
+                </div>
+                <button class="site-button action-button" id="btn-rotate-action" type="button"><span aria-hidden="true">↻</span><span data-i18n="remote.rotate90">ROTATE +90°</span></button>
+                <div class="sub-control separated-control">
+                  <div class="micro-label" data-i18n="remote.anglePreset">ANGLE PRESET</div>
+                  <div class="angle-grid" role="group" aria-label="Rotation preset">
+                    <button class="site-button site-button-small angle-button is-active" id="btn-rot-0" type="button">0° Normal</button>
+                    <button class="site-button site-button-small angle-button" id="btn-rot-90" type="button">90° Right</button>
+                    <button class="site-button site-button-small angle-button" id="btn-rot-270" type="button">270° Left</button>
+                    <button class="site-button site-button-small angle-button" id="btn-rot-180" type="button">180° Flip</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <footer class="remote-footer">
+        <span>NextStudio Remote · <span data-i18n="remote.noAudio">No audio stream</span></span>
+        <a href="../privacy/" data-i18n="remote.privacy">Privacy</a>
+        <a href="mailto:nextfeeder.ts@gmail.com" data-i18n="remote.support">Support</a>
+      </footer>
     </main>
+
     <script src="../assets/vendor/peerjs.min.js" defer></script>
     <script src="../assets/js/remote-protocol.js" defer></script>
     <script src="../assets/js/remote.js" defer></script>

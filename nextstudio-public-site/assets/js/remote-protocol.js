@@ -9,10 +9,10 @@
     volume: number(0, 1), pan: number(-1, 1), pitch: number(-12, 12), reverb: number(0, 2),
     videoDelay: number(0, 5), videoZoom: number(1, 3), videoRotate: number(0, 360),
     videoPosX: number(-50, 50), videoPosY: number(-50, 50),
-    isVocalOn: boolean, isEqOn: boolean, normalize: boolean, isVideoMasterOn: boolean,
+    isAudioMasterOn: boolean, isVocalOn: boolean, isEqOn: boolean, normalize: boolean, isVideoMasterOn: boolean,
     vocalMode: enumeration(["bypass", "karaoke", "acapella"]),
-    videoQuality: enumeration(["max", "high", "medium", "low"]),
-    eqPreset: enumeration(["flat", "pop", "rock", "jazz", "vocal", "custom"]),
+    videoQuality: enumeration(["max", "high", "mid", "low"]),
+    eqPreset: enumeration(["flat", "bass", "rock", "pop", "voice", "custom"]),
     eq: number(-12, 12)
   });
 
