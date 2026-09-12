@@ -1,6 +1,6 @@
-# NextAmp AI Vocal Engine
+# NextStudio AI Vocal Engine
 
-Ultra-lightweight, high-performance real-time AI Vocal Remover and Stem Separation engine for NextAmp.
+Ultra-lightweight, high-performance real-time AI Vocal Remover and Stem Separation engine for NextStudio.
 
 ## Directory Structure
 

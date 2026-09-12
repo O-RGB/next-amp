@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nextamp Extension</title>
+    <title>NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync</title>
 
     <link
       href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;600&family=Sarabun:wght@300;400;600&display=swap"
@@ -22,8 +22,12 @@
           <button id="btn-close-qr" class="win-btn text-red-900 font-bold bg-[#e0e0e0]">X</button>
         </div>
         <div class="p-4 flex flex-col gap-4 items-center bg-[#222]">
-          <div class="bg-white p-2">
-            <img id="qr-image" src="" alt="Scan QR" class="w-[150px] h-[150px] object-contain" />
+          <div class="bg-white p-2 w-[166px] h-[166px] flex items-center justify-center">
+            <div id="qr-loading" class="flex flex-col items-center justify-center gap-2 text-center text-[#000080]">
+              <div class="w-9 h-9 border-4 border-[#000080] border-t-transparent rounded-full animate-spin"></div>
+              <span id="qr-loading-text" class="text-[8px] font-bold font-pixel tracking-wide">LOADING QR...</span>
+            </div>
+            <img id="qr-image" alt="Scan QR" class="hidden w-[150px] h-[150px] object-contain" />
           </div>
           <p class="text-[9px] text-gray-400 font-pixel text-center">
             Scan with your phone to control
@@ -77,49 +81,13 @@
       </div>
     </div>
 
-    <!-- Tab Reload / Status Check Overlay -->
-    <div id="tab-status-overlay" class="z-[150000]">
-      <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">
-        <div class="theme-bar justify-between mb-2">
-          <span id="tab-status-title" class="flex items-center gap-1 font-bold">
-            <i id="tab-status-title-icon" class="ph-bold ph-arrows-clockwise text-yellow-400"></i>
-            <span id="tab-status-title-text">TAB RELOAD REQUIRED</span>
-          </span>
-          <button id="btn-close-tab-status" class="win-btn text-red-900 font-bold bg-[#e0e0e0]">X</button>
-        </div>
-        <div class="bg-[#222] p-4 flex flex-col gap-3 items-center text-center">
-          <div id="tab-status-icon-box" class="w-10 h-10 rounded-full border border-yellow-500/60 bg-yellow-500/10 flex items-center justify-center text-yellow-400 text-xl">
-            <i id="tab-status-icon" class="ph-bold ph-arrows-clockwise"></i>
-          </div>
-          <p id="tab-status-desc" class="text-white text-[10px] font-pixel leading-tight">
-            Kindly refresh the tab to ensure Next-Amp audio capture and video controls work smoothly.
-          </p>
-          <div class="flex flex-col gap-2 w-full mt-1">
-            <button
-              id="btn-tab-status-action"
-              class="win-btn h-8 bg-blue-900 text-white border-blue-400 hover:bg-blue-800 flex items-center justify-center gap-1.5"
-            >
-              <i id="btn-tab-status-action-icon" class="ph-bold ph-arrows-clockwise"></i>
-              <span id="btn-tab-status-action-text" class="text-[9px] font-bold uppercase">REFRESH THE TAB</span>
-            </button>
-            <button
-              id="btn-tab-status-dismiss"
-              class="win-btn h-6 bg-gray-700 text-gray-300 hover:bg-gray-600"
-            >
-              <span class="text-[8px]">CONTINUE ANYWAY</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- First-Launch "Buy Me a Coffee" Modal -->
     <div id="first-launch-overlay" class="z-[160000]">
       <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">
         <div class="theme-bar justify-between mb-2">
           <span class="flex items-center gap-1 font-bold">
             <i class="ph-bold ph-coffee text-amber-300"></i>
-            <span>SUPPORT NEXT-AMP</span>
+            <span>SUPPORT NEXTSTUDIO</span>
           </span>
           <button id="btn-close-first-launch" class="win-btn text-red-900 font-bold bg-[#e0e0e0]">X</button>
         </div>
@@ -136,7 +104,7 @@
             </span>
           </div>
           <p class="text-white text-[9.5px] font-pixel leading-relaxed">
-            Thank you for using Next-Amp! If you enjoy this tool, please consider buying me a coffee to support continuous development and updates.
+            Thank you for using NextStudio! If you enjoy this tool, please consider buying me a coffee to support continuous development and updates.
           </p>
           <div class="flex flex-col gap-2 w-full mt-1">
             <button
@@ -151,6 +119,42 @@
               class="win-btn h-6 bg-gray-700 text-gray-300 hover:bg-gray-600 cursor-pointer"
             >
               <span class="text-[8px]">MAYBE LATER</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Occasional, non-blocking community support prompt -->
+    <div id="usage-donate-overlay" class="z-[155000]" role="dialog" aria-modal="true" aria-labelledby="usage-donate-title">
+      <div class="win-border-out session-dialog donation-dialog shadow-2xl bg-[#292929]">
+        <div class="theme-bar justify-between mb-2">
+          <span class="flex items-center gap-1 font-bold">
+            <i class="ph-bold ph-coffee text-amber-300"></i>
+            <span id="usage-donate-title">SUPPORT NEXTSTUDIO</span>
+          </span>
+          <button id="btn-close-usage-donate" class="win-btn text-red-900 font-bold bg-[#e0e0e0]" aria-label="Close">X</button>
+        </div>
+        <div class="bg-[#222] p-3 flex flex-col gap-2 text-center">
+          <div class="w-9 h-9 rounded-full border border-amber-500/50 bg-amber-500/10 flex items-center justify-center self-center text-amber-400 text-lg">
+            <i class="ph-bold ph-heart"></i>
+          </div>
+          <span class="text-[10px] font-bold text-amber-300 font-pixel uppercase tracking-wide">
+            ENJOYING NEXTSTUDIO?
+          </span>
+          <p class="text-white text-[8.5px] font-pixel leading-relaxed">
+            If NextStudio is useful to you, an optional coffee helps support maintenance and future updates.
+          </p>
+          <div class="flex gap-1.5 w-full mt-1">
+            <button id="btn-usage-donate" class="win-btn h-7 flex-1 bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] text-[#4a2810] font-bold font-pixel text-[8px] flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer">
+              <i class="ph-bold ph-coffee text-[9px]"></i>
+              <span>SUPPORT</span>
+            </button>
+            <button id="btn-usage-later" class="win-btn h-7 px-2 bg-gray-700 text-gray-200 hover:bg-gray-600 font-pixel text-[8px] cursor-pointer">
+              LATER
+            </button>
+            <button id="btn-usage-dismiss" class="win-btn h-7 px-2 bg-gray-800 text-gray-400 hover:bg-gray-700 font-pixel text-[8px] cursor-pointer">
+              DON'T SHOW
             </button>
           </div>
         </div>
@@ -253,7 +257,7 @@
 
           <!-- Quick Guide -->
           <div class="text-[7.5px] text-gray-400 font-pixel text-left w-full leading-tight flex flex-col gap-0.5">
-            <span>1. เปิดโปรแกรม <code class="text-white bg-[#111] px-1">nextamp-engine</code> บนเครื่อง</span>
+            <span>1. เปิดโปรแกรม <code class="text-white bg-[#111] px-1">nextstudio-engine</code> บนเครื่อง</span>
             <span>2. ระบบเชื่อมต่อแบบอัตโนมัติ (ไม่ต้องกรอกรหัส)</span>
             <span>3. ก้อนเสียงจะส่งไปประมวลผลที่ Go ทันที</span>
           </div>
@@ -437,7 +441,7 @@
               UTILITIES
             </div>
             <div class="flex flex-col gap-1 mt-0.5">
-              <div class="flex items-center gap-1">
+              <div class="hidden flex items-center gap-1">
                 <span class="text-[8px] text-gray-500 w-8">ID:</span
                 ><input
                   type="text"
@@ -457,25 +461,16 @@
               </button>
             </div>
             <div
-              class="text-[9px] font-bold text-emerald-400 mb-0.5 mt-1.5 border-b border-gray-700"
+              class="hidden text-[9px] font-bold text-emerald-400 mb-0.5 mt-1.5 border-b border-gray-700"
             >
               AI ACCELERATION ENGINE
             </div>
-            <div class="setting-row">
+            <div class="hidden setting-row">
               <span>Engine</span>
               <select id="sel-ai-engine" class="bg-black border border-gray-600 text-[8px] text-cyan-400 h-4 outline-none">
                 <option value="webgl">Browser WebGL (In-App)</option>
                 <option value="go_native">Go Turbo Engine (Desktop) ⚡</option>
               </select>
-            </div>
-            <div class="flex flex-col gap-1 mt-0.5">
-              <button
-                id="btn-ai-diagnostics"
-                class="win-btn w-full py-1 text-emerald-400 font-bold bg-[#1a1a1a] hover:bg-[#282828] border border-emerald-600 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-              >
-                <i class="ph-bold ph-activity text-emerald-400 text-[10px]"></i>
-                <span>RUN AI & GPU BENCHMARK</span>
-              </button>
             </div>
           </div>
           <div id="tab-record" class="tab-content">
@@ -512,9 +507,9 @@
               </div>
               <div>
                 <div class="text-[10px] font-bold text-white">
-                  NEXTAMP EXTENSION
+                  NEXTSTUDIO EXTENSION
                 </div>
-                <div class="text-[8px] text-gray-400">Version 4.5.1</div>
+                <div class="text-[8px] text-gray-400">Version 1.0</div>
               </div>
               <p class="text-[8px] text-gray-500 px-4">
                 Advanced audio processing & real-time visualizer.
@@ -535,6 +530,25 @@
                   <span>BUY ME A COFFEE</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="record-delete-overlay" class="record-delete-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="record-delete-title">
+        <div class="win-border-out session-dialog shadow-2xl">
+          <div class="theme-bar">
+            <span class="flex items-center gap-1" id="record-delete-title">
+              <i class="ph-bold ph-trash text-red-400"></i>
+              <span>DELETE RECORDING</span>
+            </span>
+            <button id="btn-record-delete-close" class="win-btn text-red-900 font-bold bg-[#e0e0e0]" aria-label="Close">X</button>
+          </div>
+          <div class="bg-[#222] p-3 flex flex-col gap-3 items-center text-center">
+            <p id="record-delete-message" class="text-[9px] text-gray-300 leading-tight m-0"></p>
+            <div class="flex gap-2 w-full">
+              <button id="btn-record-delete-cancel" class="win-btn flex-1 h-5 text-[8px] font-bold">CANCEL</button>
+              <button id="btn-record-delete-confirm" class="win-btn flex-1 h-5 text-[8px] font-bold text-white bg-red-800">DELETE</button>
             </div>
           </div>
         </div>
@@ -743,33 +757,35 @@
           </button>
           <i class="ph-bold ph-microphone-stage"></i>
           <span>AI VOCAL</span>
-          <button
-            id="btn-engine-toggle"
-            class="win-btn h-3 px-1 text-[7px] font-bold text-gray-400 cursor-pointer"
-            title="Switch AI Engine: Browser WebGL (WEB) / Go Desktop Engine (GO)"
-          >
-            WEB
-          </button>
         </div>
-        <div class="flex items-center gap-1.5 overflow-hidden">
-          <span id="txt-vocal-status" class="text-[8px] font-pixel text-gray-500 font-bold truncate max-w-[130px]" title="AI Vocal Status">ORIGINAL</span>
+        <div class="flex items-center gap-1 overflow-hidden min-w-0">
+          <div class="flex items-center gap-0.5" role="group" aria-label="AI power mode">
+            <button id="btn-ai-mode-eco" class="win-btn ai-mode-btn ai-mode-active pressed h-3 px-1.5 text-[7px] font-bold" type="button" aria-label="Use ECO AI mode" aria-pressed="true" title="ECO: lower GPU power">
+              <i class="ph-bold ph-leaf text-[8px]"></i><span>ECO</span>
+            </button>
+            <button id="btn-ai-mode-full" class="win-btn ai-mode-btn h-3 px-1.5 text-[7px] font-bold" type="button" aria-label="Use FULL AI mode" aria-pressed="false" title="FULL: highest AI quality">
+              <i class="ph-bold ph-sparkle text-[8px]"></i><span>FULL</span>
+            </button>
+          </div>
         </div>
       </div>
       <div class="p-1 flex flex-col gap-1 bg-[#222]" id="vocal-controls-area" style="opacity: 0.4; filter: grayscale(100%); pointer-events: none;">
-        <!-- Modes & Model Detail Controls -->
+        <!-- Modes & active accelerator -->
         <div class="win-border-in bg-[#1a1a1a] p-1 flex items-center justify-between gap-1">
           <div class="flex items-center gap-0.5">
             <button id="btn-vocal-bypass" class="win-btn h-4 px-1.5 text-[7px] font-bold pressed text-black flex items-center justify-center gap-0.5" title="Original Track"><i class="ph-bold ph-speaker-high text-[8px]"></i><span>ORIG</span></button>
             <button id="btn-vocal-karaoke" class="win-btn h-4 px-1.5 text-[7px] font-bold text-black flex items-center justify-center gap-0.5" title="Remove Vocals (Karaoke)"><i class="ph-bold ph-microphone-slash text-[8px]"></i><span>KARA</span></button>
             <button id="btn-vocal-acapella" class="win-btn h-4 px-1.5 text-[7px] font-bold text-black flex items-center justify-center gap-0.5" title="Isolate Vocals (Acapella)"><i class="ph-bold ph-music-notes-simple text-[8px]"></i><span>SOLO</span></button>
           </div>
-          <!-- Keep the current low-power profile, or raise only the model cadence/detail. -->
-          <div class="flex items-center gap-1 bg-black px-1.5 py-0.5 border border-gray-700">
-            <span class="text-[7px] font-pixel text-gray-400 font-bold flex items-center gap-0.5"><i class="ph-bold ph-gauge text-[8px]"></i>MODEL:</span>
-            <div class="flex gap-0.5" id="vocal-profile-buttons">
-              <button class="win-btn btn-vocal-profile h-3.5 px-1 text-[6px] font-bold pressed text-black flex items-center justify-center gap-0.5" data-profile="balanced" title="Current optimized profile: smoothest and lowest power"><i class="ph-bold ph-waveform text-[7px]"></i><span>SMOOTH</span></button>
-              <button class="win-btn btn-vocal-profile h-3.5 px-1 text-[6px] font-bold text-black flex items-center justify-center gap-0.5" data-profile="ai_remove" title="Higher model detail: same optimized app pipeline, more processing"><i class="ph-bold ph-sparkle text-[7px]"></i><span>DETAIL</span></button>
-            </div>
+          <div id="vocal-runtime-status" class="flex min-w-0 max-w-[230px] flex-col items-end justify-center gap-0.5 leading-none text-right overflow-hidden" title="Active AI hardware">
+            <span class="flex-none text-[7px] font-pixel font-bold text-emerald-400 whitespace-nowrap">
+              <i id="vocal-runtime-dot" class="ph-fill ph-circle text-[4px]"></i>
+              <span id="txt-vocal-runtime" title="AI Vocal operation">ORIGINAL</span>
+            </span>
+            <span class="flex min-w-0 max-w-full items-center justify-end gap-1 whitespace-nowrap">
+              <span id="txt-vocal-device" class="max-w-[105px] truncate text-[6px] font-pixel text-gray-500" title="Hardware Device">HW: Detecting GPU...</span>
+              <span id="txt-vocal-api" class="max-w-[72px] truncate text-[6px] font-pixel text-gray-500" title="Active AI API">API: WEBGL</span>
+            </span>
           </div>
         </div>
       </div>

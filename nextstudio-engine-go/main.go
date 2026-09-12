@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -20,13 +22,25 @@ import (
 
 	"github.com/gorilla/websocket"
 	ort "github.com/yalue/onnxruntime_go"
-	"nextamp-engine-go/dsp"
+	"nextstudio-engine-go/dsp"
 )
 
 const (
-	ListenAddr  = "127.0.0.1:41919"
-	Version     = "2.2.0-eco"
-	HeaderBytes = 8
+	ListenAddr         = "127.0.0.1:41919"
+	Version            = "2.3.0-eco"
+	HeaderBytes        = 8
+	DigitalSilencePeak = 3.25e-5
+	// A valid model run should never produce an entirely empty tensor for an
+	// audible probe. Keep this threshold far below any usable audio/mask value;
+	// it is only used by the provider-health guard, not by the audio DSP.
+	ModelOutputSignalFloor = 1e-12
+	FastInferenceLimitMs   = 1.0
+	// The compact head is output-only: it keeps the same FP32 model weights and
+	// selected frames while cutting the native output/readback in half. The
+	// overlap-consensus quality candidate remains disabled independently.
+	// Keep the candidate available for opt-in runtime tests. Full output remains
+	// the production quality path until CoreML/DirectML listening gates pass.
+	CompactModelOutputEnabled = false
 )
 
 var upgrader = websocket.Upgrader{
@@ -53,7 +67,6 @@ type AIEngine struct {
 	inputTensor    *ort.Tensor[float32]
 	outputTensor   *ort.Tensor[float32]
 	dspEngine      *dsp.Engine
-	modelData      []byte
 	enabled        bool
 	deviceInfo     string
 	recoveryTried  bool
@@ -68,6 +81,9 @@ var (
 	totalBytesReceived  atomic.Uint64
 	lastStatusTime      time.Time
 	muStatus            sync.Mutex
+	coreMLComputeUnits  = "ALL"
+	coreMLProfile       bool
+	ortProfilePrefix    string
 )
 
 func cpuFallbackDevice(dev AccelerationOption) AccelerationOption {
@@ -80,22 +96,71 @@ func cpuFallbackDevice(dev AccelerationOption) AccelerationOption {
 }
 
 func createSessionOptions(dev AccelerationOption) (*ort.SessionOptions, string, error) {
+	opts, deviceLabel, err := createSessionOptionsForCoreML(dev, coreMLComputeUnits, coreMLProfile)
+	if err != nil {
+		return nil, "", err
+	}
+	if strings.TrimSpace(ortProfilePrefix) != "" {
+		if err := opts.EnableProfiling(ortProfilePrefix); err != nil {
+			opts.Destroy()
+			return nil, "", err
+		}
+	}
+	return opts, deviceLabel, nil
+}
+
+func createSessionOptionsForCoreML(dev AccelerationOption, computeUnits string, profileComputePlan bool) (*ort.SessionOptions, string, error) {
 	opts, err := ort.NewSessionOptions()
 	if err != nil {
 		return nil, "", err
 	}
 
-	// High-Performance Graph Optimization
-	opts.SetGraphOptimizationLevel(ort.GraphOptimizationLevelEnableAll)
-	opts.SetCpuMemArena(true)
-	opts.SetMemPattern(true)
-	opts.AddSessionConfigEntry("session.intra_op.allow_spinning", "0")
+	// High-Performance Graph Optimization. DirectML requires sequential
+	// execution with memory-pattern allocation disabled; leaving the generic
+	// ORT defaults here can make older Windows GPUs stall or fail at runtime.
+	if err := opts.SetGraphOptimizationLevel(ort.GraphOptimizationLevelEnableAll); err != nil {
+		opts.Destroy()
+		return nil, "", err
+	}
+	if err := opts.SetCpuMemArena(true); err != nil {
+		opts.Destroy()
+		return nil, "", err
+	}
+	if err := opts.SetExecutionMode(ort.ExecutionModeSequential); err != nil {
+		opts.Destroy()
+		return nil, "", err
+	}
+	useMemPattern := dev.Type != DeviceDirectML
+	if err := opts.SetMemPattern(useMemPattern); err != nil {
+		opts.Destroy()
+		return nil, "", err
+	}
+	if err := opts.AddSessionConfigEntry("session.intra_op.allow_spinning", "0"); err != nil {
+		opts.Destroy()
+		return nil, "", err
+	}
 
 	deviceLabel := dev.DisplayName
 	switch dev.Type {
 	case DeviceCoreML:
-		// Hardware Acceleration on Apple Silicon / macOS via CoreML
-		err = opts.AppendExecutionProviderCoreML(0)
+		// Hardware Acceleration on Apple Silicon / macOS via CoreML. This model
+		// contains an AvgPool form that the bundled CoreML parser cannot compile
+		// as MLProgram (it reports a missing `pad` parameter), so keep the
+		// provider-aware NeuralNetwork format for the exact FP32 graph.
+		if strings.TrimSpace(computeUnits) == "" {
+			computeUnits = "ALL"
+		}
+		coreMLOptions := map[string]string{
+			"ModelFormat":                        "NeuralNetwork",
+			"MLComputeUnits":                     computeUnits,
+			"RequireStaticInputShapes":           "1",
+			"SpecializationStrategy":             "FastPrediction",
+			"AllowLowPrecisionAccumulationOnGPU": "0",
+		}
+		if profileComputePlan {
+			coreMLOptions["ProfileComputePlan"] = "1"
+		}
+		err = opts.AppendExecutionProviderCoreMLV2(coreMLOptions)
 	case DeviceDirectML:
 		// Hardware Acceleration on Windows via DirectML (GPU)
 		err = opts.AppendExecutionProviderDirectML(dev.DeviceIndex)
@@ -124,6 +189,41 @@ func createSessionOptions(dev AccelerationOption) (*ort.SessionOptions, string, 
 }
 
 func createORTSession(modelData []byte, dev AccelerationOption) (*ort.AdvancedSession, *ort.Tensor[float32], *ort.Tensor[float32], string, error) {
+	if !CompactModelOutputEnabled {
+		return createORTSessionWithOutputFrames(modelData, dev, dsp.MaxFrames, "Identity")
+	}
+	modelForSession, compact, rewriteErr := rewriteONNXOutputWindow(modelData)
+	if rewriteErr != nil {
+		// Keep the full model as a safe fallback if an unknown ONNX export is
+		// encountered. The rewrite is an optimization, never a load prerequisite.
+		modelForSession = modelData
+		compact = false
+	}
+	outputFrames := dsp.MaxFrames
+	if compact {
+		outputFrames = compactOutputFrames
+	}
+	session, inputTensor, outputTensor, deviceLabel, err := createORTSessionWithOutputFrames(
+		modelForSession, dev, outputFrames, compactOutputNameIf(compact),
+	)
+	if err == nil || !compact {
+		return session, inputTensor, outputTensor, deviceLabel, err
+	}
+
+	// A provider may accept the original graph but reject a newly-added output
+	// Slice. Retry the untouched graph before the normal CPU/provider recovery
+	// logic gets involved.
+	return createORTSessionWithOutputFrames(modelData, dev, dsp.MaxFrames, "Identity")
+}
+
+func compactOutputNameIf(compact bool) string {
+	if compact {
+		return compactOutputName
+	}
+	return "Identity"
+}
+
+func createORTSessionWithOutputFrames(modelData []byte, dev AccelerationOption, outputFrames int, outputName string) (*ort.AdvancedSession, *ort.Tensor[float32], *ort.Tensor[float32], string, error) {
 	opts, deviceLabel, err := createSessionOptions(dev)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -137,7 +237,7 @@ func createORTSession(modelData []byte, dev AccelerationOption) (*ort.AdvancedSe
 		return nil, nil, nil, "", fmt.Errorf("failed to create input tensor: %w", err)
 	}
 
-	outputShape := ort.NewShape(1, 1024, 64, 2)
+	outputShape := ort.NewShape(1, 1024, int64(outputFrames), 2)
 	outputTensor, err := ort.NewEmptyTensor[float32](outputShape)
 	if err != nil {
 		inputTensor.Destroy()
@@ -148,7 +248,7 @@ func createORTSession(modelData []byte, dev AccelerationOption) (*ort.AdvancedSe
 	session, err := ort.NewAdvancedSessionWithONNXData(
 		modelData,
 		[]string{"input"},
-		[]string{"Identity"},
+		[]string{outputName},
 		[]ort.Value{inputTensor},
 		[]ort.Value{outputTensor},
 		opts,
@@ -160,6 +260,46 @@ func createORTSession(modelData []byte, dev AccelerationOption) (*ort.AdvancedSe
 	}
 
 	return session, inputTensor, outputTensor, deviceLabel, nil
+}
+
+// validateModelOutput catches provider paths that report a successful Run but
+// leave the output tensor empty or non-finite. This is especially useful for
+// older DirectML adapters: a broken provider can otherwise make the rest of
+// the pipeline synthesize silence with no error to recover from.
+func validateModelOutput(raw []float32, requireSignal bool) error {
+	expected := dsp.NumBins * dsp.MaxFrames * 2
+	if len(raw) != expected {
+		return fmt.Errorf("unexpected model output length: got %d, want %d", len(raw), expected)
+	}
+
+	hasSignal := false
+	for _, value := range raw {
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+			return fmt.Errorf("model output contains non-finite values")
+		}
+		if requireSignal && math.Abs(float64(value)) > ModelOutputSignalFloor {
+			hasSignal = true
+		}
+	}
+	if requireSignal && !hasSignal {
+		return fmt.Errorf("provider returned an empty model output")
+	}
+	return nil
+}
+
+// runInferenceProbe performs a deterministic non-zero first run. A zero-filled
+// warmup can pass through a faulty GPU provider while leaving the real output
+// path unusable, so initialization must exercise the same tensor/output path
+// that playback will use.
+func runInferenceProbe(session *ort.AdvancedSession, input *ort.Tensor[float32], output *ort.Tensor[float32]) error {
+	inputData := input.GetData()
+	for i := range inputData {
+		inputData[i] = 0.125 + float32(i%17)/64.0
+	}
+	if err := session.Run(); err != nil {
+		return err
+	}
+	return validateModelOutput(output.GetData(), true)
 }
 
 func initAIEngine(dev AccelerationOption) (*AIEngine, error) {
@@ -192,9 +332,11 @@ func initAIEngine(dev AccelerationOption) (*AIEngine, error) {
 		return nil, fmt.Errorf("failed to initialize ONNX session: %w", err)
 	}
 
-	// Warmup is part of validation. If hardware execution fails here, retry
-	// with the same model on CPU instead of silently serving a broken stream.
-	warmupErr := session.Run()
+	// Warmup is part of validation. Use a non-zero probe so a hardware provider
+	// cannot pass initialization with an empty output tensor. If hardware
+	// execution fails here, retry with the same model on CPU instead of silently
+	// serving a broken stream.
+	warmupErr := runInferenceProbe(session, inputTensor, outputTensor)
 	if warmupErr != nil && dev.Type != DeviceCPU {
 		session.Destroy()
 		inputTensor.Destroy()
@@ -204,7 +346,7 @@ func initAIEngine(dev AccelerationOption) (*AIEngine, error) {
 			return createORTSession(modelData, cpuFallbackDevice(dev))
 		}()
 		if warmupErr == nil {
-			warmupErr = session.Run()
+			warmupErr = runInferenceProbe(session, inputTensor, outputTensor)
 		}
 	}
 	if warmupErr != nil {
@@ -221,12 +363,18 @@ func initAIEngine(dev AccelerationOption) (*AIEngine, error) {
 		return nil, fmt.Errorf("ONNX warmup failed: %w", warmupErr)
 	}
 
+	// ORT has parsed the graph and owns the live session now. Do not keep a
+	// second decrypted copy of the model resident during playback. If a
+	// provider later fails, recoverWithCPU decrypts the embedded model again on
+	// that rare error path before rebuilding the session.
+	clearModelBytes(modelData)
+	debug.FreeOSMemory()
+
 	return &AIEngine{
 		session:      session,
 		inputTensor:  inputTensor,
 		outputTensor: outputTensor,
 		dspEngine:    dsp.NewEngine(),
-		modelData:    modelData,
 		enabled:      true,
 		deviceInfo:   deviceLabel,
 	}, nil
@@ -242,24 +390,29 @@ func (ai *AIEngine) recoverWithCPU() error {
 		return fmt.Errorf("CPU recovery already attempted")
 	}
 	ai.recoveryTried = true
-	if len(ai.modelData) == 0 {
-		return fmt.Errorf("decrypted model is no longer available for CPU recovery")
+
+	// The normal playback path intentionally releases decrypted model bytes.
+	// Reload only when a hardware/provider failure makes recovery necessary.
+	modelData, err := loadDecryptedModel()
+	if err != nil {
+		return fmt.Errorf("decrypted model reload failed: %w", err)
 	}
+	defer clearModelBytes(modelData)
 
 	cpuDev := AccelerationOption{
 		Type:        DeviceCPU,
 		Name:        "CPU",
 		DisplayName: "CPU (Eco SIMD 2 Cores)",
 	}
-	newSession, newInput, newOutput, deviceLabel, err := createORTSession(ai.modelData, cpuDev)
+	newSession, newInput, newOutput, deviceLabel, err := createORTSession(modelData, cpuDev)
 	if err != nil {
 		return fmt.Errorf("CPU session creation failed: %w", err)
 	}
-	if err := newSession.Run(); err != nil {
+	if err := runInferenceProbe(newSession, newInput, newOutput); err != nil {
 		newSession.Destroy()
 		newInput.Destroy()
 		newOutput.Destroy()
-		return fmt.Errorf("CPU warmup failed: %w", err)
+		return fmt.Errorf("CPU warmup/output validation failed: %w", err)
 	}
 
 	oldSession := ai.session
@@ -269,7 +422,6 @@ func (ai *AIEngine) recoverWithCPU() error {
 	ai.inputTensor = newInput
 	ai.outputTensor = newOutput
 	ai.deviceInfo = deviceLabel
-	ai.modelData = nil
 
 	if oldSession != nil {
 		oldSession.Destroy()
@@ -284,6 +436,15 @@ func (ai *AIEngine) recoverWithCPU() error {
 
 	fmt.Printf("[✓] Recovered ONNX inference on %s after provider failure.\n", deviceLabel)
 	return nil
+}
+
+// clearModelBytes removes a decrypted model buffer before allowing the
+// runtime to reclaim it. The zeroing is deliberate: model bytes are sensitive
+// and can otherwise remain in the Go heap until the next collection.
+func clearModelBytes(modelData []byte) {
+	for i := range modelData {
+		modelData[i] = 0
+	}
 }
 
 func (ai *AIEngine) Close() {
@@ -304,10 +465,6 @@ func (ai *AIEngine) Close() {
 		ai.outputTensor.Destroy()
 		ai.outputTensor = nil
 	}
-	for i := range ai.modelData {
-		ai.modelData[i] = 0
-	}
-	ai.modelData = nil
 	ort.DestroyEnvironment()
 }
 
@@ -326,7 +483,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(HealthResponse{
 		Status:    "running",
-		Engine:    "Next-Amp Go Native Engine (Eco AI)",
+		Engine:    "NextStudio Go Native Engine (Eco AI)",
 		Version:   Version,
 		AIEnabled: aiActive,
 		Device:    dev,
@@ -348,7 +505,7 @@ func parseChannelSamples(payload []byte) ([]float32, []float32) {
 }
 
 // Zero-Copy Sample Packing
-func packChannelSamples(chunkIndex uint32, mode uint8, left, right []float32, buf []byte) []byte {
+func packChannelSamples(chunkIndex uint32, mode uint8, streamToken uint16, left, right []float32, buf []byte) []byte {
 	numSamples := len(left)
 	totalBytes := HeaderBytes + (numSamples * 8)
 	if len(buf) < totalBytes {
@@ -360,8 +517,7 @@ func packChannelSamples(chunkIndex uint32, mode uint8, left, right []float32, bu
 	binary.LittleEndian.PutUint32(buf[0:4], chunkIndex)
 	buf[4] = mode
 	buf[5] = 0
-	buf[6] = 0
-	buf[7] = 0
+	binary.LittleEndian.PutUint16(buf[6:8], streamToken)
 
 	lByteSlice := unsafe.Slice((*byte)(unsafe.Pointer(&left[0])), numSamples*4)
 	rByteSlice := unsafe.Slice((*byte)(unsafe.Pointer(&right[0])), numSamples*4)
@@ -375,7 +531,7 @@ func packChannelSamples(chunkIndex uint32, mode uint8, left, right []float32, bu
 // packSilentSamples is the safe failure output for an AI packet. Returning
 // the input here would leak the original vocal whenever ONNX Runtime has a
 // transient provider/scheduling error.
-func packSilentSamples(chunkIndex uint32, mode uint8, numSamples int, buf []byte) []byte {
+func packSilentSamples(chunkIndex uint32, mode uint8, streamToken uint16, numSamples int, buf []byte) []byte {
 	totalBytes := HeaderBytes + (numSamples * 8)
 	if len(buf) < totalBytes {
 		buf = make([]byte, totalBytes)
@@ -386,8 +542,7 @@ func packSilentSamples(chunkIndex uint32, mode uint8, numSamples int, buf []byte
 	binary.LittleEndian.PutUint32(buf[0:4], chunkIndex)
 	buf[4] = mode
 	buf[5] = 0
-	buf[6] = 0
-	buf[7] = 0
+	binary.LittleEndian.PutUint16(buf[6:8], streamToken)
 	for i := HeaderBytes; i < totalBytes; i++ {
 		buf[i] = 0
 	}
@@ -445,8 +600,8 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		globalDashboard.SetClient(clientAddr, true)
 		defer globalDashboard.SetClient("", false)
 	} else {
-		fmt.Printf("\n[+] \033[1;32mNext-Amp Connected!\033[0m (%s)\n", clientAddr)
-		defer fmt.Println("\n[-] Next-Amp Client Disconnected")
+		fmt.Printf("\n[+] \033[1;32mNextStudio Connected!\033[0m (%s)\n", clientAddr)
+		defer fmt.Println("\n[-] NextStudio Client Disconnected")
 	}
 
 	devInfo := "Go Native Core (Loopback)"
@@ -459,7 +614,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Send Welcome Handshake
 	welcomeMsg := map[string]interface{}{
 		"type":       "READY",
-		"engine":     "Next-Amp Go Native Engine (Eco AI)",
+		"engine":     "NextStudio Go Native Engine (Eco AI)",
 		"version":    Version,
 		"device":     devInfo,
 		"ai_enabled": globalAI != nil && globalAI.enabled,
@@ -474,25 +629,51 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		globalAI.mu.Unlock()
 	}
 
-	// Reusable preallocated packet buffer for responses
-	outBuf := make([]byte, 65544)
+	// The extension uses one fixed 8,192-sample packet for the native path.
+	// Reuse one exact-size receive buffer as well as the response buffer so a
+	// busy Windows/Apple machine does not create a new ~64 KiB payload on every
+	// WebSocket message.
+	packetBuf := make([]byte, HeaderBytes+(dsp.ChunkSamples*8))
+	outBuf := make([]byte, HeaderBytes+(dsp.ChunkSamples*8))
+	// Keep the safe failure output allocation outside the audio loop. These
+	// buffers are only exposed to the dashboard on an inference/provider error;
+	// the WebSocket response itself is still zeroed by packSilentSamples.
+	silenceL := make([]float32, dsp.ChunkSamples)
+	silenceR := make([]float32, dsp.ChunkSamples)
+	conn.SetReadLimit(int64(len(packetBuf)))
 
 	for {
-		messageType, payload, err := conn.ReadMessage()
+		messageType, messageReader, err := conn.NextReader()
 		if err != nil {
 			break
 		}
 
 		if messageType == websocket.BinaryMessage {
+			// ReadFull also handles a smaller valid packet: it returns the bytes
+			// read with io.ErrUnexpectedEOF at the WebSocket message boundary.
+			packetLen, readErr := io.ReadFull(messageReader, packetBuf)
+			if packetLen == len(packetBuf) {
+				// Reject oversized packets without allowing leftover bytes to be
+				// interpreted as a second audio message on the next iteration.
+				var extra [1]byte
+				if extraLen, _ := messageReader.Read(extra[:]); extraLen > 0 {
+					continue
+				}
+			}
+			if packetLen == 0 || (readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF) {
+				continue
+			}
+			payload := packetBuf[:packetLen]
 			t0 := time.Now()
-			chunkLen := len(payload)
+			chunkLen := packetLen
 
-			if chunkLen < HeaderBytes {
+			if chunkLen <= HeaderBytes || (chunkLen-HeaderBytes)%8 != 0 {
 				continue
 			}
 
 			chunkIndex := binary.LittleEndian.Uint32(payload[0:4])
 			mode := payload[4]
+			streamToken := binary.LittleEndian.Uint16(payload[6:8])
 
 			totalChunksReceived.Add(1)
 			totalBytesReceived.Add(uint64(chunkLen))
@@ -503,35 +684,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			var respPayload []byte
 			var inferMs, dspMs float64
 
-			// Fast peak check for intelligent silence skip (Zero-Load VAD)
-			var inPeak float32
-			for i := 0; i < len(leftSamples); i += 16 {
-				vL := float32(math.Abs(float64(leftSamples[i])))
-				vR := float32(math.Abs(float64(rightSamples[i])))
-				if vL > inPeak {
-					inPeak = vL
-				}
-				if vR > inPeak {
-					inPeak = vR
-				}
-			}
-
-			// Near-zero energy (< -70 dB): instant skip neural network, saving 99% CPU/battery
-			if inPeak < 0.0003 && (mode == 1 || mode == 2) {
-				if mode == 1 {
-					// Karaoke: input already has no vocal, pass directly
-					outL, outR = leftSamples, rightSamples
-					respPayload = payload
-				} else {
-					// Acapella: vocals are silent, return zero silence
-					outL, outR = leftSamples, rightSamples
-					copy(outBuf, payload)
-					for i := HeaderBytes; i < chunkLen; i++ {
-						outBuf[i] = 0
-					}
-					respPayload = outBuf[:chunkLen]
-				}
-			} else if (mode == 1 || mode == 2) && globalAI != nil && globalAI.enabled {
+			if (mode == 1 || mode == 2) && globalAI != nil && globalAI.enabled {
 				// Process with Hardware-Accelerated AI Vocal Separation Pipeline
 				globalAI.mu.Lock()
 
@@ -539,60 +692,87 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				// 1. Forward STFT + Peak Tracking + Normalization (~0.25ms via SIMD)
 				normInput := globalAI.dspEngine.StepForward(leftSamples, rightSamples)
 				dspMs += float64(time.Since(tDSP1).Microseconds()) / 1000.0
-
-				// 2. Load into ONNX Tensor buffer
-				tensorBuf := globalAI.inputTensor.GetData()
-				copy(tensorBuf, normInput)
-
-				// 3. Neural Network U-Net Inference (~50ms via CoreML/DirectML)
-				tNN := time.Now()
-				runErr := globalAI.session.Run()
-				inferMs = float64(time.Since(tNN).Microseconds()) / 1000.0
-
-				if runErr != nil {
-					if !globalAI.runErrorLogged {
-						fmt.Printf("[!] ONNX inference failed on %s at chunk #%d: %v\n", globalAI.deviceInfo, chunkIndex, runErr)
-						globalAI.runErrorLogged = true
-					}
-					if !globalAI.recoveryTried {
-						if recoveryErr := globalAI.recoverWithCPU(); recoveryErr == nil {
-							// The replacement session owns a new input tensor; replay the
-							// current normalized chunk instead of dropping it.
-							copy(globalAI.inputTensor.GetData(), normInput)
-							runErr = globalAI.session.Run()
-							if runErr != nil {
-								fmt.Printf("[!] CPU recovery inference failed at chunk #%d: %v\n", chunkIndex, runErr)
-							}
-						} else {
-							fmt.Printf("[!] CPU recovery unavailable at chunk #%d: %v\n", chunkIndex, recoveryErr)
-						}
-					}
+				delayChunks := int(payload[5])
+				if delayChunks > 3 {
+					delayChunks = 0
 				}
 
-				if runErr != nil {
-					outL = make([]float32, len(leftSamples))
-					outR = make([]float32, len(rightSamples))
-					respPayload = packSilentSamples(chunkIndex, mode, len(leftSamples), outBuf)
-				} else {
-					// 4. Inverse STFT + Fast C SIMD Sigmoid + Overlap-Add (~0.06ms via SIMD)
+				// A delayed target that is already at the digital-silence floor still
+				// needs StepBackward so the STFT/lookahead/OLA timeline advances, but
+				// it does not need an ONNX run. The old gate happened before
+				// StepForward and could leave the native state one chunk behind.
+				// Only skip inference when both the delayed target and the current
+				// chunk are silent. This preserves the first audible chunk after a
+				// pause/song boundary, where the delayed target is correctly silent
+				// but the current input already contains real audio.
+				targetIsDigitalSilence := globalAI.dspEngine.TargetChunkIsDigitalSilence(delayChunks, DigitalSilencePeak) &&
+					globalAI.dspEngine.TargetChunkIsDigitalSilence(0, DigitalSilencePeak)
+				if targetIsDigitalSilence {
 					tDSP2 := time.Now()
-					rawOut := globalAI.outputTensor.GetData()
-					delayChunks := int(payload[5])
-					if delayChunks > 3 {
-						delayChunks = 0
-					}
-					outL, outR = globalAI.dspEngine.StepBackward(rawOut, delayChunks, int(mode), 1.0)
+					outL, outR = globalAI.dspEngine.StepBackwardSilence(delayChunks)
 					dspMs += float64(time.Since(tDSP2).Microseconds()) / 1000.0
-					respPayload = packChannelSamples(chunkIndex, mode, outL, outR, outBuf)
+					respPayload = packChannelSamples(chunkIndex, mode, streamToken, outL, outR, outBuf)
+				} else {
+					// 2. Load into ONNX Tensor buffer
+					tensorBuf := globalAI.inputTensor.GetData()
+					copy(tensorBuf, normInput)
+
+					// 3. Neural Network U-Net Inference (~50ms via CoreML/DirectML)
+					tNN := time.Now()
+					runErr := globalAI.session.Run()
+					inferMs = float64(time.Since(tNN).Microseconds()) / 1000.0
+
+					// A provider that returns in near-zero time is not plausibly
+					// executing this model. Inspect the tensor only on that anomaly
+					// path so the normal realtime loop keeps its low overhead.
+					if runErr == nil && inferMs < FastInferenceLimitMs {
+						runErr = validateModelOutput(globalAI.outputTensor.GetData(), true)
+					}
+
+					if runErr != nil {
+						if !globalAI.runErrorLogged {
+							fmt.Printf("[!] ONNX inference failed on %s at chunk #%d: %v\n", globalAI.deviceInfo, chunkIndex, runErr)
+							globalAI.runErrorLogged = true
+						}
+						if !globalAI.recoveryTried {
+							if recoveryErr := globalAI.recoverWithCPU(); recoveryErr == nil {
+								// The replacement session owns a new input tensor; replay the
+								// current normalized chunk instead of dropping it.
+								copy(globalAI.inputTensor.GetData(), normInput)
+								runErr = globalAI.session.Run()
+								if runErr == nil {
+									runErr = validateModelOutput(globalAI.outputTensor.GetData(), true)
+								}
+								if runErr != nil {
+									fmt.Printf("[!] CPU recovery inference failed at chunk #%d: %v\n", chunkIndex, runErr)
+								}
+							} else {
+								fmt.Printf("[!] CPU recovery unavailable at chunk #%d: %v\n", chunkIndex, recoveryErr)
+							}
+						}
+					}
+
+					if runErr != nil {
+						outL = silenceL[:len(leftSamples)]
+						outR = silenceR[:len(rightSamples)]
+						respPayload = packSilentSamples(chunkIndex, mode, streamToken, len(leftSamples), outBuf)
+					} else {
+						// 4. Inverse STFT + Fast C SIMD Sigmoid + Overlap-Add (~0.06ms via SIMD)
+						tDSP2 := time.Now()
+						rawOut := globalAI.outputTensor.GetData()
+						outL, outR = globalAI.dspEngine.StepBackward(rawOut, delayChunks, int(mode), 1.0)
+						dspMs += float64(time.Since(tDSP2).Microseconds()) / 1000.0
+						respPayload = packChannelSamples(chunkIndex, mode, streamToken, outL, outR, outBuf)
+					}
 				}
 				globalAI.mu.Unlock()
 			} else {
 				if mode == 1 || mode == 2 {
 					// Never expose raw audio when an AI mode is requested but the
 					// native session is unavailable. Silence is the safe output.
-					outL = make([]float32, len(leftSamples))
-					outR = make([]float32, len(rightSamples))
-					respPayload = packSilentSamples(chunkIndex, mode, len(leftSamples), outBuf)
+					outL = silenceL[:len(leftSamples)]
+					outR = silenceR[:len(rightSamples)]
+					respPayload = packSilentSamples(chunkIndex, mode, streamToken, len(leftSamples), outBuf)
 				} else {
 					// Bypass Mode (raw zero-latency loopback)
 					outL, outR = leftSamples, rightSamples
@@ -629,6 +809,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 
 		} else if messageType == websocket.TextMessage {
+			payload, readErr := io.ReadAll(messageReader)
+			if readErr != nil {
+				continue
+			}
 			var msg map[string]interface{}
 			if err := json.Unmarshal(payload, &msg); err == nil {
 				if msg["type"] == "PING" {
@@ -659,7 +843,13 @@ func main() {
 	flagTimeout := flag.Int("timeout", 3, "Countdown seconds for interactive device selection prompt (0 to skip)")
 	flagAddr := flag.String("addr", ListenAddr, "WebSocket listen address")
 	flagHeadless := flag.Bool("headless", false, "Disable interactive TUI dashboard")
+	flagCoreMLUnits := flag.String("coreml-units", "ALL", "CoreML compute units: ALL, CPUAndNeuralEngine, CPUAndGPU, or CPUOnly")
+	flagCoreMLProfile := flag.Bool("coreml-profile", false, "Enable CoreML compute-plan diagnostics (debug only)")
+	flagORTProfile := flag.String("ort-profile", "", "Write an ONNX Runtime Chrome-trace profile to this file prefix (debug only)")
 	flag.Parse()
+	coreMLComputeUnits = strings.TrimSpace(*flagCoreMLUnits)
+	coreMLProfile = *flagCoreMLProfile
+	ortProfilePrefix = strings.TrimSpace(*flagORTProfile)
 
 	// Set Go runtime garbage collection and memory tuning for minimal footprint & zero GC pauses
 	debug.SetGCPercent(400)
@@ -682,7 +872,14 @@ func main() {
 
 	// 4. Initialize and Start Dashboard
 	if !*flagHeadless {
-		globalDashboard = NewDashboard(hw, selectedDev.DisplayName, *flagAddr)
+		dashboardDevice := selectedDev.DisplayName
+		if ai != nil {
+			// Show the device that actually owns the initialized ORT session.
+			// This prevents a failed CoreML/DirectML partition from being
+			// presented as hardware acceleration after CPU fallback.
+			dashboardDevice = ai.deviceInfo
+		}
+		globalDashboard = NewDashboard(hw, dashboardDevice, *flagAddr)
 		globalDashboard.Start()
 		defer globalDashboard.Stop()
 	} else {

@@ -1,5 +1,5 @@
 export class DBManager {
-  constructor(dbName = "NextAmpDB", storeName = "recordings") {
+  constructor(dbName = "NextStudioDB", storeName = "recordings") {
     this.dbName = dbName;
     this.storeName = storeName;
     this.db = null;

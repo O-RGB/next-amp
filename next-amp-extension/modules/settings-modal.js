@@ -1,6 +1,18 @@
 // next-amp-extension/modules/settings-modal.js
 import { $, $$ } from "../assets/js/utils.js";
 
+const escapeHtml = (value) =>
+  String(value ?? "").replace(/[&<>"']/g, (character) => {
+    const entities = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return entities[character];
+  });
+
 const MODAL_HTML = `
   <div class="win-border-out modal-window shadow-2xl">
     <div class="theme-bar">
@@ -88,22 +100,12 @@ const MODAL_HTML = `
         </div>
         <div class="text-[9px] font-bold text-blue-400 mb-0.5 mt-1 border-b border-gray-700">UTILITIES</div>
         <div class="flex flex-col gap-1 mt-0.5">
-          <div class="flex items-center gap-1">
-            <span class="text-[8px] text-gray-500 w-8">ID:</span>
-            <input type="text" id="txt-ext-id" class="flex-1 bg-[#111] border border-gray-600 text-[8px] text-gray-400 px-1 h-4 outline-none cursor-default" readonly value="Loading..." />
-            <button id="btn-copy-id" class="win-btn w-8 h-4 text-[8px]" title="Copy ID">CPY</button>
+            <div class="hidden flex items-center gap-1">
+              <span class="text-[8px] text-gray-500 w-8">ID:</span>
+              <input type="text" id="txt-ext-id" class="flex-1 bg-[#111] border border-gray-600 text-[8px] text-gray-400 px-1 h-4 outline-none cursor-default" readonly value="Loading..." />
+              <button id="btn-copy-id" class="win-btn w-8 h-4 text-[8px]" title="Copy ID">CPY</button>
           </div>
           <button id="btn-reset" class="win-btn w-full py-0.5 text-red-900 font-bold bg-[#e0e0e0]">FACTORY RESET</button>
-        </div>
-        <div class="text-[9px] font-bold text-emerald-400 mb-0.5 mt-1.5 border-b border-gray-700">AI & GPU DIAGNOSTICS</div>
-        <div class="flex flex-col gap-1 mt-0.5">
-          <button
-            id="btn-ai-diagnostics"
-            class="win-btn w-full py-1 text-emerald-400 font-bold bg-[#1a1a1a] hover:bg-[#282828] border border-emerald-600 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-          >
-            <i class="ph-bold ph-activity text-emerald-400 text-[10px]"></i>
-            <span>RUN AI & GPU BENCHMARK</span>
-          </button>
         </div>
       </div>
 
@@ -125,8 +127,9 @@ const MODAL_HTML = `
             <img src="./assets/logo.png" alt="Logo" class="w-full h-full object-contain" />
           </div>
           <div>
-            <div class="text-[10px] font-bold text-white">NEXTAMP EXTENSION</div>
-            <div class="text-[8px] text-gray-400">Version 4.5.1</div>
+            <div class="text-[10px] font-bold text-white">NEXTSTUDIO EXTENSION</div>
+            <div class="text-[7px] text-cyan-300">NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync</div>
+            <div class="text-[8px] text-gray-400">Version 1.0</div>
           </div>
           <p class="text-[8px] text-gray-500 px-4">Advanced audio processing, real-time visualizer, and in-browser audio recording.</p>
           <div class="win-border-in bg-[#1e1e1e] p-2 mt-1 w-[90%] flex flex-col items-center gap-1 border border-gray-700">
@@ -148,6 +151,25 @@ const MODAL_HTML = `
         </div>
       </div>
     </div>
+
+    <div id="record-delete-overlay" class="record-delete-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="record-delete-title">
+      <div class="win-border-out session-dialog shadow-2xl">
+        <div class="theme-bar">
+          <span class="flex items-center gap-1" id="record-delete-title">
+            <i class="ph-bold ph-trash text-red-400"></i>
+            <span>DELETE RECORDING</span>
+          </span>
+          <button id="btn-record-delete-close" class="win-btn text-red-900 font-bold bg-[#e0e0e0]" aria-label="Close">X</button>
+        </div>
+        <div class="bg-[#222] p-3 flex flex-col gap-3 items-center text-center">
+          <p id="record-delete-message" class="text-[9px] text-gray-300 leading-tight m-0"></p>
+          <div class="flex gap-2 w-full">
+            <button id="btn-record-delete-cancel" class="win-btn flex-1 h-5 text-[8px] font-bold">CANCEL</button>
+            <button id="btn-record-delete-confirm" class="win-btn flex-1 h-5 text-[8px] font-bold text-white bg-red-800">DELETE</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 `;
 
@@ -165,6 +187,10 @@ export class SettingsModal {
     this.db = dbManager;
     this.callbacks = callbacks;
     this.audioPlayer = null;
+    this.audioPlayerUrl = null;
+    this.activeRecordingId = null;
+    this.pendingDeleteRecording = null;
+    this.playbackGeneration = 0;
   }
 
   init() {
@@ -194,6 +220,7 @@ export class SettingsModal {
   toggle(show) {
     const overlay = $("#modal-overlay");
     if (overlay) overlay.classList.toggle("active", show);
+    if (!show) this.closeDeleteConfirm();
   }
 
   switchTab(id) {
@@ -232,7 +259,7 @@ export class SettingsModal {
     const donateAboutBtn = $("#btn-donate-about");
     if (donateAboutBtn) {
       donateAboutBtn.onclick = () => {
-        chrome.tabs.create({ url: "https://ganknow.com/nextfeeder/tip" });
+        chrome.tabs.create({ url: "https://ganknow.com/nextfeederlabs/tip" });
       };
     }
 
@@ -307,25 +334,42 @@ export class SettingsModal {
     }
     $("#btn-reset")?.addEventListener("click", this.callbacks.onReset);
 
-    const btnDiag = $("#btn-ai-diagnostics");
-    if (btnDiag) {
-      btnDiag.onclick = () => {
-        chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
-      };
-    }
-
     // Recording
     const btnRecAction = $("#btn-rec-action");
     if (btnRecAction) {
       btnRecAction.onclick = this.callbacks.onToggleRecord;
     }
+
+    const deleteOverlay = $("#record-delete-overlay");
+    $("#btn-record-delete-close")?.addEventListener("click", () =>
+      this.closeDeleteConfirm()
+    );
+    $("#btn-record-delete-cancel")?.addEventListener("click", () =>
+      this.closeDeleteConfirm()
+    );
+    $("#btn-record-delete-confirm")?.addEventListener("click", () =>
+      this.confirmDeleteRecording()
+    );
+    deleteOverlay?.addEventListener("click", (e) => {
+      if (e.target === deleteOverlay) this.closeDeleteConfirm();
+    });
   }
 
   async renderRecordingList() {
     const listContainer = $("#rec-list");
     if (!listContainer) return;
-    listContainer.innerHTML = "";
     const recordings = await this.db.getAllRecordings();
+
+    // If the currently playing recording was deleted elsewhere, release its
+    // object URL before rebuilding the list.
+    if (
+      this.activeRecordingId !== null &&
+      !recordings.some((rec) => rec.id === this.activeRecordingId)
+    ) {
+      this.stopRecordingPlayback();
+    }
+
+    listContainer.innerHTML = "";
     if (recordings.length === 0) {
       listContainer.innerHTML = `<div class="text-[8px] text-gray-600 text-center py-4">No recordings yet</div>`;
       return;
@@ -333,20 +377,21 @@ export class SettingsModal {
     recordings.forEach((rec) => {
       const el = document.createElement("div");
       el.className = "rec-item";
+      el.dataset.recordingId = String(rec.id);
       el.innerHTML = `
             <i class="ph-fill ph-music-note-simple rec-icon text-[10px] mr-1"></i>
             <div class="rec-info flex-1 min-w-0 mr-1">
-                <span class="text-[9px] text-white leading-none block truncate">${rec.name}</span>
+                <span class="text-[9px] text-white leading-none block truncate">${escapeHtml(rec.name)}</span>
                 <span class="text-[8px] text-gray-500">${rec.size}MB - ${rec.date}</span>
             </div>
             <div class="flex gap-1">
-                <button class="win-btn w-4 h-4 text-[9px] btn-play text-green-400 border border-gray-600" title="Play">P</button>
-                <button class="win-btn w-4 h-4 text-[9px] btn-dl text-blue-400 border border-gray-600" title="Download">DL</button>
-                <button class="win-btn w-4 h-4 text-[9px] btn-del text-red-500 font-bold border border-gray-600" title="Delete">D</button>
+                <button class="win-btn w-6 h-5 text-[10px] btn-play text-green-400 border border-gray-600" title="Play" aria-label="Play recording"><i class="ph-bold ph-play"></i></button>
+                <button class="win-btn w-7 h-5 text-[8px] btn-dl text-blue-400 border border-gray-600" title="Download" aria-label="Download recording">DL</button>
+                <button class="win-btn w-6 h-5 text-[10px] btn-del text-red-500 font-bold border border-gray-600" title="Delete" aria-label="Delete recording"><i class="ph-bold ph-trash"></i></button>
             </div>
         `;
       el.querySelector(".btn-play").onclick = () =>
-        this.playRecording(rec.blob);
+        this.playRecording(rec);
       el.querySelector(".btn-dl").onclick = () => {
         const url = URL.createObjectURL(rec.blob);
         const a = document.createElement("a");
@@ -362,26 +407,144 @@ export class SettingsModal {
       };
       el.querySelector(".btn-del").onclick = async (e) => {
         e.stopPropagation();
-        if (confirm(`Delete ${rec.name}?`)) {
-          await this.db.deleteRecording(rec.id);
-          this.renderRecordingList();
-        }
+        this.requestDeleteRecording(rec);
       };
       listContainer.appendChild(el);
     });
+
+    this.updateRecordingPlaybackUI();
   }
 
-  playRecording(blob) {
-    if (this.audioPlayer) {
-      this.audioPlayer.pause();
-      this.audioPlayer = null;
+  updateRecordingPlaybackUI() {
+    const listContainer = $("#rec-list");
+    if (!listContainer) return;
+
+    const isPlaying = this.audioPlayer && !this.audioPlayer.paused;
+    listContainer.querySelectorAll(".rec-item").forEach((item) => {
+      const isActive =
+        item.dataset.recordingId === String(this.activeRecordingId);
+      const playButton = item.querySelector(".btn-play");
+      item.classList.toggle("is-playing", Boolean(isActive && isPlaying));
+
+      if (playButton) {
+        playButton.innerHTML =
+          isActive && isPlaying
+            ? '<i class="ph-bold ph-pause"></i>'
+            : '<i class="ph-bold ph-play"></i>';
+        playButton.title = isActive && isPlaying ? "Pause" : "Play";
+        playButton.setAttribute(
+          "aria-label",
+          isActive && isPlaying ? "Pause recording" : "Play recording"
+        );
+      }
+    });
+  }
+
+  stopRecordingPlayback() {
+    const player = this.audioPlayer;
+    const url = this.audioPlayerUrl;
+
+    // Invalidate any play() promise that may still be resolving.
+    this.playbackGeneration += 1;
+    this.audioPlayer = null;
+    this.audioPlayerUrl = null;
+    this.activeRecordingId = null;
+
+    if (player) {
+      player.pause();
+      player.removeAttribute("src");
+      player.load();
     }
-    const url = URL.createObjectURL(blob);
-    this.audioPlayer = new Audio(url);
-    this.audioPlayer.play();
-    this.audioPlayer.onended = () => {
+    if (url) URL.revokeObjectURL(url);
+    this.updateRecordingPlaybackUI();
+  }
+
+  async playRecording(recording) {
+    if (!recording?.blob) return;
+
+    // Clicking the active row toggles pause/play. Clicking another row first
+    // stops the old player, so two recordings can never overlap.
+    if (this.audioPlayer && this.activeRecordingId === recording.id) {
+      if (this.audioPlayer.paused) {
+        try {
+          await this.audioPlayer.play();
+        } catch (err) {
+          console.warn("[SettingsModal] Unable to resume recording:", err);
+        }
+      } else {
+        this.audioPlayer.pause();
+      }
+      this.updateRecordingPlaybackUI();
+      return;
+    }
+
+    this.stopRecordingPlayback();
+
+    const url = URL.createObjectURL(recording.blob);
+    const player = new Audio(url);
+    const generation = ++this.playbackGeneration;
+    this.audioPlayer = player;
+    this.audioPlayerUrl = url;
+    this.activeRecordingId = recording.id;
+    player.preload = "auto";
+
+    const cleanup = () => {
+      if (this.audioPlayer !== player) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      this.audioPlayer = null;
+      this.audioPlayerUrl = null;
+      this.activeRecordingId = null;
       URL.revokeObjectURL(url);
+      this.updateRecordingPlaybackUI();
     };
+
+    player.addEventListener("play", () => this.updateRecordingPlaybackUI());
+    player.addEventListener("pause", () => this.updateRecordingPlaybackUI());
+    player.addEventListener("ended", cleanup, { once: true });
+    player.addEventListener("error", cleanup, { once: true });
+
+    try {
+      await player.play();
+      if (generation !== this.playbackGeneration || this.audioPlayer !== player) {
+        player.pause();
+        return;
+      }
+      this.updateRecordingPlaybackUI();
+    } catch (err) {
+      cleanup();
+      console.warn("[SettingsModal] Unable to play recording:", err);
+    }
+  }
+
+  requestDeleteRecording(recording) {
+    this.pendingDeleteRecording = recording;
+    const message = $("#record-delete-message");
+    if (message) message.textContent = `Delete “${recording.name}”?`;
+    $("#record-delete-overlay")?.classList.remove("hidden");
+  }
+
+  closeDeleteConfirm() {
+    this.pendingDeleteRecording = null;
+    $("#record-delete-overlay")?.classList.add("hidden");
+  }
+
+  async confirmDeleteRecording() {
+    const recording = this.pendingDeleteRecording;
+    this.closeDeleteConfirm();
+    if (!recording) return;
+
+    if (this.activeRecordingId === recording.id) {
+      this.stopRecordingPlayback();
+    }
+
+    try {
+      await this.db.deleteRecording(recording.id);
+      await this.renderRecordingList();
+    } catch (err) {
+      console.error("[SettingsModal] Failed to delete recording:", err);
+    }
   }
 
   updateRecordStatus(isRecording) {

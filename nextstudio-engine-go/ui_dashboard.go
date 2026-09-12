@@ -17,35 +17,37 @@ import (
 var sparkBlocks = []rune{' ', ' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
 
 type AudioMetrics struct {
-	InputPeakL      float32
-	InputPeakR      float32
-	OutputPeakL     float32
-	OutputPeakR     float32
-	InputSparkL     string
-	InputSparkR     string
-	OutputSparkL    string
-	OutputSparkR    string
-	InferMs         float64
-	DspMs           float64
-	TotalMs         float64
-	AheadMs         float64
-	ChunkNumber     uint64
-	TotalBytes      uint64
-	ModeName        string
-	LastUpdated     time.Time
+	InputPeakL   float32
+	InputPeakR   float32
+	OutputPeakL  float32
+	OutputPeakR  float32
+	InputSparkL  string
+	InputSparkR  string
+	OutputSparkL string
+	OutputSparkR string
+	InferMs      float64
+	DspMs        float64
+	TotalMs      float64
+	AheadMs      float64
+	ChunkNumber  uint64
+	TotalBytes   uint64
+	ModeName     string
+	LastUpdated  time.Time
 }
 
 type Dashboard struct {
-	hw            *HardwareInfo
-	deviceDesc    string
-	listenAddr    string
-	clientAddr    atomic.Pointer[string]
-	connected     atomic.Bool
-	startTime     time.Time
-	metrics       AudioMetrics
-	metricsMu     sync.RWMutex
-	stopChan      chan struct{}
-	running       atomic.Bool
+	hw         *HardwareInfo
+	deviceDesc string
+	listenAddr string
+	clientAddr atomic.Pointer[string]
+	connected  atomic.Bool
+	startTime  time.Time
+	metrics    AudioMetrics
+	metricsMu  sync.RWMutex
+	memStats   runtime.MemStats
+	memStatsAt time.Time
+	stopChan   chan struct{}
+	running    atomic.Bool
 }
 
 func NewDashboard(hw *HardwareInfo, deviceDesc string, listenAddr string) *Dashboard {
@@ -90,7 +92,7 @@ func (d *Dashboard) UpdateAudioMetrics(
 	d.metrics.DspMs = dspMs
 	d.metrics.TotalMs = totalMs
 
-	// Chunk duration is 185.75 ms (8916 samples / 48kHz)
+	// Native packets contain 8,192 samples at the extension's 44.1 kHz rate.
 	chunkDurationMs := 185.75
 	d.metrics.AheadMs = chunkDurationMs - totalMs
 	d.metrics.LastUpdated = time.Now()
@@ -114,6 +116,10 @@ func computePeakAndSpark(samples []float32, width int) (float32, string) {
 	}
 
 	var sb strings.Builder
+	// The dashboard is informational and refreshes only a few times per
+	// second. Sampling each bin keeps terminal telemetry from competing with
+	// the audio deadline while leaving the actual input/output samples intact.
+	const sampleStride = 16
 	for i := 0; i < width; i++ {
 		start := i * step
 		end := start + step
@@ -121,7 +127,7 @@ func computePeakAndSpark(samples []float32, width int) (float32, string) {
 			end = len(samples)
 		}
 		var binPeak float32
-		for j := start; j < end; j++ {
+		for j := start; j < end; j += sampleStride {
 			v := samples[j]
 			if v < 0 {
 				v = -v
@@ -189,7 +195,7 @@ func (d *Dashboard) Start() {
 		if isOutputTerminal() {
 			os.Stdout.WriteString("\033[?25h\033[0m\n")
 		}
-		fmt.Println("[*] Next-Amp Engine closed. Goodbye!")
+		fmt.Println("[*] NextStudio Engine closed. Goodbye!")
 		os.Exit(0)
 	}()
 
@@ -206,7 +212,7 @@ func (d *Dashboard) Stop() {
 }
 
 func (d *Dashboard) renderLoop() {
-	interval := 66 * time.Millisecond // ~15 FPS in interactive terminal
+	interval := 200 * time.Millisecond // 5 FPS; keep terminal rendering off the audio deadline
 	if !isOutputTerminal() {
 		interval = 2 * time.Second // 0.5 FPS in background/log mode
 	}
@@ -238,13 +244,18 @@ func (d *Dashboard) renderLogLine() {
 		status = "CONNECTED"
 	}
 	totalMB := float64(metrics.TotalBytes) / 1024 / 1024
-	fmt.Printf("[⚡ Next-Amp Engine] Dev: %s | Status: %s | Mode: %s | Chunks: #%d (%.1f MB) | Latency: %.1f ms\n",
+	fmt.Printf("[⚡ NextStudio Engine] Dev: %s | Status: %s | Mode: %s | Chunks: #%d (%.1f MB) | Latency: %.1f ms\n",
 		d.deviceDesc, status, metrics.ModeName, metrics.ChunkNumber, totalMB, metrics.TotalMs)
 }
 
 func (d *Dashboard) renderFrame() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
+	// ReadMemStats can briefly stop the world. The dashboard is informational,
+	// so refresh it at 1 Hz instead of doing that work on every 5 FPS frame.
+	if d.memStatsAt.IsZero() || time.Since(d.memStatsAt) >= time.Second {
+		runtime.ReadMemStats(&d.memStats)
+		d.memStatsAt = time.Now()
+	}
+	m := d.memStats
 
 	allocMB := float64(m.Alloc) / 1024 / 1024
 	sysMB := float64(m.Sys) / 1024 / 1024
@@ -286,7 +297,7 @@ func (d *Dashboard) renderFrame() {
 	b.WriteString("\033[H")
 
 	// TITLE
-	b.WriteString("\033[1;36m  ⚡ Next-Amp Audio Engine\033[0m  \033[90mv2.2.0-eco\033[0m\n")
+	b.WriteString(fmt.Sprintf("\033[1;36m  ⚡ NextStudio Audio Engine\033[0m  \033[90mv%s\033[0m\n", Version))
 	b.WriteString("\033[90m  ──────────────────────────────────────────────────────────\033[0m\n")
 
 	// PANE 1: HARDWARE & SYSTEM STATUS

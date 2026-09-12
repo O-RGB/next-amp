@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>RUNNING|suite</title>
+<pre id="result">Running kernel suite...</pre>
+<script type="module">
+const names = [
+  'baseline',
+  'exp_conv',
+  'direct_conv',
+  'unpacked_depthwise',
+  'unpacked_transpose'
+];
+const result = document.querySelector('#result');
+const outputs = [];
+
+function runCandidate(candidate) {
+  return new Promise((resolve) => {
+    const frame = document.createElement('iframe');
+    frame.hidden = true;
+    frame.src = `model-kernel-flags-benchmark.html?candidate=${candidate}&rounds=10`;
+    const onMessage = event => {
+      if (event.origin !== location.origin ||
+          event.data?.type !== 'NEXTSTUDIO_KERNEL_BENCH' ||
+          event.data?.output?.candidate !== candidate) return;
+      window.removeEventListener('message', onMessage);
+      frame.remove();
+      resolve(event.data.output);
+    };
+    window.addEventListener('message', onMessage);
+    document.body.append(frame);
+  });
+}
+
+for (const name of names) {
+  const output = await runCandidate(name);
+  outputs.push(output);
+  result.textContent = JSON.stringify(outputs, null, 2);
+  const partial = outputs.map(item => item.error
+    ? `${item.candidate}:ERR`
+    : `${item.candidate}:${item.timing.p50Ms}:${item.timing.p95Ms}`
+  ).join(',');
+  document.title = `RUNNING|suite|${partial}`;
+  await new Promise(resolve => setTimeout(resolve, 500));
+}
+
+const compact = outputs.map(output => output.error
+  ? `${output.candidate}:ERR`
+  : `${output.candidate}:${output.timing.p50Ms}:${output.timing.p95Ms}`
+).join(',');
+document.title = `DONE|suite|${compact}`;
+</script>

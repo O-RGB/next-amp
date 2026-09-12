@@ -1,0 +1,11 @@
+{
+  "name": "NextStudio — Pitch Shifter, AI Vocal & Video Sync",
+  "short_name": "NextStudio",
+  "description": "A focused browser studio for real-time audio practice, AI vocal control, video sync and recording.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#071411",
+  "theme_color": "#071411",
+  "icons": [{ "src": "/assets/images/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }]
+}

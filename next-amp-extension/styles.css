@@ -97,6 +97,25 @@ body {
   background-color: #a0a0a0;
 }
 
+.ai-mode-btn {
+  min-width: 31px;
+  gap: 2px;
+}
+
+.ai-mode-btn.ai-mode-active {
+  background-color: var(--theme-window);
+  color: var(--theme-text);
+  border-top-color: #000;
+  border-left-color: #000;
+  border-right-color: #fff;
+  border-bottom-color: #fff;
+  text-shadow: 0 0 2px rgba(0, 255, 0, 0.45);
+}
+
+.ai-mode-btn:not(.ai-mode-active) {
+  color: #666;
+}
+
 .theme-text-main {
   color: var(--theme-text);
   text-shadow: 0 0 2px rgba(0, 255, 0, 0.5);
@@ -245,8 +264,8 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 /* Modal and other styles remain same ... */
 #modal-overlay,
 #session-mode-overlay,
-#tab-status-overlay,
 #first-launch-overlay,
+#usage-donate-overlay,
 #ai-slow-overlay,
 #go-engine-overlay {
   position: fixed;
@@ -261,8 +280,8 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 
 #modal-overlay.active,
 #session-mode-overlay.active,
-#tab-status-overlay.active,
 #first-launch-overlay.active,
+#usage-donate-overlay.active,
 #ai-slow-overlay.active,
 #go-engine-overlay.active {
   display: flex;
@@ -282,6 +301,10 @@ input[type="range"].h-slider::-webkit-slider-thumb {
   max-width: 260px;
   background: #292929;
   padding: 4px;
+}
+
+.donation-dialog {
+  max-width: 278px;
 }
 
 .tab-header {
@@ -349,6 +372,16 @@ input[type="range"].h-slider::-webkit-slider-thumb {
   margin-bottom: 2px;
 }
 
+.rec-item.is-playing {
+  border-color: var(--theme-text-sec);
+  background: #171717;
+  box-shadow: inset 2px 0 0 var(--theme-text-sec);
+}
+
+.rec-item.is-playing .rec-icon {
+  color: var(--theme-text-sec);
+}
+
 .rec-icon {
   color: var(--theme-text-sec);
 }
@@ -357,6 +390,21 @@ input[type="range"].h-slider::-webkit-slider-thumb {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.record-delete-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.record-delete-overlay.hidden {
+  display: none;
 }
 
 .tab-content::-webkit-scrollbar {

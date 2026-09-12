@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Nextamp Extension",
-  "version": "4.6",
+  "name": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
+  "description": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
+  "version": "1.0",
   "permissions": [
     "tabCapture",
     "offscreen",

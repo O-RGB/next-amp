@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>NextAmp model equivalence and timing</title>
-<p>Local diagnostic: compares unchanged weights and output masks. Timings are not power measurements.</p>
+<title>NextStudio model equivalence and timing</title>
+<p>Local diagnostic: compares unchanged weights and output masks. Timings are not power measurements. Run one backend at a time with this page visible.</p>
 <button id="webgpu">Test WebGPU</button>
 <button id="webgl">Test WebGL</button>
 <pre id="result">Choose a backend. Keep this page visible for timing.</pre>
@@ -13,11 +13,89 @@ import { compareStreamingModels, measureFrameIndexedContinuity } from './stream-
 
 const display = document.querySelector('#result');
 const pause = () => new Promise(resolve => setTimeout(resolve, 0));
+const MODEL_JSON_URL = '../../next-amp-extension/model/model.json';
+const MODEL_BIN_URL = '../../next-amp-extension/model/group1-shard1of1.bin';
+
+async function sha256(url) {
+  const response = await fetch(url, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`Unable to hash ${url}: ${response.status}`);
+  const digest = await crypto.subtle.digest('SHA-256', await response.arrayBuffer());
+  return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function collectEnvironment(backend) {
+  const environment = {
+    timestamp: new Date().toISOString(),
+    userAgent: navigator.userAgent,
+    platform: navigator.platform || null,
+    hardwareConcurrency: navigator.hardwareConcurrency || null,
+    deviceMemoryGiB: navigator.deviceMemory || null,
+    tfjs: tf.version_core || null,
+    requestedBackend: backend,
+    actualBackend: tf.getBackend(),
+    sampleRate: 44100,
+    profile: { balanced: { frames: 15, chunkSamples: 7680, sliceStart: 34 }, ai_remove: { frames: 16, chunkSamples: 8192, sliceStart: 32 } }
+  };
+  try {
+    const gl = tf.backend()?.gpgpu?.gl;
+    if (gl) {
+      environment.renderer = gl.getParameter(gl.RENDERER) || null;
+      environment.vendor = gl.getParameter(gl.VENDOR) || null;
+      environment.webglVersion = gl.getParameter(gl.VERSION) || null;
+    }
+  } catch (_) {}
+  if (backend === 'webgpu' && navigator.gpu?.requestAdapter) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      const info = adapter?.info || (adapter?.requestAdapterInfo ? await adapter.requestAdapterInfo() : null);
+      if (info) environment.adapter = {
+        vendor: info.vendor || null,
+        architecture: info.architecture || null,
+        device: info.device || null,
+        description: info.description || null
+      };
+    } catch (_) {}
+  }
+  [environment.modelJsonHash, environment.modelBinHash] = await Promise.all([
+    sha256(MODEL_JSON_URL),
+    sha256(MODEL_BIN_URL)
+  ]);
+  return environment;
+}
+
+function summarize(values) {
+  if (!values.length) return { count: 0, p50Ms: null, p95Ms: null, maxMs: null };
+  const sorted = [...values].sort((a, b) => a - b);
+  const at = ratio => sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)];
+  return {
+    count: values.length,
+    p50Ms: Number(at(0.50).toFixed(3)),
+    p95Ms: Number(at(0.95).toFixed(3)),
+    maxMs: Number(sorted[sorted.length - 1].toFixed(3))
+  };
+}
+
 window.runModelValidation = async (backend = 'webgpu', rounds = 24) => {
   if (window.validation?.running) throw new Error('Validation already running');
-  const state = window.validation = { running: true, backend, quality: [], timings: [[], []] };
+  const state = window.validation = {
+    running: true,
+    backend,
+    quality: [],
+    outputHeadQuality: null,
+    timings: {
+      launch: [[], []],
+      readback: [[], []],
+      total: [[], []]
+    },
+    outputHeadTiming: {
+      launch: [],
+      readback: [],
+      total: []
+    }
+  };
   const update = stage => { state.stage = stage; display.textContent = JSON.stringify(state, null, 2); };
   const models = [];
+  let outputHeadModel;
   let benchInput;
   try {
     update('loading');
@@ -29,13 +107,27 @@ window.runModelValidation = async (backend = 'webgpu', rounds = 24) => {
     tf.env().set('WEBGL_DELETE_TEXTURE_THRESHOLD', -1);
     if (!await tf.setBackend(backend)) throw new Error(`${backend} unavailable`);
     await tf.ready();
-    const artifacts = await tf.io.browserHTTPRequest('../../next-amp-extension/model/model.json').load();
+    state.environment = await collectEnvironment(backend);
+    const artifacts = await tf.io.browserHTTPRequest(MODEL_JSON_URL).load();
     const optimized = optimizeVocalModelArtifacts(artifacts);
     state.foldedCount = optimized.foldedCount;
     state.explicitPadCount = optimized.explicitPadCount;
     if (optimized.foldedCount !== 12) throw new Error('Expected all 12 branches to be optimized');
     if (optimized.explicitPadCount !== 16) throw new Error('Expected all 16 padding nodes to be folded');
     for (const item of [artifacts, optimized.artifacts]) models.push(await tf.loadGraphModel({ load: async () => item }));
+    const outputHead = optimizeVocalModelArtifacts(artifacts, {
+      outputHead: {
+        start: 32,
+        frames: 32,
+        bins: 1024,
+        headStart: 0,
+        sourceCrop: { start: 32, frames: 32, inputFrames: 64, bins: 1024 },
+        decoderCrop: { start: 31, frames: 33, inputFrames: 64, channels: 96, bins: 1024 }
+      }
+    });
+    if (!outputHead?.artifacts) throw new Error('Unable to create exact output-head candidate');
+    state.outputHeadCandidate = outputHead.metadata;
+    outputHeadModel = await tf.loadGraphModel({ load: async () => outputHead.artifacts });
     let seed = 0x51a7;
     const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
     for (const kind of ['silence', 'sparse', 'dense', 'quiet']) {
@@ -75,34 +167,101 @@ window.runModelValidation = async (backend = 'webgpu', rounds = 24) => {
       boundaryFrames: 3
     });
     benchInput = tf.tensor4d(Float32Array.from({ length: 1024 * 64 * 2 }, () => random()), [1, 1024, 64, 2]);
+    update('output-head equivalence');
+    const fullOutput = models[0].execute(benchInput);
+    const headOutput = outputHeadModel.execute(benchInput);
+    try {
+      const fullData = await fullOutput.data();
+      const headData = await headOutput.data();
+      let maxMaskError = 0;
+      for (let bin = 0; bin < 1024; bin++) {
+        for (let frame = 0; frame < 32; frame++) {
+          for (let channel = 0; channel < 2; channel++) {
+            const fullIndex = ((bin * 64) + frame + 32) * 2 + channel;
+            const headIndex = (channel * 32 + frame) * 1024 + bin;
+            const expected = 1 / (1 + Math.exp(-fullData[fullIndex]));
+            if (!Number.isFinite(expected) || !Number.isFinite(headData[headIndex])) throw new Error('Non-finite output-head result');
+            maxMaskError = Math.max(maxMaskError, Math.abs(expected - headData[headIndex]));
+          }
+        }
+      }
+      state.outputHeadQuality = { maxMaskError };
+      if (maxMaskError > 2e-6) throw new Error(`Output-head mask mismatch: ${maxMaskError}`);
+    } finally {
+      fullOutput.dispose();
+      headOutput.dispose();
+    }
     const infer = async model => {
       const start = performance.now();
-      const mask = tf.tidy(() => model.execute(benchInput)
+      let mask;
+      const launchStart = performance.now();
+      mask = tf.tidy(() => model.execute(benchInput)
         .slice([0, 0, 34, 0], [1, 1024, 15, 2]).transpose([0, 3, 2, 1]).reshape([2, 15, 1024]).sigmoid());
+      const launchMs = performance.now() - launchStart;
+      const readbackStart = performance.now();
       try { await mask.data(); } finally { mask.dispose(); }
-      return performance.now() - start;
+      const readbackMs = performance.now() - readbackStart;
+      return {
+        launchMs,
+        readbackMs,
+        totalMs: performance.now() - start
+      };
+    };
+    const inferOutputHead = async model => {
+      const start = performance.now();
+      const launchStart = performance.now();
+      const output = tf.tidy(() => model.execute(benchInput));
+      const launchMs = performance.now() - launchStart;
+      const readbackStart = performance.now();
+      try { await output.data(); } finally { output.dispose(); }
+      const readbackMs = performance.now() - readbackStart;
+      return { launchMs, readbackMs, totalMs: performance.now() - start };
     };
     for (let i = 0; i < 3; i++) for (const model of models) await infer(model);
+    for (let i = 0; i < 3; i++) await inferOutputHead(outputHeadModel);
     state.profiles = [];
     for (const model of models) {
       const profile = await tf.profile(() => model.execute(benchInput));
       const counts = {};
       for (const kernel of profile.kernels) counts[kernel.name] = (counts[kernel.name] || 0) + 1;
-      state.profiles.push({ kernelCount: profile.kernels.length, peakBytes: profile.peakBytes, counts });
+      state.profiles.push({ kernelCount: profile.kernels.length, peakBytes: profile.peakBytes, newBytes: profile.newBytes, resultBytes: profile.resultBytes, counts });
       profile.result.dispose();
     }
+    const outputHeadProfile = await tf.profile(() => outputHeadModel.execute(benchInput));
+    state.outputHeadProfile = {
+      kernelCount: outputHeadProfile.kernels.length,
+      peakBytes: outputHeadProfile.peakBytes,
+      newBytes: outputHeadProfile.newBytes,
+      resultBytes: outputHeadProfile.resultBytes,
+      counts: outputHeadProfile.kernels.reduce((counts, kernel) => {
+        counts[kernel.name] = (counts[kernel.name] || 0) + 1;
+        return counts;
+      }, {})
+    };
+    outputHeadProfile.result.dispose();
     state.steadyTensorCount = tf.memory().numTensors;
     for (let i = 0; i < rounds; i++) {
       update(`timing: ${i + 1}/${rounds}`);
       // Alternate order to reduce systematic bias from load/temperature.
-      for (const index of (i % 2 ? [1, 0] : [0, 1])) state.timings[index].push(await infer(models[index]));
+      for (const index of (i % 2 ? [1, 0] : [0, 1])) {
+        const timing = await infer(models[index]);
+        state.timings.launch[index].push(timing.launchMs);
+        state.timings.readback[index].push(timing.readbackMs);
+        state.timings.total[index].push(timing.totalMs);
+      }
+      const outputHeadTiming = await inferOutputHead(outputHeadModel);
+      state.outputHeadTiming.launch.push(outputHeadTiming.launchMs);
+      state.outputHeadTiming.readback.push(outputHeadTiming.readbackMs);
+      state.outputHeadTiming.total.push(outputHeadTiming.totalMs);
       await pause();
     }
     if (tf.memory().numTensors !== state.steadyTensorCount) throw new Error('Inference leaked tensors');
-    state.summary = state.timings.map(values => {
-      const sorted = [...values].sort((a, b) => a - b);
-      return { medianMs: sorted[Math.floor(sorted.length / 2)], p95Ms: sorted[Math.ceil(sorted.length * 0.95) - 1] };
-    });
+    state.summary = ['launch', 'readback', 'total'].map(stage => ({
+      stage,
+      original: summarize(state.timings[stage][0]),
+      optimized: summarize(state.timings[stage][1]),
+      outputHead: summarize(state.outputHeadTiming[stage])
+    }));
     update('passed');
   } catch (error) {
     state.error = error.stack || String(error);
@@ -110,6 +269,7 @@ window.runModelValidation = async (backend = 'webgpu', rounds = 24) => {
   } finally {
     benchInput?.dispose();
     models.forEach(model => model.dispose());
+    outputHeadModel?.dispose();
     state.remainingTensors = tf.memory().numTensors;
     state.running = false;
     display.textContent = JSON.stringify(state, null, 2);

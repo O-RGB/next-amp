@@ -14,9 +14,35 @@ const original = {
   weightData: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
 };
 const before = JSON.stringify(original.modelTopology);
+const baselineResult = optimizeVocalModelArtifacts(original, { optimizeGraph: false });
+assert.equal(baselineResult.foldedCount, 0);
+assert.equal(baselineResult.explicitPadCount, 0);
+assert.equal(baselineResult.outputHead, null);
+assert.equal(baselineResult.artifacts, original, 'quality baseline must keep the original graph');
 const { artifacts: optimized, foldedCount, explicitPadCount } = optimizeVocalModelArtifacts(original);
+const outputHeadResult = optimizeVocalModelArtifacts(original, {
+  outputHead: {
+    start: 32,
+    frames: 32,
+    bins: 1024,
+    headStart: 0,
+    sourceCrop: { start: 32, frames: 32, inputFrames: 64, bins: 1024 },
+    decoderCrop: { start: 31, frames: 33, inputFrames: 64, channels: 96, bins: 1024 }
+  }
+});
 assert.equal(foldedCount, 12);
 assert.equal(explicitPadCount, 16);
+assert.deepEqual(outputHeadResult.outputHead, {
+  start: 32,
+  frames: 32,
+  bins: 1024,
+  inputFrames: 64,
+  activation: 'sigmoid',
+  layout: '[2,frames,bins]',
+  decoderRoi: { start: 1, frames: 32, inputFrames: 33, channels: 32 },
+  decoderLayerRoi: { start: 31, frames: 33, inputFrames: 64, channels: 96 }
+});
+assert.equal(outputHeadResult.artifacts.weightData.byteLength, original.weightData.byteLength + 172);
 assert.equal(optimized.modelTopology.node.length, original.modelTopology.node.length - 40);
 assert.equal(optimized.weightData, original.weightData);
 assert.equal(optimized.weightSpecs, original.weightSpecs);
@@ -43,6 +69,7 @@ assert.equal(optimizeVocalModelArtifacts({}).foldedCount, 0);
 await tf.setBackend('cpu');
 const load = artifacts => tf.loadGraphModel({ load: async () => artifacts });
 const models = [await load(original), await load(optimized)];
+const outputHeadModel = await load(outputHeadResult.artifacts);
 let seed = 0x51a7;
 const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
 try {
@@ -68,7 +95,30 @@ try {
     assert.ok(maxError <= 1e-5, `${kind}: logit mismatch ${maxError}`);
     console.log(JSON.stringify({ kind, foldedCount, maxLogitError: maxError, milliseconds: times }));
   }
+  const headInput = tf.tensor4d(Float32Array.from({ length: 1024 * 64 * 2 }, () => random()), [1, 1024, 64, 2]);
+  const fullOutput = models[0].execute(headInput);
+  const headOutput = outputHeadModel.execute(headInput);
+  const fullData = await fullOutput.data();
+  const headData = await headOutput.data();
+  let maxHeadError = 0;
+  for (let bin = 0; bin < 1024; bin++) {
+    for (let frame = 0; frame < 32; frame++) {
+      for (let channel = 0; channel < 2; channel++) {
+        const fullIndex = ((bin * 64) + frame + 32) * 2 + channel;
+        const headIndex = (channel * 32 + frame) * 1024 + bin;
+        const expected = 1 / (1 + Math.exp(-fullData[fullIndex]));
+        maxHeadError = Math.max(maxHeadError, Math.abs(expected - headData[headIndex]));
+      }
+    }
+  }
+  const outputHeadShape = headOutput.shape;
+  fullOutput.dispose();
+  headOutput.dispose();
+  headInput.dispose();
+  assert.ok(maxHeadError <= 2e-6, `output head mismatch ${maxHeadError}`);
+  console.log(JSON.stringify({ outputHeadShape, maxHeadError }));
 } finally {
   models.forEach(model => model.dispose());
+  outputHeadModel.dispose();
 }
 assert.equal(tf.memory().numTensors, 0, 'model validation leaked tensors');

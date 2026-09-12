@@ -1,7 +1,7 @@
 /**
- * NextAmp Go Native Engine Client
+ * NextStudio Go Native Engine Client
  * 
- * High-performance WebSocket bridge connecting Next-Amp Extension
+ * High-performance WebSocket bridge connecting NextStudio Extension
  * to the standalone Go Native Desktop Engine (ws://127.0.0.1:41919/ws).
  */
 
@@ -14,8 +14,23 @@ export class GoEngineClient {
     this.enabled = false;
     this.lastRtt = 0;
     this.deviceInfo = "Go Native Core";
+    // The worklet restarts chunk indexes at every mode/song boundary. Echo a
+    // short stream token in the reserved packet bytes so an old response can
+    // never collide with the new stream's chunk #0.
+    this.streamToken = 0;
 
-    this.pendingChunks = new Map();
+    // The native server processes one audio packet at a time. Do not let the
+    // browser queue unbounded packets in the WebSocket when a CPU/GPU spike
+    // makes inference temporarily slower than realtime.
+    this.maxInFlightChunks = 2;
+    // Keep the bounded in-flight ledger in typed arrays. A Map entry per
+    // packet is unnecessary here and creates avoidable GC work during a long
+    // stream, especially while an older Windows application is busy.
+    this.pendingChunkIndexes = new Uint32Array(this.maxInFlightChunks);
+    this.pendingChunkTimes = new Float64Array(this.maxInFlightChunks);
+    this.pendingChunkValid = new Uint8Array(this.maxInFlightChunks);
+    this.pendingChunkCount = 0;
+    this.backpressureDrops = 0;
     this.reconnectTimer = null;
 
     // Some Chromium/Windows runtimes can still surface a binary WebSocket
@@ -45,6 +60,7 @@ export class GoEngineClient {
 
   disable() {
     this.enabled = false;
+    this.advanceStreamToken();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -57,7 +73,7 @@ export class GoEngineClient {
     }
     this.isConnected = false;
     this.isConnecting = false;
-    this.pendingChunks.clear();
+    this.clearPendingChunks();
   }
 
   connect() {
@@ -79,7 +95,7 @@ export class GoEngineClient {
           clearTimeout(this.reconnectTimer);
           this.reconnectTimer = null;
         }
-        console.log("[NextAmp Go Engine] Connected to", this.url);
+        console.log("[NextStudio Go Engine] Connected to", this.url);
         if (this.onStatusChange) {
           this.onStatusChange("⚡ GO ENGINE (Connected)");
         }
@@ -98,7 +114,8 @@ export class GoEngineClient {
         const wasConnected = this.isConnected;
         this.isConnected = false;
         this.isConnecting = false;
-        this.pendingChunks.clear();
+        this.advanceStreamToken();
+        this.clearPendingChunks();
 
         if (this.enabled) {
           if (this.onStatusChange) {
@@ -131,7 +148,7 @@ export class GoEngineClient {
         const msg = JSON.parse(e.data);
         if (msg.type === "READY") {
           this.deviceInfo = msg.device || "Go Native Core";
-          console.log("[NextAmp Go Engine] Handshake READY:", msg);
+          console.log("[NextStudio Go Engine] Handshake READY:", msg);
           if (this.onStatusChange) {
             if (msg.ai_enabled === false) {
               const reason = msg.error ? `: ${String(msg.error).slice(0, 80)}` : "";
@@ -172,12 +189,16 @@ export class GoEngineClient {
 
     const view = new DataView(buf);
     const chunkIndex = view.getUint32(0, true);
+    const streamToken = view.getUint16(6, true);
+    if (streamToken !== this.streamToken) return;
 
-    const sendTime = this.pendingChunks.get(chunkIndex);
-    if (sendTime) {
-      this.lastRtt = Math.round((performance.now() - sendTime) * 10) / 10;
-      this.pendingChunks.delete(chunkIndex);
-    }
+    const pendingSlot = this.findPendingSlot(chunkIndex);
+    // A response without a matching current request is stale/out-of-band
+    // (for example, it arrived after RESET_STREAM). Never enqueue it.
+    if (pendingSlot < 0) return;
+    const sendTime = this.pendingChunkTimes[pendingSlot];
+    this.lastRtt = Math.round((performance.now() - sendTime) * 10) / 10;
+    this.deletePendingSlot(pendingSlot);
 
     // Zero-Copy sub-array views (no buf.slice, no duplicate ArrayBuffer allocation)
     const numSamples = payloadBytes / 8;
@@ -192,7 +213,8 @@ export class GoEngineClient {
   }
 
   resetStream() {
-    this.pendingChunks.clear();
+    this.advanceStreamToken();
+    this.clearPendingChunks();
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     try {
       // WebSocket preserves ordering: packets sent before this marker are
@@ -201,8 +223,56 @@ export class GoEngineClient {
     } catch (_) {}
   }
 
+  advanceStreamToken() {
+    this.streamToken = (this.streamToken + 1) & 0xffff;
+    if (this.streamToken === 0) this.streamToken = 1;
+  }
+
+  canSendChunk() {
+    return this.pendingChunkCount < this.maxInFlightChunks;
+  }
+
+  getPendingCount() {
+    return this.pendingChunkCount;
+  }
+
+  findPendingSlot(chunkIndex) {
+    for (let i = 0; i < this.maxInFlightChunks; i++) {
+      if (this.pendingChunkValid[i] && this.pendingChunkIndexes[i] === chunkIndex) return i;
+    }
+    return -1;
+  }
+
+  allocatePendingSlot(chunkIndex, sendTime) {
+    for (let i = 0; i < this.maxInFlightChunks; i++) {
+      if (!this.pendingChunkValid[i]) {
+        this.pendingChunkValid[i] = 1;
+        this.pendingChunkIndexes[i] = chunkIndex;
+        this.pendingChunkTimes[i] = sendTime;
+        this.pendingChunkCount++;
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  deletePendingSlot(slot) {
+    if (slot < 0 || slot >= this.maxInFlightChunks || !this.pendingChunkValid[slot]) return;
+    this.pendingChunkValid[slot] = 0;
+    this.pendingChunkCount--;
+  }
+
+  clearPendingChunks() {
+    this.pendingChunkValid.fill(0);
+    this.pendingChunkCount = 0;
+  }
+
   sendChunk(chunkIndex, rawL, rawR, mode, delayChunks = 1) {
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    if (!this.canSendChunk()) {
+      this.backpressureDrops++;
       return false;
     }
 
@@ -215,7 +285,7 @@ export class GoEngineClient {
       this.sendView.setUint32(0, chunkIndex, true);
       this.sendView.setUint8(4, modeCode);
       this.sendView.setUint8(5, delayChunks);
-      this.sendView.setUint8(6, 0);
+      this.sendView.setUint16(6, this.streamToken, true);
       this.sendFloatL.set(rawL);
       this.sendFloatR.set(rawR);
       bufferToSend = this.sendBuffer;
@@ -227,7 +297,7 @@ export class GoEngineClient {
       view.setUint32(0, chunkIndex, true);
       view.setUint8(4, modeCode);
       view.setUint8(5, delayChunks);
-      view.setUint8(6, 0);
+      view.setUint16(6, this.streamToken, true);
       const rawLBytes = new Uint8Array(rawL.buffer, rawL.byteOffset, rawL.byteLength);
       const rawRBytes = new Uint8Array(rawR.buffer, rawR.byteOffset, rawR.byteLength);
       packet.set(rawLBytes, 8);
@@ -235,14 +305,18 @@ export class GoEngineClient {
       bufferToSend = packet.buffer;
     }
 
-    this.pendingChunks.set(chunkIndex, performance.now());
+    if (this.allocatePendingSlot(chunkIndex, performance.now()) < 0) {
+      this.backpressureDrops++;
+      return false;
+    }
     try {
       this.ws.send(bufferToSend);
       return true;
     } catch (_) {
       // The socket can close between readyState checking and send(). Do not
       // pass raw audio to the worklet; GO concealment will cover the gap.
-      this.pendingChunks.delete(chunkIndex);
+      const pendingSlot = this.findPendingSlot(chunkIndex);
+      this.deletePendingSlot(pendingSlot);
       return false;
     }
   }

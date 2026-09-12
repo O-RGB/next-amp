@@ -18,7 +18,7 @@ var embeddedEncryptedModel []byte
 // The raw ONNX graph and weights never touch disk.
 func loadDecryptedModel() ([]byte, error) {
 	// If explicit dev flag is set, allow loading from file
-	if os.Getenv("NEXTAMP_USE_LOCAL_MODEL") == "1" {
+	if os.Getenv("NEXTSTUDIO_USE_LOCAL_MODEL") == "1" {
 		if data, err := os.ReadFile("model.onnx"); err == nil {
 			return data, nil
 		}

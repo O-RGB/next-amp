@@ -1,5 +1,13 @@
 let creating;
 
+// Open a small first-run welcome page after a real installation. Chrome only
+// emits reason="install" once for an extension install, so normal popup use,
+// service-worker wakeups, and extension reloads do not interrupt the user.
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason !== "install") return;
+  chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
+});
+
 async function setMap(playerTabId, sourceTabId) {
   const data = await chrome.storage.session.get("playerMap");
   const map = data.playerMap || {};
@@ -167,8 +175,17 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
     );
     return true;
   } else if (msg.type === "STOP_CAPTURE") {
-    chrome.runtime.sendMessage(msg);
-    sendResponse({ success: true });
+    // Wait for the offscreen document to invalidate/tear down the capture.
+    // Returning immediately lets the popup close while START_CAPTURE is still
+    // preparing a stream, which used to leave an orphaned AI load behind.
+    chrome.runtime.sendMessage(msg, (response) => {
+      // Reading lastError prevents Chrome from reporting an unhandled
+      // "Receiving end does not exist" warning when the offscreen document is
+      // already gone.
+      void chrome.runtime.lastError;
+      sendResponse(response || { success: true });
+    });
+    return true;
   } else if (msg.type === "SET_PARAM") {
     chrome.runtime.sendMessage(msg);
     sendResponse({ success: true });

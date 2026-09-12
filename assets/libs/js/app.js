@@ -1,4 +1,4 @@
-/* NEXTAMP PLAYER - OPTIMIZED VERSION
+/* NEXTSTUDIO PLAYER - OPTIMIZED VERSION
    Performance tuned for Mobile & Background Playback
    Date: 2025-12-27
 */
@@ -6,6 +6,10 @@
 import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 
 (function () {
+  // The Web build replaces this marker from NEXTSTUDIO_DISABLE_UNAUTHORIZED_COPY.
+  // Source/dev execution keeps the guard enabled by default.
+  const unauthorizedCopyGuardEnabled =
+    "__NEXTSTUDIO_DISABLE_UNAUTHORIZED_COPY__" !== "true";
   const allowedDomains = [
     "next-amp-player.vercel.app",
     "localhost",
@@ -13,7 +17,7 @@ import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
   ];
   const currentDomain = window.location.hostname;
 
-  if (!allowedDomains.includes(currentDomain)) {
+  if (unauthorizedCopyGuardEnabled && !allowedDomains.includes(currentDomain)) {
     document.body.innerHTML = "<h1>Unauthorized Copy</h1>";
     throw new Error("Piracy detected!");
   }
@@ -61,7 +65,7 @@ document.addEventListener("contextmenu", (event) => event.preventDefault());
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
-const STORAGE_KEY = "nextamp_settings_v9_stable";
+const STORAGE_KEY = "nextstudio_settings_v9_stable";
 
 const savedSettingsRaw = localStorage.getItem(STORAGE_KEY);
 let savedSettings = savedSettingsRaw ? JSON.parse(savedSettingsRaw) : {};
@@ -107,6 +111,189 @@ let isReverbOn = false;
 
 let currentAudioBuffer = null;
 let isStretchOn = false;
+
+// Web AI Vocal is opt-in. Keep TensorFlow, the AI module, AudioWorklet,
+// model, and WASM completely off the initial player load path.
+let aiVocalManager = null;
+let aiVocalNode = null;
+let aiVocalScriptPromise = null;
+let aiVocalModulePromise = null;
+let aiVocalOpening = false;
+
+const AI_WEB_ASSETS = Object.freeze({
+  assetBase: "/next-amp-extension/",
+  worklet: "/next-amp-extension/modules/ai-vocal/vocal-worklet.js",
+  stftSimd: "/next-amp-extension/modules/ai-vocal/stft_simd.wasm",
+  stftScalar: "/next-amp-extension/modules/ai-vocal/stft_scalar.wasm",
+  model: "/next-amp-extension/model/model.json",
+  webgpuBackend: "/next-amp-extension/assets/libs/js/tf-backend-webgpu.min.js"
+});
+
+function updateAIVocalUI(status = "OFF • NOT LOADED") {
+  const statusEl = $("#ai-vocal-status");
+  if (statusEl) statusEl.textContent = status;
+
+  const hardwareEl = $("#ai-vocal-hardware");
+  if (hardwareEl && aiVocalManager) {
+    const device = aiVocalManager.getHardwareDevice();
+    const api = aiVocalManager.getHardwareApi();
+    hardwareEl.textContent = `${device} • ${api}`;
+    hardwareEl.title = aiVocalManager.getHardwareDeviceRaw() || device;
+  } else if (hardwareEl) {
+    hardwareEl.textContent = "AI engine is optional";
+    hardwareEl.removeAttribute("title");
+  }
+}
+
+function updateAIVocalModeUI(mode = "bypass") {
+  const buttons = [
+    ["#btn-ai-original", "bypass"],
+    ["#btn-ai-karaoke", "karaoke"],
+    ["#btn-ai-acapella", "acapella"]
+  ];
+  buttons.forEach(([selector, buttonMode]) => {
+    $(selector)?.classList.toggle("active", mode === buttonMode);
+  });
+}
+
+function loadAIVocalScript() {
+  if (typeof tf !== "undefined") return Promise.resolve();
+  if (aiVocalScriptPromise) return aiVocalScriptPromise;
+
+  aiVocalScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "/next-amp-extension/assets/libs/js/tf.min.js";
+    script.onload = () => resolve();
+    script.onerror = () => {
+      aiVocalScriptPromise = null;
+      reject(new Error("AI runtime download failed"));
+    };
+    (document.head || document.documentElement).appendChild(script);
+  });
+  return aiVocalScriptPromise;
+}
+
+async function createAIVocalManager() {
+  await loadAIVocalScript();
+  if (!aiVocalModulePromise) {
+    // The dynamic import is intentional: even the AI manager code is not
+    // fetched until the user explicitly opens AI Vocal.
+    aiVocalModulePromise = import(
+      "../../next-amp-extension/modules/ai-vocal/ai-vocal-manager.js"
+    );
+  }
+  const { AIVocalManager } = await aiVocalModulePromise;
+  const manager = new AIVocalManager(audioContext, {
+    runtime: "web",
+    assetBase: AI_WEB_ASSETS.assetBase,
+    assetUrls: AI_WEB_ASSETS,
+    protectedAssets: false,
+    persistStatus: false
+  });
+  manager.onStatusChange = (status) => {
+    // Do not spend main-thread time updating the hidden Web player. The AI
+    // manager keeps processing audio; refresh the label when the page returns.
+    if (!document.hidden) updateAIVocalUI(status);
+  };
+  const node = await manager.init();
+  if (!node) throw new Error(manager.lastError || "AI AudioWorklet unavailable");
+  return { manager, node };
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && aiVocalManager) {
+    updateAIVocalUI(aiVocalManager.getStatus());
+  }
+});
+
+function getAIVocalOutputTarget() {
+  return aiVocalNode || eqNodes[0] || analyser;
+}
+
+function rewireAIVocalInput() {
+  const sourceNode = isStretchOn ? stretch : simpleSource;
+  if (!sourceNode) return;
+
+  try { sourceNode.disconnect(); } catch (_) {}
+  if (aiVocalNode) {
+    try { aiVocalNode.disconnect(); } catch (_) {}
+    sourceNode.connect(aiVocalNode);
+    aiVocalNode.connect(eqNodes[0] || analyser);
+  } else {
+    sourceNode.connect(getAIVocalOutputTarget());
+  }
+}
+
+async function openAIVocal() {
+  if (aiVocalManager || aiVocalOpening) return true;
+  aiVocalOpening = true;
+  const openButton = $("#btn-ai-open");
+  if (openButton) openButton.disabled = true;
+  updateAIVocalUI("LOADING AI...");
+
+  try {
+    const created = await createAIVocalManager();
+    aiVocalManager = created.manager;
+    aiVocalNode = created.node;
+    rewireAIVocalInput();
+    // init() only creates the low-cost bypass node. preloadEngine() is the
+    // first point that fetches the model and starts the accelerator.
+    await aiVocalManager.preloadEngine();
+    $("#ai-vocal-controls")?.classList.remove("hidden");
+    $("#btn-ai-close")?.classList.remove("hidden");
+    updateAIVocalUI("READY • ORIGINAL");
+    return true;
+  } catch (error) {
+    console.error("[NextStudio AI] Web player init failed:", error);
+    updateAIVocalUI("ERROR • AI OFF");
+    try { aiVocalManager?.destroy(); } catch (_) {}
+    aiVocalManager = null;
+    aiVocalNode = null;
+    if (openButton) openButton.disabled = false;
+    customAlert(`AI Vocal unavailable: ${error.message || error}`);
+    return false;
+  } finally {
+    aiVocalOpening = false;
+  }
+}
+
+async function setAIVocalMode(mode) {
+  if (mode !== "bypass" && !currentAudioBuffer) {
+    customAlert("Add an MP3/audio file first.");
+    return;
+  }
+  if (!aiVocalManager && mode !== "bypass") {
+    if (!(await openAIVocal())) return;
+  }
+  if (!aiVocalManager) {
+    updateAIVocalModeUI("bypass");
+    return;
+  }
+  aiVocalManager.setMode(mode);
+  updateAIVocalModeUI(mode);
+  updateAIVocalUI(mode === "bypass" ? "READY • ORIGINAL" : "BUFFERING...");
+}
+
+async function closeAIVocal() {
+  if (!aiVocalManager || aiVocalOpening) return;
+  try {
+    aiVocalManager.setMode("bypass");
+    aiVocalManager.unloadEngine();
+    aiVocalManager.destroy();
+  } catch (error) {
+    console.warn("[NextStudio AI] Web player unload failed:", error);
+  }
+  aiVocalManager = null;
+  aiVocalNode = null;
+  rewireAIVocalInput();
+  $("#ai-vocal-controls")?.classList.add("hidden");
+  $("#btn-ai-close")?.classList.add("hidden");
+  const openButton = $("#btn-ai-open");
+  if (openButton) openButton.disabled = false;
+  updateAIVocalModeUI("bypass");
+  updateAIVocalUI();
+}
 
 let simpleSource = null;
 let simpleState = {
@@ -630,6 +817,11 @@ async function loadAudioEngine(arrayBuffer, trackObj) {
   audioDuration = currentAudioBuffer.duration;
 
   await initActiveEngine(0);
+  // A newly selected track is a hard AI stream boundary. Reset the manager's
+  // overlap/lookahead state so the previous track can never leak into it.
+  if (aiVocalManager) {
+    aiVocalManager.setMode(aiVocalManager.currentMode || "bypass");
+  }
 
   controlValues.active = true;
   controlsChanged();
@@ -650,6 +842,10 @@ async function loadAudioEngine(arrayBuffer, trackObj) {
 
 async function initActiveEngine(startTime = 0) {
   const eqChain = initEQ();
+  if (aiVocalNode) {
+    try { aiVocalNode.disconnect(); } catch (_) {}
+    aiVocalNode.connect(eqChain.input);
+  }
   try {
     eqChain.output.connect(analyser);
   } catch (e) {}
@@ -675,20 +871,52 @@ async function initActiveEngine(startTime = 0) {
   }
 
   if (isStretchOn) {
-    stretch = await SignalsmithStretch(audioContext);
-    stretch.connect(eqChain.input);
+    let nextStretch = null;
+    try {
+      // Build the stretch engine completely before publishing it to the
+      // playback path.  Signalsmith can fail while registering its worklet;
+      // leaving the old source already stopped would otherwise mute the app.
+      nextStretch = await SignalsmithStretch(audioContext);
 
-    const channelBuffers = [];
-    for (let c = 0; c < currentAudioBuffer.numberOfChannels; ++c)
-      channelBuffers.push(currentAudioBuffer.getChannelData(c));
-    await stretch.addBuffers(channelBuffers);
+      const channelBuffers = [];
+      for (let c = 0; c < currentAudioBuffer.numberOfChannels; ++c)
+        channelBuffers.push(currentAudioBuffer.getChannelData(c));
 
-    stretch.schedule({ input: startTime });
+      await nextStretch.addBuffers(channelBuffers);
+      nextStretch.connect(aiVocalNode || eqChain.input);
+      nextStretch.schedule({ input: startTime });
+      stretch = nextStretch;
+    } catch (error) {
+      console.error("[Stretch] unavailable; restoring normal playback", error);
+
+      if (nextStretch) {
+        try {
+          nextStretch.stop();
+        } catch (_) {}
+        try {
+          nextStretch.disconnect();
+        } catch (_) {}
+      }
+
+      stretch = null;
+      isStretchOn = false;
+      updateStretchUI();
+      saveSettings();
+      simpleState.startOffset = startTime;
+      simpleState.playing = false;
+      $("#marquee").textContent = "Stretch unavailable. Normal playback.";
+    }
   } else {
     simpleState.startOffset = startTime;
     simpleState.playing = false;
   }
 }
+
+$("#btn-ai-open")?.addEventListener("click", openAIVocal);
+$("#btn-ai-close")?.addEventListener("click", closeAIVocal);
+$("#btn-ai-original")?.addEventListener("click", () => setAIVocalMode("bypass"));
+$("#btn-ai-karaoke")?.addEventListener("click", () => setAIVocalMode("karaoke"));
+$("#btn-ai-acapella")?.addEventListener("click", () => setAIVocalMode("acapella"));
 
 function getPlayerCurrentTime() {
   if (isStretchOn) {
@@ -737,7 +965,8 @@ function startSimplePlayback() {
   simpleSource = audioContext.createBufferSource();
   simpleSource.buffer = currentAudioBuffer;
 
-  if (eqNodes.length > 0) simpleSource.connect(eqNodes[0]);
+  if (aiVocalNode) simpleSource.connect(aiVocalNode);
+  else if (eqNodes.length > 0) simpleSource.connect(eqNodes[0]);
   else simpleSource.connect(analyser);
 
   simpleState.startTime = audioContext.currentTime;
@@ -814,7 +1043,7 @@ function updateMediaSession(trackName) {
   if ("mediaSession" in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: trackName,
-      artist: "Nextamp Player",
+      artist: "NextStudio Player",
       artwork: [
         {
           src: "https://next-amp-player.vercel.app/assets/logo/logo.png",
@@ -876,7 +1105,7 @@ let LIBRARY = [],
   currentTrackIndex = -1,
   selectedIndices = new Set(),
   lastSelectedIndex = -1;
-const DB_NAME = "NextampUltimateDB",
+const DB_NAME = "NextStudioUltimateDB",
   dbReq = indexedDB.open(DB_NAME, 8);
 dbReq.onupgradeneeded = (e) => {
   const db = e.target.result;

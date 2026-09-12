@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>NEXTAMP DOS REMOTE</title>
+<title>NEXTSTUDIO DOS REMOTE</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:Consolas,Monaco,"Lucida Console","Courier New",monospace;font-size:12px}
@@ -29,7 +29,7 @@ button:active,button.active{background:#00ff00;color:#000}
 
 <div class="box">
   <div class="title">
-    <span>C:\NEXTAMP\REMOTE.COM</span>
+    <span>C:\NEXTSTUDIO\REMOTE.COM</span>
     <span id="status">OFFLINE</span>
   </div>
   <div class="row" style="gap:4px">
@@ -81,11 +81,6 @@ button:active,button.active{background:#00ff00;color:#000}
     <button id="btn-vocal-karaoke" onclick="setVocal('karaoke')">🎤 KARA</button>
     <button id="btn-vocal-acapella" onclick="setVocal('acapella')">🎵 SOLO</button>
   </div>
-  <div class="row" style="margin-top:6px">
-    <span class="label">MODEL:</span>
-    <button id="btn-vocal-balanced" class="active" onclick="setVocalProfile('balanced')" style="flex:1">〰 SMOOTH</button>
-    <button id="btn-vocal-detail" onclick="setVocalProfile('ai_remove')" style="flex:1">✦ DETAIL</button>
-  </div>
 </div>
 
 <div class="box">
@@ -117,7 +112,7 @@ button:active,button.active{background:#00ff00;color:#000}
 </div>
 
 <div class="box" style="text-align:center;padding:8px">
-  <a href="https://ganknow.com/nextfeeder/tip" target="_blank" rel="noopener noreferrer" style="color:#ffff00;text-decoration:none;font-weight:bold;font-size:11px;display:inline-block;padding:2px 8px;border:1px dashed #ffff00">
+  <a href="https://ganknow.com/nextfeederlabs/tip" target="_blank" rel="noopener noreferrer" style="color:#ffff00;text-decoration:none;font-weight:bold;font-size:11px;display:inline-block;padding:2px 8px;border:1px dashed #ffff00">
     [ ☕ BUY ME A COFFEE ]
   </a>
 </div>
@@ -145,8 +140,8 @@ function getParam(key) {
   return val || "";
 }
 
-let initId = "__NEXTAMP_HOST_ID__";
-let initTok = "__NEXTAMP_TOKEN__";
+let initId = "__NEXTSTUDIO_HOST_ID__";
+let initTok = "__NEXTSTUDIO_TOKEN__";
 if (!initId || initId.startsWith("__")) initId = getParam("id") || safeGet("na_hid");
 if (!initTok || initTok.startsWith("__")) initTok = getParam("token") || safeGet("na_tok");
 G("hid").value = initId;
@@ -258,10 +253,6 @@ function setVocal(m) {
   snd("vocalMode", m);
 }
 
-function setVocalProfile(profile) {
-  snd("vocalProfile", profile === "ai_remove" ? "ai_remove" : "balanced");
-}
-
 function applyFullState(s) {
   isProgrammatic = true;
   for (let k in s) syncKey(k, s[k]);
@@ -296,10 +287,6 @@ function syncKey(k, v) {
     G("btn-vocal-acapella")?.classList.toggle("active", m === "acapella");
     const t = G("t-vocal");
     if (t) t.textContent = m === "karaoke" ? "KARAOKE" : m === "acapella" ? "ACAPELLA" : "ORIGINAL";
-  } else if (k === "vocalProfile") {
-    const profile = v === "ai_remove" ? "ai_remove" : "balanced";
-    G("btn-vocal-balanced")?.classList.toggle("active", profile === "balanced");
-    G("btn-vocal-detail")?.classList.toggle("active", profile === "ai_remove");
   } else if (k === "isAudioMasterOn") {
     G("btn-mute").className = v ? "" : "active";
     G("btn-mute").textContent = v ? "MUTE" : "MUTED";

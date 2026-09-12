@@ -13,17 +13,17 @@
       crossorigin="anonymous"
     ></script>
 
-    <title>Nextamp Player – เครื่องมือปรับแต่งเสียงเพลงออนไลน์</title>
+    <title>NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync</title>
 
     <meta
       name="description"
-      content="NEXTAMP โปรแกรมเล่นเพลงผ่านเว็บไซต์ เปลี่ยนคีย์เพลง เพิ่มความเร็ว และปรับ EQ ได้ฟรี ช่วยนักดนตรีแกะเพลงและฝึกซ้อม ด้วยเทคโนโลยี Web Audio API คุณภาพสูง"
+      content="NextStudio โปรแกรมเล่นเพลงผ่านเว็บไซต์ เปลี่ยนคีย์เพลง เพิ่มความเร็ว และปรับ EQ ได้ฟรี ช่วยนักดนตรีแกะเพลงและฝึกซ้อม ด้วยเทคโนโลยี Web Audio API คุณภาพสูง"
     />
     <meta
       name="keywords"
-      content="nextamp, โปรแกรมเล่นเพลง, เปลี่ยนคีย์เพลง, เพิ่มความเร็วเพลง, music player, pitch shift, time stretch, web audio, แกะเพลง, ฝึกร้องเพลง"
+      content="nextstudio, โปรแกรมเล่นเพลง, เปลี่ยนคีย์เพลง, เพิ่มความเร็วเพลง, music player, pitch shift, time stretch, web audio, แกะเพลง, ฝึกร้องเพลง"
     />
-    <meta name="author" content="NEXTAMP Team" />
+    <meta name="author" content="NextStudio Team" />
     <link
       rel="icon"
       type="image/png"
@@ -40,7 +40,7 @@
     <meta property="og:type" content="website" />
     <meta
       property="og:title"
-      content="NEXTAMP – โปรแกรมเล่นเพลงสำหรับนักดนตรี"
+      content="NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync"
     />
     <meta
       property="og:description"
@@ -57,7 +57,7 @@
     />
     <meta
       property="twitter:title"
-      content="NEXTAMP – โปรแกรมเล่นเพลงสำหรับนักดนตรี"
+      content="NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync"
     />
     <meta
       property="twitter:description"
@@ -73,7 +73,7 @@
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
     />
-    <meta name="apple-mobile-web-app-title" content="Nextamp" />
+    <meta name="apple-mobile-web-app-title" content="NextStudio" />
     <link
       rel="apple-touch-icon"
       href="https://next-amp-player.vercel.app/assets/logo/logo.png"
@@ -465,7 +465,7 @@
           class="w-8 h-8 rounded shadow-lg"
         />
         <span class="font-display font-bold text-xl tracking-wider text-white"
-          >NEXTAMP</span
+          >NEXTSTUDIO</span
         >
       </div>
       <div class="hidden md:flex gap-6 text-sm text-gray-400 font-display">
@@ -512,7 +512,7 @@
               class="theme-bar h-5 flex justify-between items-center px-1 text-[10px] font-bold cursor-grab"
             >
               <div class="flex items-center gap-1">
-                <i class="ph-bold ph-music-note"></i><span>NEXTAMP PLAYER</span>
+                <i class="ph-bold ph-music-note"></i><span>NEXTSTUDIO PLAYER</span>
               </div>
               <div class="flex gap-1 items-center">
                 <button
@@ -869,6 +869,70 @@
         </div>
 
         <div
+          class="bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-10 shadow-lg"
+        >
+          <div
+            class="theme-bar h-4 flex justify-between items-center px-1 border-b border-black text-[10px] font-bold"
+          >
+            <div class="flex items-center gap-1">
+              <i class="ph-bold ph-microphone-slash"></i>
+              <span>AI VOCAL / KARAOKE</span>
+            </div>
+            <span id="ai-vocal-status" class="text-[8px] text-gray-400"
+              >OFF • NOT LOADED</span
+            >
+          </div>
+          <div class="p-2 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <span
+                id="ai-vocal-hardware"
+                class="font-pixel text-[8px] text-gray-500 truncate"
+                >AI engine is optional</span
+              >
+              <div class="flex gap-1 shrink-0">
+                <button
+                  id="btn-ai-open"
+                  class="win-btn h-5 px-2 text-[9px] font-bold gap-1"
+                  title="Load AI Vocal only when enabled"
+                >
+                  <i class="ph-bold ph-power"></i> OPEN AI
+                </button>
+                <button
+                  id="btn-ai-close"
+                  class="win-btn h-5 px-2 text-[9px] font-bold gap-1 hidden"
+                  title="Unload AI model and free GPU memory"
+                >
+                  <i class="ph-bold ph-x"></i> CLOSE
+                </button>
+              </div>
+            </div>
+            <div id="ai-vocal-controls" class="grid grid-cols-3 gap-1 hidden">
+              <button
+                id="btn-ai-original"
+                class="retro-txt-btn h-5 text-[8px] active"
+                type="button"
+              >
+                ORIGINAL
+              </button>
+              <button
+                id="btn-ai-karaoke"
+                class="retro-txt-btn h-5 text-[8px]"
+                type="button"
+              >
+                <i class="ph-bold ph-microphone-slash mr-0.5"></i>KARAOKE
+              </button>
+              <button
+                id="btn-ai-acapella"
+                class="retro-txt-btn h-5 text-[8px]"
+                type="button"
+              >
+                <i class="ph-bold ph-microphone mr-0.5"></i>VOCAL
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
           class="w-full h-40 bg-[#292929] border-t-2 border-l-2 border-gray-500 border-r-2 border-b-2 border-black relative z-0 shadow-lg flex-1 min-h-0 flex flex-col mt-2"
         >
           <div
@@ -964,7 +1028,7 @@
         <h2
           class="text-2xl font-bold text-green-400 mb-6 flex items-center gap-2 font-pixel"
         >
-          <i class="ph-bold ph-book-open"></i> Nextamp User Manual
+          <i class="ph-bold ph-book-open"></i> NextStudio User Manual
         </h2>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm">
@@ -1068,14 +1132,14 @@
           class="w-12 h-12 mx-auto mb-4 grayscale hover:grayscale-0 transition opacity-50 hover:opacity-100"
         />
         <h3 class="font-display font-bold text-white text-lg mb-2">
-          NEXTAMP PLAYER
+          NEXTSTUDIO PLAYER
         </h3>
         <p class="text-gray-500 text-sm mb-6 max-w-md mx-auto">
           Web Audio Player for Musicians. Pitch Shift, Time Stretch, EQ, and
           Reverb in your browser.
         </p>
         <p class="text-gray-700 text-xs font-mono">
-          &copy; 2025 Nextamp Project. All rights reserved.
+          &copy; 2025 NextStudio Project. All rights reserved.
         </p>
       </div>
     </footer>
@@ -1483,7 +1547,7 @@
 
         const newWin = window.open(
           "app.html?popup=1",
-          "NextampPlayer",
+          "NextStudioPlayer",
           features
         );
 
@@ -1624,7 +1688,7 @@
 
         window.open(
           "install-extension.html",
-          "NextampExtensionGuide",
+          "NextStudioExtensionGuide",
           `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
         );
       }

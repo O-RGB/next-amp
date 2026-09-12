@@ -2,9 +2,10 @@ import { DBManager } from "./db-manager.js";
 import { $, $$, sendMessageWithRetry } from "./assets/js/utils.js";
 import { SessionManager } from "./modules/session-manager.js";
 import { SettingsModal } from "./modules/settings-modal.js";
+import { normalizeAiPowerMode } from "./modules/ai-vocal/ai-power-mode.mjs";
 
 const ITTY_BITTY_HASH =
-  "NextAmp-DOS/data:text/html;charset=utf-8;bxze64,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";
+  "NextStudio-DOS/data:text/html;charset=utf-8;bxze64,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";
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 const LABELS = [
   "60",
@@ -25,6 +26,13 @@ const PRESETS = {
   pop: [2, 1, 3, 2, 1, 0, 1, 2, 2, 1],
   voice: [-2, -1, 0, 2, 4, 4, 3, 1, 0, 0],
 };
+const AI_WARNING_MAX_AGE_MS = 10 * 60 * 1000;
+const DONATION_URL = "https://ganknow.com/nextfeederlabs/tip";
+const DONATION_MIN_USAGE_MS = 30 * 60 * 1000;
+const DONATION_MIN_SESSIONS = 3;
+const DONATION_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+const DONATION_MAX_PROMPTS = 3;
+const REMOTE_LINK_CACHE_KEY = "remoteLinkCache";
 
 let isAudioMasterOn = true;
 let isVideoMasterOn = true;
@@ -33,7 +41,14 @@ let isEqOn = true;
 let isVocalOn = false;
 let currentVocalMode = "bypass";
 let aiEngineType = "webgl"; // "webgl" or "go_native"
-let currentVocalProfile = "balanced";
+let aiPowerMode = "eco"; // "eco" or "quality"; WEB AI only
+// Detail is the single production profile. Keep experimental profiles
+// internal and do not expose a profile selector.
+let currentVocalProfile = "ai_remove";
+let currentVocalDevice = "";
+let currentVocalDeviceRaw = "";
+let currentVocalApi = "WEBGL";
+let currentVocalStatus = "ORIGINAL";
 
 let isNormalizeOn = false;
 let currentEqValues = [...PRESETS.flat];
@@ -42,123 +57,108 @@ let isRecording = false;
 let db = new DBManager();
 let isTabReady = true;
 let currentTabId = null;
+let captureRequestId = 0;
 
 let sessionManager;
 let settingsModal;
+const ACTION_NOTIFICATION_DELAY_MS = 280;
+const actionNotificationTimers = new Map();
 
-async function checkTabStatus(tab) {
-  if (!tab || !tab.id) {
-    return { ok: false, reason: "no_tab" };
+function showActionNotification(message, { source = "local", tone = "success", icon = "ph-check-circle" } = {}) {
+  if (!message) return;
+
+  // Notifications live on the media page, not inside this popup. Remote
+  // commands are relayed by the offscreen host when the popup is closed.
+  if (source !== "remote" && currentTabId) {
+    chrome.tabs.sendMessage(currentTabId, {
+      type: "SHOW_ACTION_NOTIFICATION",
+      message,
+      icon,
+      tone,
+    }).catch(() => {});
   }
-
-  if (!tab.url) {
-    return { ok: false, reason: "unsupported", tabId: tab.id };
-  }
-
-  let parsedUrl;
-  try {
-    parsedUrl = new URL(tab.url);
-  } catch (e) {
-    return { ok: false, reason: "unsupported", tabId: tab.id };
-  }
-
-  const isHttpOrHttps =
-    parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
-  const isRestricted =
-    parsedUrl.hostname === "chrome.google.com" ||
-    parsedUrl.hostname === "chromewebstore.google.com" ||
-    parsedUrl.protocol.startsWith("chrome") ||
-    parsedUrl.protocol.startsWith("edge") ||
-    parsedUrl.protocol.startsWith("about");
-
-  if (!isHttpOrHttps || isRestricted) {
-    return { ok: false, reason: "unsupported", tabId: tab.id, url: tab.url };
-  }
-
-  // Ping content script to verify if tab was loaded before extension was installed/reloaded
-  const hasContentScript = await new Promise((resolve) => {
-    try {
-      chrome.tabs.sendMessage(tab.id, { type: "PING" }, (response) => {
-        if (chrome.runtime.lastError || !response || !response.pong) {
-          resolve(false);
-        } else {
-          resolve(true);
-        }
-      });
-      setTimeout(() => resolve(false), 300);
-    } catch (e) {
-      resolve(false);
-    }
-  });
-
-  if (!hasContentScript) {
-    return { ok: false, reason: "needs_reload", tabId: tab.id };
-  }
-
-  return { ok: true, tabId: tab.id };
 }
 
-function showTabStatusModal(status, tab) {
-  const overlay = $("#tab-status-overlay");
-  if (!overlay) return;
+function scheduleActionNotification(group, messageFactory, options = {}) {
+  const oldTimer = actionNotificationTimers.get(group);
+  if (oldTimer) clearTimeout(oldTimer);
+  const timer = setTimeout(() => {
+    actionNotificationTimers.delete(group);
+    const message = typeof messageFactory === "function" ? messageFactory() : messageFactory;
+    showActionNotification(message, options);
+  }, ACTION_NOTIFICATION_DELAY_MS);
+  actionNotificationTimers.set(group, timer);
+}
 
-  const titleText = $("#tab-status-title-text");
-  const titleIcon = $("#tab-status-title-icon");
-  const icon = $("#tab-status-icon");
-  const desc = $("#tab-status-desc");
-  const btnAction = $("#btn-tab-status-action");
-  const btnActionText = $("#btn-tab-status-action-text");
-  const btnActionIcon = $("#btn-tab-status-action-icon");
-  const btnDismiss = $("#btn-tab-status-dismiss");
-  const btnClose = $("#btn-close-tab-status");
+function formatSignedValue(value, decimals = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value ?? "");
+  const formatted = decimals > 0 ? number.toFixed(decimals) : String(Math.round(number));
+  return number > 0 ? `+${formatted}` : formatted;
+}
 
-  if (status.reason === "unsupported") {
-    if (titleText) titleText.textContent = "OPEN A MEDIA TAB";
-    if (titleIcon)
-      titleIcon.className = "ph-bold ph-monitor-play text-yellow-400";
-    if (icon) icon.className = "ph-bold ph-monitor-play";
-    if (desc)
-      desc.textContent =
-        "To get started with Next-Amp, please open a music or video website like YouTube.";
-    if (btnActionText) btnActionText.textContent = "OPEN YOUTUBE";
-    if (btnActionIcon) btnActionIcon.className = "ph-bold ph-monitor-play";
-    if (btnAction) {
-      btnAction.onclick = () => {
-        chrome.tabs.create({ url: "https://www.youtube.com/" });
-        window.close();
+function getActionNotification(key, value) {
+  switch (key) {
+    case "isAudioMasterOn":
+      return { message: `AUDIO ${value ? "ON" : "OFF"}`, icon: value ? "ph-speaker-high" : "ph-speaker-slash" };
+    case "pitch":
+      return { group: "pitch", message: `KEY ${formatSignedValue(value)}`, icon: "ph-music-note" };
+    case "reverb":
+      return { group: "reverb", message: `REVERB ${Number(value).toFixed(1)}`, icon: "ph-waveform" };
+    case "isEqOn":
+      return { message: `EQ ${value ? "ON" : "OFF"}`, icon: value ? "ph-equalizer" : "ph-speaker-slash" };
+    case "normalize":
+      return { message: `DYN ${value ? "ON" : "OFF"}`, icon: value ? "ph-arrows-in" : "ph-arrows-out" };
+    case "isVocalOn":
+      return { message: `AI VOCAL ${value ? "ON" : "OFF"}`, icon: value ? "ph-sparkle" : "ph-sparkle-slash" };
+    case "vocalMode": {
+      const labels = { karaoke: "KARAOKE", acapella: "ACAPELLA", bypass: "ORIGINAL" };
+      return {
+        message: `${labels[value] || String(value).toUpperCase()} ACTIVE`,
+        icon: value === "karaoke" ? "ph-microphone-slash" : "ph-speaker-high",
+        tone: "loading",
       };
     }
-  } else {
-    if (titleText) titleText.textContent = "TAB RELOAD REQUIRED";
-    if (titleIcon)
-      titleIcon.className = "ph-bold ph-arrows-clockwise text-yellow-400";
-    if (icon) icon.className = "ph-bold ph-arrows-clockwise";
-    if (desc)
-      desc.textContent =
-        "Kindly refresh the tab after installation to ensure Next-Amp audio capture and video controls work smoothly.";
-    if (btnActionText) btnActionText.textContent = "REFRESH THE TAB";
-    if (btnActionIcon) btnActionIcon.className = "ph-bold ph-arrows-clockwise";
-    if (btnAction) {
-      btnAction.onclick = () => {
-        if (tab && tab.id) chrome.tabs.reload(tab.id);
-        window.close();
+    case "vocalProfile":
+      return { message: `AI PROFILE ${String(value).replace(/_/g, " ").toUpperCase()}`, icon: "ph-sliders" };
+    case "aiPowerMode":
+      return { message: `AI ${normalizeAiPowerMode(value).toUpperCase()}`, icon: normalizeAiPowerMode(value) === "eco" ? "ph-leaf" : "ph-sparkle" };
+    case "aiEngineType":
+      return { message: `AI ENGINE ${value === "go_native" ? "GO" : "WEB"}`, icon: value === "go_native" ? "ph-lightning" : "ph-globe" };
+    case "videoQuality":
+      return { message: `VIDEO ${String(value).toUpperCase()}`, icon: "ph-monitor-play" };
+    case "videoDelay":
+      return { group: "videoDelay", message: `VIDEO DELAY ${Number(value).toFixed(2)}s`, icon: "ph-clock-countdown" };
+    case "videoTransform":
+      return {
+        group: "videoTransform",
+        message: () => `VIDEO ${Math.round(Number($("#video-zoom")?.value || 1) * 100)}% / ${Number($("#video-rotate")?.value || 0)}°`,
+        icon: "ph-crop",
       };
-    }
+    case "isVideoMasterOn":
+      return { message: `VIDEO ${value ? "ON" : "OFF"}`, icon: value ? "ph-monitor-play" : "ph-monitor-slash" };
+    case "videoPosition":
+      return {
+        group: "videoPosition",
+        message: () => `VIDEO POS ${$("#video-pos-x")?.value || 0},${$("#video-pos-y")?.value || 0}`,
+        icon: "ph-arrows-out-cardinal",
+      };
+    default:
+      return null;
   }
+}
 
-  const dismissModal = () => {
-    overlay.classList.remove("active");
-    isTabReady = true;
-    if (isAudioMasterOn && currentTabId) {
-      initCapture(sessionManager.sessionMode);
-    }
-    checkFirstLaunchModal();
-  };
-
-  if (btnDismiss) btnDismiss.onclick = dismissModal;
-  if (btnClose) btnClose.onclick = dismissModal;
-
-  overlay.classList.add("active");
+function notifyAction(key, value, { source = "local", immediate = false, groupOverride = null } = {}) {
+  const config = getActionNotification(key, value);
+  if (!config) return;
+  const options = { source, tone: config.tone, icon: config.icon };
+  const group = groupOverride || config.group;
+  if (!immediate && group) {
+    scheduleActionNotification(group, config.message, options);
+  } else {
+    const message = typeof config.message === "function" ? config.message() : config.message;
+    showActionNotification(message, options);
+  }
 }
 
 async function checkFirstLaunchModal() {
@@ -175,7 +175,7 @@ async function checkFirstLaunchModal() {
       chrome.storage.local.set({ hasSeenWelcomeDonateModal: true });
       overlay.classList.remove("active");
       if (openLink) {
-        chrome.tabs.create({ url: "https://ganknow.com/nextfeeder/tip" });
+        chrome.tabs.create({ url: DONATION_URL });
       }
     };
 
@@ -187,19 +187,80 @@ async function checkFirstLaunchModal() {
   }
 }
 
+async function maybeShowUsageDonateModal(audioState) {
+  // Never cover a live audio session or another status/error dialog.
+  if (!isTabReady || isAudioMasterOn || audioState?.isAudioActive) return;
+
+  const overlay = $("#usage-donate-overlay");
+  if (!overlay || overlay.classList.contains("active")) return;
+
+  const data = await chrome.storage.local.get([
+    "hasSeenWelcomeDonateModal",
+    "donationUsage",
+  ]);
+  if (!data.hasSeenWelcomeDonateModal) return;
+
+  const usage = data.donationUsage || {};
+  const usageMs = Number(usage.usageMs) || 0;
+  const completedSessions = Number(usage.completedSessions) || 0;
+  const promptCount = Number(usage.promptCount) || 0;
+  const now = Date.now();
+
+  if (usage.dismissedForever || promptCount >= DONATION_MAX_PROMPTS) return;
+  if (Number(usage.snoozeUntil) > now) return;
+  if (Number(usage.lastPromptAt) && now - Number(usage.lastPromptAt) < DONATION_COOLDOWN_MS) return;
+  if (usageMs < DONATION_MIN_USAGE_MS && completedSessions < DONATION_MIN_SESSIONS) return;
+
+  // Reserve this prompt before displaying it so reopening the popup cannot
+  // show the same request repeatedly if the user closes it immediately.
+  await chrome.storage.local.set({
+    donationUsage: {
+      ...usage,
+      promptCount: promptCount + 1,
+      lastPromptAt: now,
+    },
+  });
+
+  const close = () => overlay.classList.remove("active");
+  const updatePromptState = (extra = {}) =>
+    chrome.storage.local.set({
+      donationUsage: {
+        ...usage,
+        promptCount: promptCount + 1,
+        lastPromptAt: now,
+        ...extra,
+      },
+    });
+  const openDonation = () => {
+    updatePromptState({ dismissedForever: true });
+    close();
+    chrome.tabs.create({ url: DONATION_URL });
+  };
+  const later = () => {
+    updatePromptState({ snoozeUntil: now + DONATION_COOLDOWN_MS });
+    close();
+  };
+  const dismissForever = () => {
+    updatePromptState({ dismissedForever: true });
+    close();
+  };
+
+  $("#btn-usage-donate").onclick = openDonation;
+  $("#btn-usage-later").onclick = later;
+  $("#btn-usage-dismiss").onclick = dismissForever;
+  $("#btn-close-usage-donate").onclick = later;
+  overlay.classList.add("active");
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) currentTabId = tab.id;
 
-  // Check tab status (Tab reload check like in ai remove)
-  const tabStatus = await checkTabStatus(tab);
-  if (!tabStatus.ok) {
-    isTabReady = false;
-    showTabStatusModal(tabStatus, tab);
-  } else {
-    isTabReady = true;
-    checkFirstLaunchModal();
-  }
+  // Audio capture is not limited to media websites. Let the capture request
+  // decide whether the current tab is supported instead of blocking on a
+  // YouTube/media-tab gate or requiring a content-script ping.
+  isTabReady = true;
+  checkFirstLaunchModal();
 
   sessionManager = new SessionManager(currentTabId);
   settingsModal = new SettingsModal(db, {
@@ -240,8 +301,10 @@ async function finalizeInitialization() {
     "isVideoMasterOn",
     "isEqOn",
     "isVocalOn",
+    "vocalMode",
     "aiEngineType",
     "vocalProfile",
+    "aiPowerMode",
   ]);
   if (savedToggles.isAudioMasterOn !== undefined)
     isAudioMasterOn = savedToggles.isAudioMasterOn;
@@ -249,9 +312,20 @@ async function finalizeInitialization() {
     isVideoMasterOn = savedToggles.isVideoMasterOn;
   if (savedToggles.isEqOn !== undefined) isEqOn = savedToggles.isEqOn;
   if (savedToggles.isVocalOn !== undefined) isVocalOn = savedToggles.isVocalOn;
+  if (["bypass", "karaoke", "acapella"].includes(savedToggles.vocalMode)) {
+    currentVocalMode = savedToggles.vocalMode;
+  }
   if (savedToggles.aiEngineType !== undefined) aiEngineType = savedToggles.aiEngineType;
-  if (savedToggles.vocalProfile !== undefined) currentVocalProfile = savedToggles.vocalProfile === "ai_remove" ? "ai_remove" : "balanced";
+  if (savedToggles.aiPowerMode !== undefined) {
+    aiPowerMode = normalizeAiPowerMode(savedToggles.aiPowerMode);
+    if (savedToggles.aiPowerMode === "medium" && sessionManager.sessionMode === "shared") {
+      await chrome.storage.local.set({ aiPowerMode: aiPowerMode });
+    }
+  }
+  currentVocalProfile = "ai_remove";
+  await sessionManager.setSetting({ vocalProfile: currentVocalProfile });
   updateVocalProfileUI(currentVocalProfile);
+  updateAiPowerModeUI(aiPowerMode);
   updateAiEngineUI();
   checkGoEngineHealth();
 
@@ -271,11 +345,14 @@ async function finalizeInitialization() {
       "videoPosX",
       "videoPosY",
       "isEqOn",
+      "isVocalOn",
+      "vocalMode",
       "reverbTime",
       "reverbDecay",
       "dynBoost",
       "dynLimit",
       "vocalProfile",
+      "aiPowerMode",
     ]);
 
     if (Object.keys(sharedParams).length > 0) {
@@ -327,7 +404,11 @@ async function finalizeInitialization() {
       } else {
         updateVocalMasterUI();
       }
-      if (sharedParams.vocalProfile) updateVocalProfileUI(sharedParams.vocalProfile);
+      if (sharedParams.vocalProfile) updateVocalProfileUI("ai_remove");
+      if (sharedParams.aiPowerMode !== undefined) {
+        aiPowerMode = normalizeAiPowerMode(sharedParams.aiPowerMode);
+        updateAiPowerModeUI(aiPowerMode);
+      }
 
       if (sharedParams.reverbTime)
         $("#adv-rev-time").value = sharedParams.reverbTime;
@@ -373,7 +454,13 @@ async function finalizeInitialization() {
   if (state && state.isAudioActive) {
     loadAudioState(state);
     isAudioMasterOn = true;
+    // The popup is recreated every time it is reopened. Restore the recorder
+    // state from the offscreen session instead of trusting the new popup's
+    // default (false) value. Otherwise a still-recording MediaRecorder looks
+    // like REC locally, and the next START_RECORDING is rejected as busy.
+    syncRecordingUI(state.isRecording === true);
   } else {
+    syncRecordingUI(false);
     if (isAudioMasterOn && isTabReady) {
       initCapture(sessionManager.sessionMode);
     }
@@ -389,6 +476,10 @@ async function finalizeInitialization() {
     if (frameCount < 60) requestAnimationFrame(loop);
   };
   loop();
+
+  // Check only when the user opens the popup and the audio session is idle.
+  // It never interrupts playback or model loading.
+  maybeShowUsageDonateModal(state).catch(() => {});
 }
 
 function setupStorageListener() {
@@ -432,6 +523,10 @@ function setupStorageListener() {
       if (changes.isEqOn) {
         isEqOn = changes.isEqOn.newValue;
         updateEqToggleButton();
+      }
+      if (changes.aiPowerMode) {
+        aiPowerMode = normalizeAiPowerMode(changes.aiPowerMode.newValue);
+        updateAiPowerModeUI(aiPowerMode);
       }
     }
   });
@@ -481,7 +576,8 @@ async function buildMicroBootloaderUrl(hostId, token) {
   const bootloader = `Loading...<script src=https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js></script><script>let H=${JSON.stringify(hostId)},T=${JSON.stringify(token)},p=new Peer(),c;p.on('open',()=>{c=p.connect(H,{reliable:1});c.on('open',()=>c.send({type:'HANDSHAKE',token:T,needUI:1}));c.on('data',d=>{if(d.type==='MOUNT_UI'){if(d.css)document.head.appendChild(document.createElement('style')).textContent=d.css;document.body.innerHTML=d.html;if(d.js)(new Function('conn','initState','H','T','peer',d.js))(c,d.state,H,T,p);}});});<\/script>`;
 
   // Compress using native browser CompressionStream("deflate")
-  const stream = new Blob([bootloader]).stream().pipeThrough(new CompressionStream("deflate"));
+  // itty.bitty's format=gz decoder expects a gzip stream, not zlib/deflate.
+  const stream = new Blob([bootloader]).stream().pipeThrough(new CompressionStream("gzip"));
   const buf = await new Response(stream).arrayBuffer();
   const bytes = new Uint8Array(buf);
   let binary = "";
@@ -490,18 +586,107 @@ async function buildMicroBootloaderUrl(hostId, token) {
   }
   const b64 = btoa(binary);
 
-  return `https://itty.bitty.site/#NextAmp/data:text/html;charset=utf-8;format=gz;base64,${b64}`;
+  return `https://itty.bitty.site/#NextStudio/data:text/html;charset=utf-8;format=gz;base64,${b64}`;
+}
+
+async function getCachedRemoteLink(tabId, hostId, token) {
+  if (!tabId || !hostId || !token) return null;
+  try {
+    const data = await chrome.storage.session.get(REMOTE_LINK_CACHE_KEY);
+    const cached = data[REMOTE_LINK_CACHE_KEY]?.[String(tabId)];
+    if (
+      cached?.hostId === hostId &&
+      cached?.token === token &&
+      typeof cached.finalUrl === "string" &&
+      cached.finalUrl.length > 0
+    ) {
+      return cached;
+    }
+  } catch (e) {
+    // Link caching is an enhancement; remote generation still works if the
+    // session storage area is unavailable.
+  }
+  return null;
+}
+
+async function cacheRemoteLink(tabId, hostId, token, finalUrl) {
+  if (!tabId || !hostId || !token || !finalUrl) return;
+  try {
+    const data = await chrome.storage.session.get(REMOTE_LINK_CACHE_KEY);
+    const cache = data[REMOTE_LINK_CACHE_KEY] || {};
+    cache[String(tabId)] = {
+      hostId,
+      token,
+      finalUrl,
+      savedAt: Date.now(),
+    };
+    await chrome.storage.session.set({ [REMOTE_LINK_CACHE_KEY]: cache });
+  } catch (e) {
+    // A cache miss on the next popup open is safe and will regenerate the
+    // link for the still-active remote token.
+  }
 }
 
 async function setupRemoteUI() {
   const btnConnect = $("#btn-remote-connect");
   const qrOverlay = $("#qr-overlay");
   const qrImage = $("#qr-image");
+  const qrLoading = $("#qr-loading");
+  const qrLoadingText = $("#qr-loading-text");
   const urlDisplay = $("#remote-url-display");
   const btnCloseQr = $("#btn-close-qr");
   const btnCopyUrl = $("#btn-copy-url");
+  let qrRequestUrl = "";
+  let qrRetryCount = 0;
+  let qrLoadGeneration = 0;
+
+  const setQrLoading = (message) => {
+    if (qrLoading) qrLoading.classList.remove("hidden");
+    if (qrLoadingText) qrLoadingText.textContent = message;
+    if (qrImage) {
+      qrImage.classList.add("hidden");
+    }
+  };
+
+  const loadQrImage = (url) => {
+    qrRequestUrl = url;
+    qrRetryCount = 0;
+    qrLoadGeneration += 1;
+    const generation = qrLoadGeneration;
+    setQrLoading("LOADING QR...");
+    if (qrImage) {
+      qrImage.dataset.qrGeneration = String(generation);
+      qrImage.src = `${url}&_=${Date.now()}`;
+    }
+  };
+
+  qrImage?.addEventListener("load", () => {
+    if (qrImage.dataset.qrGeneration !== String(qrLoadGeneration)) return;
+    if (qrLoading) qrLoading.classList.add("hidden");
+    qrImage.classList.remove("hidden");
+  });
+
+  qrImage?.addEventListener("error", () => {
+    if (qrImage.dataset.qrGeneration !== String(qrLoadGeneration)) return;
+    if (qrRetryCount < 2 && qrRequestUrl) {
+      qrRetryCount += 1;
+      setQrLoading(`RETRYING QR ${qrRetryCount}/2...`);
+      setTimeout(() => {
+        if (qrImage && qrImage.dataset.qrGeneration === String(qrLoadGeneration)) {
+          qrImage.src = `${qrRequestUrl}&_=${Date.now()}`;
+        }
+      }, 500);
+    } else {
+      setQrLoading("QR SERVER UNAVAILABLE");
+    }
+  });
 
   btnConnect.addEventListener("click", async () => {
+    qrLoadGeneration += 1;
+    qrRequestUrl = "";
+    qrRetryCount = 0;
+    setQrLoading("CONNECTING REMOTE...");
+    qrOverlay.classList.remove("hidden");
     try {
       let hasOffscreen = await sendMessageWithRetry({
         type: "CHECK_OFFSCREEN",
@@ -522,23 +707,41 @@ async function setupRemoteUI() {
         if (elId) elId.textContent = res.hostId;
         if (elTok) elTok.textContent = res.token;
 
-        urlDisplay.value = "Generating remote...";
-        qrOverlay.classList.remove("hidden");
+        // The offscreen audio session owns the remote token. Reuse the same
+        // generated link while that session is alive so reopening the popup
+        // does not create a new QR/itty.bitty URL every time.
+        const cachedLink = await getCachedRemoteLink(
+          currentTabId,
+          res.hostId,
+          res.token
+        );
+        let finalUrl = cachedLink?.finalUrl;
 
-        const fullUrl = await buildMicroBootloaderUrl(res.hostId, res.token);
-        urlDisplay.value = "Shortening link...";
-        const finalUrl = await shortenUrl(fullUrl);
+        if (finalUrl) {
+          setQrLoading("RESTORING REMOTE...");
+        } else {
+          urlDisplay.value = "Generating remote...";
+          setQrLoading("GENERATING QR LINK...");
+
+          const fullUrl = await buildMicroBootloaderUrl(res.hostId, res.token);
+          urlDisplay.value = "Shortening link...";
+          setQrLoading("SHORTENING QR LINK...");
+          finalUrl = await shortenUrl(fullUrl);
+          await cacheRemoteLink(currentTabId, res.hostId, res.token, finalUrl);
+        }
 
         urlDisplay.value = finalUrl;
         const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
           finalUrl
         )}`;
-        qrImage.src = qrApi;
+        loadQrImage(qrApi);
       } else {
+        setQrLoading("REMOTE ID NOT READY");
         alert("Remote ID not ready. Please turn Audio Master ON first.");
       }
     } catch (e) {
       console.error(e);
+      setQrLoading("REMOTE ERROR — TRY AGAIN");
       alert("Failed to connect remote.");
     }
   });
@@ -608,10 +811,13 @@ function applyTheme(colorCode) {
 
 async function initCapture(mode) {
   if (!currentTabId) return;
+  const requestId = ++captureRequestId;
   let hasOffscreen = await sendMessageWithRetry({ type: "CHECK_OFFSCREEN" });
+  if (requestId !== captureRequestId) return;
   if (!hasOffscreen) {
     await sendMessageWithRetry({ type: "INIT_OFFSCREEN" });
     await new Promise((r) => setTimeout(r, 1000));
+    if (requestId !== captureRequestId) return;
   }
   const latencyHint = $("#sel-latency")?.value || "balanced";
   const sampleRate = $("#sel-sample-rate")?.value || "44100";
@@ -620,6 +826,7 @@ async function initCapture(mode) {
   chrome.tabCapture.getMediaStreamId(
     { targetTabId: currentTabId },
     (streamId) => {
+      if (requestId !== captureRequestId) return;
       if (chrome.runtime.lastError || !streamId) return;
       chrome.runtime
         .sendMessage({
@@ -630,8 +837,10 @@ async function initCapture(mode) {
           sampleRate: sampleRate,
           mode: mode,
           initialPreset: preset,
+          aiPowerMode: aiPowerMode,
         })
         .then((res) => {
+          if (requestId !== captureRequestId || !res?.success) return;
           if (res && res.sampleRate) {
             settingsModal.updateActiveSampleRate(res.sampleRate);
           }
@@ -655,6 +864,7 @@ async function initCapture(mode) {
           sendParam("isVocalOn", isVocalOn);
           sendParam("vocalMode", currentVocalMode);
           sendParam("vocalProfile", currentVocalProfile);
+          sendParam("aiPowerMode", aiPowerMode);
           sendParam("aiEngineType", aiEngineType);
         })
         .catch((e) => console.warn(e));
@@ -671,33 +881,45 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (currentTabId && msg.tabId === currentTabId)
       drawVisualizer(msg.data, msg.mode);
   } else if (msg.type === "AI_VOCAL_STATUS") {
-    const txtStatus = $("#txt-vocal-status");
-    if (txtStatus) {
-      txtStatus.textContent = msg.status;
-      txtStatus.title = "AI Vocal: " + msg.status;
-    }
+    updateVocalRuntimeStatus(msg.status);
+    updateVocalRuntimeUI(
+      msg.engine,
+      msg.hardwareDevice || msg.device,
+      msg.api,
+      msg.hardwareDeviceRaw || msg.device
+    );
   } else if (msg.type === "RECORDING_SAVED") {
     handleRecordingSaved();
   } else if (msg.type === "AI_HARDWARE_WARNING") {
-    showAiSlowModal(msg.benchmarkMs, msg.deviceLabel);
+    if (msg.active === false || msg.reason === "recovered") {
+      hideAiSlowModal();
+    } else if (isCurrentAiWarning(msg)) {
+      showAiSlowModal(msg.liveP95Ms || msg.benchmarkMs, msg.deviceLabel);
+    }
   }
 });
 
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.aiVocalStatus && changes.aiVocalStatus.newValue) {
-    const txtStatus = $("#txt-vocal-status");
-    if (txtStatus) {
-      txtStatus.textContent = changes.aiVocalStatus.newValue;
-      txtStatus.title = "AI Vocal: " + changes.aiVocalStatus.newValue;
-    }
-  }
   if (changes.aiHardwareWarning && changes.aiHardwareWarning.newValue) {
     const val = changes.aiHardwareWarning.newValue;
-    if (val && val.benchmarkMs > 185) {
-      showAiSlowModal(val.benchmarkMs, val.deviceLabel);
+    if (isCurrentAiWarning(val)) {
+      showAiSlowModal(val.liveP95Ms || val.benchmarkMs, val.deviceLabel);
+    } else if (val?.active === false || val?.reason === "recovered") {
+      hideAiSlowModal();
     }
   }
 });
+
+function isCurrentAiWarning(value) {
+  if (!value || value.active !== true) return false;
+  if (!Number.isFinite(value.timestamp)) return false;
+  if (Date.now() - value.timestamp > AI_WARNING_MAX_AGE_MS) return false;
+  return value.reason !== "recovered";
+}
+
+function hideAiSlowModal() {
+  $("#ai-slow-overlay")?.classList.remove("active");
+}
 
 function showAiSlowModal(benchmarkMs, deviceLabel) {
   const overlay = $("#ai-slow-overlay");
@@ -714,7 +936,6 @@ function updateVocalUI(mode) {
   const btnBypass = $("#btn-vocal-bypass");
   const btnKaraoke = $("#btn-vocal-karaoke");
   const btnAcapella = $("#btn-vocal-acapella");
-  const txtStatus = $("#txt-vocal-status");
 
   if (!btnBypass || !btnKaraoke || !btnAcapella) return;
 
@@ -725,13 +946,13 @@ function updateVocalUI(mode) {
 
   if (currentVocalMode === "karaoke") {
     btnKaraoke.classList.add("pressed");
-    if (txtStatus) txtStatus.textContent = "KARAOKE";
+    updateVocalRuntimeStatus("KARAOKE");
   } else if (currentVocalMode === "acapella") {
     btnAcapella.classList.add("pressed");
-    if (txtStatus) txtStatus.textContent = "ACAPELLA";
+    updateVocalRuntimeStatus("ACAPELLA");
   } else {
     btnBypass.classList.add("pressed");
-    if (txtStatus) txtStatus.textContent = "ORIGINAL";
+    updateVocalRuntimeStatus("ORIGINAL");
   }
 
   updateVocalMasterUI();
@@ -740,7 +961,6 @@ function updateVocalUI(mode) {
 function updateVocalMasterUI() {
   const btnToggle = $("#btn-toggle-vocal");
   const vocalArea = $("#vocal-controls-area");
-  const txtStatus = $("#txt-vocal-status");
 
   if (btnToggle) {
     if (isVocalOn) {
@@ -766,19 +986,12 @@ function updateVocalMasterUI() {
     }
   }
 
-  if (txtStatus) {
-    if (!isVocalOn) {
-      txtStatus.classList.remove("text-yellow-300");
-      txtStatus.classList.add("text-gray-500");
-    } else {
-      txtStatus.classList.remove("text-gray-500");
-      txtStatus.classList.add("text-yellow-300");
-    }
-  }
 }
 
 function updateVocalProfileUI(profile) {
-  const selected = profile === "ai_remove" ? "ai_remove" : "balanced";
+  // Profile controls are intentionally hidden. Detail is the only profile
+  // selected by the popup.
+  const selected = "ai_remove";
   currentVocalProfile = selected;
   $$(".btn-vocal-profile").forEach((btn) => {
     if (btn.dataset.profile === selected) {
@@ -787,6 +1000,94 @@ function updateVocalProfileUI(profile) {
       btn.classList.remove("pressed");
     }
   });
+}
+
+function updateAiPowerModeUI(mode = aiPowerMode) {
+  aiPowerMode = normalizeAiPowerMode(mode);
+  const isEco = aiPowerMode === "eco";
+  const ecoButton = $("#btn-ai-mode-eco");
+  const fullButton = $("#btn-ai-mode-full");
+  [ecoButton, fullButton].forEach((button) => {
+    if (!button) return;
+    const active = (button === ecoButton) === isEco;
+    button.classList.toggle("pressed", active);
+    button.classList.toggle("ai-mode-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function selectAiPowerMode(mode) {
+  const nextMode = normalizeAiPowerMode(mode);
+  aiPowerMode = nextMode;
+  sessionManager.setSetting({ aiPowerMode: nextMode });
+  sendParam("aiPowerMode", nextMode);
+  updateAiPowerModeUI(nextMode);
+  notifyAction("aiPowerMode", nextMode, { immediate: true });
+}
+
+function updateVocalRuntimeStatus(status) {
+  const runtimeText = $("#txt-vocal-runtime");
+  if (status !== undefined && status !== null && String(status).trim()) {
+    currentVocalStatus = String(status).trim();
+  }
+  if (runtimeText) {
+    runtimeText.textContent = currentVocalStatus || "ORIGINAL";
+    runtimeText.title = `AI Vocal operation: ${currentVocalStatus || "ORIGINAL"}`;
+  }
+}
+
+function updateVocalRuntimeUI(engine = aiEngineType, device, api, rawDevice) {
+  const runtimeText = $("#txt-vocal-runtime");
+  const runtimeDot = $("#vocal-runtime-dot");
+  const deviceText = $("#txt-vocal-device");
+  const apiText = $("#txt-vocal-api");
+  const runtimePanel = $("#vocal-runtime-status");
+  const normalizedEngine = engine === "go_native" ? "go_native" : "webgl";
+
+  if (device !== undefined && device !== null && String(device).trim()) {
+    currentVocalDevice = String(device).trim();
+  } else if (normalizedEngine === "go_native") {
+    currentVocalDevice = "Go Native Core";
+  } else if (!currentVocalDevice) {
+    currentVocalDevice = "Detecting GPU...";
+  }
+  if (rawDevice !== undefined && rawDevice !== null && String(rawDevice).trim()) {
+    currentVocalDeviceRaw = String(rawDevice).trim();
+  } else if (!currentVocalDeviceRaw || normalizedEngine === "go_native") {
+    currentVocalDeviceRaw = currentVocalDevice;
+  }
+  if (api !== undefined && api !== null && String(api).trim()) {
+    currentVocalApi = String(api).trim().toUpperCase();
+  } else if (normalizedEngine === "go_native") {
+    currentVocalApi = "DIRECTML";
+  } else if (!currentVocalApi) {
+    currentVocalApi = "WEBGL";
+  }
+
+  const deviceLabel = currentVocalDevice || (normalizedEngine === "go_native" ? "Go Native Core" : "Detecting GPU...");
+  const visibleDevice = deviceLabel.replace(/\s*\(DirectML\s+Device\s+#\d+\)\s*$/i, "").trim();
+  const apiLabel = currentVocalApi || (normalizedEngine === "go_native" ? "DIRECTML" : "WEBGL");
+  const fullHardware = currentVocalDeviceRaw || deviceLabel;
+  const isCpu = /cpu|swiftshader|software|loopback/i.test(deviceLabel);
+  const isOffline = /offline|unavailable|lost|error/i.test(deviceLabel);
+  if (runtimeText) {
+    runtimeText.textContent = currentVocalStatus || "ORIGINAL";
+    runtimeText.title = `AI Vocal operation: ${currentVocalStatus || "ORIGINAL"}`;
+  }
+  if (runtimeDot) {
+    runtimeDot.className = `ph-fill ph-circle text-[4px] ${isOffline ? "text-red-500" : (isCpu ? "text-amber-400" : "text-emerald-400")}`;
+  }
+  if (deviceText) {
+    deviceText.textContent = `HW: ${visibleDevice}`;
+    deviceText.title = `Hardware Device: ${fullHardware}`;
+  }
+  if (apiText) {
+    apiText.textContent = `API: ${apiLabel}`;
+    apiText.title = `AI API: ${apiLabel}`;
+  }
+  if (runtimePanel) {
+    runtimePanel.title = `Hardware Device: ${fullHardware}; API: ${apiLabel}`;
+  }
 }
 
 function updateUIFromExternal(key, value, index) {
@@ -855,6 +1156,9 @@ function updateUIFromExternal(key, value, index) {
     updateVocalUI(value);
   } else if (key === "vocalProfile") {
     updateVocalProfileUI(value);
+  } else if (key === "aiPowerMode") {
+    aiPowerMode = normalizeAiPowerMode(value);
+    updateAiPowerModeUI(aiPowerMode);
   } else if (key === "aiEngineType") {
     aiEngineType = value;
     updateAiEngineUI();
@@ -880,6 +1184,10 @@ function updateAiEngineUI() {
   if (selEngine) {
     selEngine.value = aiEngineType;
   }
+  currentVocalDevice = isGo ? "Go Native Core" : "Detecting GPU...";
+  currentVocalDeviceRaw = currentVocalDevice;
+  currentVocalApi = isGo ? "DIRECTML" : "WEBGL";
+  updateVocalRuntimeUI(aiEngineType);
 }
 
 async function checkGoEngineHealth() {
@@ -948,49 +1256,52 @@ function sendParam(key, value, index = null) {
 }
 
 async function toggleRecording() {
-  const btnRecTop = $("#btn-rec-top");
-  const recIndicator = $("#rec-indicator");
   if (!isRecording) {
     const success = await sendMessageWithRetry({
       type: "START_RECORDING",
       tabId: currentTabId,
     });
     if (success) {
-      isRecording = true;
-      settingsModal.updateRecordStatus(true);
-      btnRecTop.textContent = "STOP";
-      btnRecTop.classList.remove("text-red-900");
-      btnRecTop.classList.add("bg-red-600", "text-white");
-      if (recIndicator) recIndicator.classList.remove("hidden");
+      syncRecordingUI(true);
+    } else {
+      // Recover from a stale popup state (for example, the popup was closed
+      // while recording). If the offscreen recorder is still active, switch
+      // this popup to STOP instead of issuing more START requests.
+      const state = await sendMessageWithRetry({
+        type: "GET_STATE",
+        tabId: currentTabId,
+      });
+      if (state?.isRecording === true) syncRecordingUI(true);
     }
   } else {
-    isRecording = false;
-    settingsModal.updateRecordStatus(false);
-    if (recIndicator) recIndicator.classList.add("hidden");
-
+    syncRecordingUI(false);
     await sendMessageWithRetry({
       type: "STOP_RECORDING",
       tabId: currentTabId,
     });
-    btnRecTop.textContent = "REC";
-    btnRecTop.classList.remove("bg-red-600", "text-white");
-    btnRecTop.classList.add("text-red-900");
   }
 }
 
-async function handleRecordingSaved() {
+function syncRecordingUI(active) {
+  isRecording = Boolean(active);
+  settingsModal?.updateRecordStatus(isRecording);
+
   const btnRecTop = $("#btn-rec-top");
   const recIndicator = $("#rec-indicator");
-  settingsModal.updateRecordStatus(false);
   if (btnRecTop) {
-    btnRecTop.textContent = "REC";
-    btnRecTop.classList.remove("bg-red-600", "text-white");
-    btnRecTop.classList.add("text-red-900");
+    btnRecTop.textContent = isRecording ? "STOP" : "REC";
+    btnRecTop.classList.toggle("bg-red-600", isRecording);
+    btnRecTop.classList.toggle("text-white", isRecording);
+    btnRecTop.classList.toggle("text-red-900", !isRecording);
+    btnRecTop.setAttribute("aria-label", isRecording ? "Stop recording" : "Start recording");
   }
-  if (recIndicator) recIndicator.classList.add("hidden");
+  if (recIndicator) recIndicator.classList.toggle("hidden", !isRecording);
+}
+
+async function handleRecordingSaved() {
+  syncRecordingUI(false);
   await settingsModal.renderRecordingList();
   settingsModal.showRecordingSaved();
-  isRecording = false;
 }
 
 function setupListeners() {
@@ -1002,6 +1313,7 @@ function setupListeners() {
     if (isAudioMasterOn) {
       initCapture(sessionManager.sessionMode);
     } else {
+      captureRequestId++;
       if (currentTabId) {
         sendMessageWithRetry({ type: "STOP_CAPTURE", tabId: currentTabId });
 
@@ -1011,6 +1323,7 @@ function setupListeners() {
         });
       }
     }
+    notifyAction("isAudioMasterOn", isAudioMasterOn, { immediate: true });
     updateEQVisuals();
   });
 
@@ -1019,6 +1332,7 @@ function setupListeners() {
     updateMasterTogglesUI();
     sessionManager.setSetting({ isVideoMasterOn });
     sendParam("isVideoMasterOn", isVideoMasterOn);
+    notifyAction("isVideoMasterOn", isVideoMasterOn, { immediate: true });
     if (isVideoMasterOn) {
       syncVideoTransform();
       const d = parseFloat($("#video-delay").value);
@@ -1057,6 +1371,7 @@ function setupListeners() {
     sessionManager.setSetting({ isEqOn });
     updateEqToggleButton();
     sendParam("isEqOn", isEqOn);
+    notifyAction("isEqOn", isEqOn, { immediate: true });
     updateEQVisuals();
   });
 
@@ -1078,18 +1393,21 @@ function setupListeners() {
     const v = parseInt(e.target.value);
     $("#txt-pitch").textContent = (v > 0 ? "+" : "") + v;
     sendParam("pitch", v);
+    notifyAction("pitch", v);
   });
   $("#main-verb").addEventListener("input", (e) => {
     if (!isAudioMasterOn) return;
     const v = parseFloat(e.target.value);
     $("#txt-verb").textContent = v.toFixed(1);
     sendParam("reverb", v);
+    notifyAction("reverb", v);
   });
 
   $("#btn-normalize")?.addEventListener("click", () => {
     isNormalizeOn = !isNormalizeOn;
     updateNormalizeButton();
     sendParam("normalize", isNormalizeOn);
+    notifyAction("normalize", isNormalizeOn, { immediate: true });
   });
 
   // --- AI VOCAL SEPARATOR CONTROLS ---
@@ -1098,38 +1416,49 @@ function setupListeners() {
     updateVocalMasterUI();
     sessionManager.setSetting({ isVocalOn });
     sendParam("isVocalOn", isVocalOn);
+    notifyAction("isVocalOn", isVocalOn, { immediate: true });
   });
   $("#btn-vocal-bypass")?.addEventListener("click", () => {
     sendParam("vocalMode", "bypass");
     updateVocalUI("bypass");
+    notifyAction("vocalMode", "bypass", { immediate: true });
   });
   $("#btn-vocal-karaoke")?.addEventListener("click", () => {
     chrome.storage.local.get("aiHardwareWarning").then((res) => {
-      if (res?.aiHardwareWarning?.benchmarkMs > 185) {
-        showAiSlowModal(res.aiHardwareWarning.benchmarkMs, res.aiHardwareWarning.deviceLabel);
+      if (isCurrentAiWarning(res?.aiHardwareWarning)) {
+        const warning = res.aiHardwareWarning;
+        showAiSlowModal(warning.liveP95Ms || warning.benchmarkMs, warning.deviceLabel);
       }
     }).catch(() => {});
     sendParam("vocalMode", "karaoke");
     updateVocalUI("karaoke");
+    notifyAction("vocalMode", "karaoke", { immediate: true });
   });
   $("#btn-vocal-acapella")?.addEventListener("click", () => {
     chrome.storage.local.get("aiHardwareWarning").then((res) => {
-      if (res?.aiHardwareWarning?.benchmarkMs > 185) {
-        showAiSlowModal(res.aiHardwareWarning.benchmarkMs, res.aiHardwareWarning.deviceLabel);
+      if (isCurrentAiWarning(res?.aiHardwareWarning)) {
+        const warning = res.aiHardwareWarning;
+        showAiSlowModal(warning.liveP95Ms || warning.benchmarkMs, warning.deviceLabel);
       }
     }).catch(() => {});
     sendParam("vocalMode", "acapella");
     updateVocalUI("acapella");
+    notifyAction("vocalMode", "acapella", { immediate: true });
   });
   $$(".btn-vocal-profile").forEach((btn) => {
     btn.addEventListener("click", (e) => {
-      const profile = e.currentTarget.dataset.profile === "ai_remove" ? "ai_remove" : "balanced";
+      const profile = e.currentTarget.dataset.profile === "balanced"
+        ? "balanced"
+        : "ai_remove";
       currentVocalProfile = profile;
       sessionManager.setSetting({ vocalProfile: profile });
       sendParam("vocalProfile", profile);
       updateVocalProfileUI(profile);
+      notifyAction("vocalProfile", profile, { immediate: true });
     });
   });
+  $("#btn-ai-mode-eco")?.addEventListener("click", () => selectAiPowerMode("eco"));
+  $("#btn-ai-mode-full")?.addEventListener("click", () => selectAiPowerMode("quality"));
 
   // AI Engine Switcher & Modal
   $("#btn-engine-toggle")?.addEventListener("click", () => {
@@ -1142,6 +1471,7 @@ function setupListeners() {
     updateAiEngineUI();
     sessionManager.setSetting({ aiEngineType });
     sendParam("aiEngineType", aiEngineType);
+    notifyAction("aiEngineType", aiEngineType, { immediate: true });
   });
 
   $("#btn-go-modal-close")?.addEventListener("click", () => {
@@ -1201,11 +1531,9 @@ function setupListeners() {
   });
 
   $("#btn-reset").addEventListener("click", handleReset);
-  $("#btn-ai-diagnostics")?.addEventListener("click", () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL("debug-ai.html") });
-  });
 
   $("#btn-close").addEventListener("click", async () => {
+    captureRequestId++;
     if (currentTabId) {
       try {
         await sendMessageWithRetry({
@@ -1240,6 +1568,7 @@ function setupListeners() {
       chrome.tabs
         .sendMessage(currentTabId, { type: "SET_VIDEO_DELAY", value: v })
         .catch(() => {});
+    notifyAction("videoDelay", v);
   };
   $("#video-delay").addEventListener("input", (e) => syncDelay(e.target.value));
   $("#num-video-delay").addEventListener("change", (e) =>
@@ -1256,6 +1585,7 @@ function setupListeners() {
   $("#video-quality")?.addEventListener("change", (e) => {
     const val = e.target.value;
     sendParam("videoQuality", val);
+    notifyAction("videoQuality", val, { immediate: true });
     if (currentTabId)
       chrome.tabs
         .sendMessage(currentTabId, { type: "SET_VIDEO_QUALITY", value: val })
@@ -1263,7 +1593,10 @@ function setupListeners() {
   });
 
   const handleTransform = () => {
-    if (isVideoMasterOn) syncVideoTransform();
+    if (isVideoMasterOn) {
+      syncVideoTransform();
+      notifyAction("videoTransform", null);
+    }
   };
   $("#video-zoom").addEventListener("input", handleTransform);
   $("#video-rotate").addEventListener("input", handleTransform);
@@ -1273,12 +1606,14 @@ function setupListeners() {
     if (isVideoMasterOn) {
       syncVideoTransform();
       sendParam("videoPosX", parseFloat(e.target.value));
+      notifyAction("videoPosition", null);
     }
   });
   $("#video-pos-y").addEventListener("input", (e) => {
     if (isVideoMasterOn) {
       syncVideoTransform();
       sendParam("videoPosY", parseFloat(e.target.value));
+      notifyAction("videoPosition", null);
     }
   });
 
@@ -1289,6 +1624,7 @@ function setupListeners() {
     handleTransform();
     sendParam("videoPosX", 0);
     sendParam("videoPosY", 0);
+    notifyAction("videoPosition", null, { immediate: true });
   });
 
   $("#btn-zoom-fit").addEventListener("click", () => {
@@ -1322,7 +1658,7 @@ function setupListeners() {
   $("#btn-rec-top").onclick = toggleRecording;
 
   const openCoffeeDonation = () => {
-    chrome.tabs.create({ url: "https://ganknow.com/nextfeeder/tip" });
+    chrome.tabs.create({ url: DONATION_URL });
   };
   const buyCoffeeBtn = $("#btn-buy-coffee");
   if (buyCoffeeBtn) buyCoffeeBtn.addEventListener("click", openCoffeeDonation);
@@ -1654,14 +1990,25 @@ function loadAudioState(state) {
   } else {
     updateVocalMasterUI();
   }
-  updateVocalProfileUI(state.vocalProfile || currentVocalProfile);
-  if (state.vocalStatus) {
-    const txtStatus = $("#txt-vocal-status");
-    if (txtStatus) {
-      txtStatus.textContent = state.vocalStatus;
-      txtStatus.title = "AI Vocal: " + state.vocalStatus;
-    }
+  updateVocalProfileUI("ai_remove");
+  if (state.vocalProfile !== "ai_remove") {
+    sendParam("vocalProfile", "ai_remove");
   }
+  if (state.aiPowerMode !== undefined) {
+    aiPowerMode = normalizeAiPowerMode(state.aiPowerMode);
+  }
+  updateAiPowerModeUI(aiPowerMode);
+  if (state.aiVocalDiagnostics) {
+    updateVocalRuntimeUI(
+      state.aiVocalDiagnostics.engine || aiEngineType,
+      state.aiVocalDiagnostics.hardwareDevice || state.aiVocalDiagnostics.backend || "",
+      state.aiVocalDiagnostics.api,
+      state.aiVocalDiagnostics.hardwareDeviceRaw || state.aiVocalDiagnostics.backend || ""
+    );
+  } else {
+    updateVocalRuntimeUI(aiEngineType);
+  }
+  updateVocalRuntimeStatus(state.vocalStatus || currentVocalStatus);
 
   if (state.eq && state.eq.length > 0) {
     currentEqValues = state.eq;

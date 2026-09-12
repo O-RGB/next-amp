@@ -4,11 +4,94 @@ import { DBManager } from "./db-manager.js";
 import { RTCServer } from "./modules/rtc-server.js";
 import { REMOTE_UI } from "./remote/remote-ui-bundle.js";
 import { AIVocalManager } from "./modules/ai-vocal/ai-vocal-manager.js";
+import { normalizeAiPowerMode } from "./modules/ai-vocal/ai-power-mode.mjs";
 import "./assets/js/peerjs.min.js";
 
 const sessions = new Map();
+// A capture can still be between getUserMedia()/AudioWorklet/model setup when
+// the popup is closed. Keep a per-tab epoch so STOP_CAPTURE can invalidate
+// that work even before the session has been published to `sessions`.
+const captureEpochs = new Map();
 const db = new DBManager();
 const rtcServer = new RTCServer();
+
+function beginCaptureEpoch(tabId) {
+  const nextEpoch = (captureEpochs.get(tabId) || 0) + 1;
+  captureEpochs.set(tabId, nextEpoch);
+  return nextEpoch;
+}
+
+function isCaptureEpochCurrent(tabId, epoch) {
+  return captureEpochs.get(tabId) === epoch;
+}
+
+function stopUnpublishedCapture({ stream, audioCtx, aiVocal }) {
+  if (aiVocal) {
+    try { aiVocal.destroy(); } catch (_) {}
+  }
+  if (stream) {
+    try { stream.getTracks().forEach((track) => track.stop()); } catch (_) {}
+  }
+  if (audioCtx) {
+    try { audioCtx.close(); } catch (_) {}
+  }
+}
+
+// Donation prompts are based only on local, real engine usage. Keep this
+// intentionally coarse so it adds virtually no work to the audio path.
+const DONATION_USAGE_TICK_MS = 30 * 1000;
+const DONATION_MIN_SESSION_MS = 30 * 1000;
+let donationUsageWriteChain = Promise.resolve();
+
+function queueDonationUsageUpdate(deltaMs, completedSession = false) {
+  if (!deltaMs && !completedSession) return;
+
+  donationUsageWriteChain = donationUsageWriteChain
+    .then(async () => {
+      const data = await chrome.storage.local.get("donationUsage");
+      const current = data.donationUsage || {};
+      const usageMs = Number(current.usageMs) || 0;
+      const completedSessions = Number(current.completedSessions) || 0;
+      await chrome.storage.local.set({
+        donationUsage: {
+          ...current,
+          usageMs: usageMs + Math.max(0, Number(deltaMs) || 0),
+          completedSessions: completedSessions + (completedSession ? 1 : 0),
+        },
+      });
+    })
+    .catch(() => {});
+}
+
+function recordDonationUsage(session, force = false) {
+  if (!session || session.donationUsageClosed) return;
+
+  const now = Date.now();
+  const elapsed = Math.max(0, now - (session.donationLastUsageAt || now));
+  session.donationLastUsageAt = now;
+
+  // Do not count a suspended/muted audio graph as active usage.
+  if (
+    elapsed > 0 &&
+    session.audioCtx?.state === "running" &&
+    session.params?.isAudioMasterOn !== false
+  ) {
+    session.donationSessionMs = (session.donationSessionMs || 0) + elapsed;
+    session.donationPendingMs = (session.donationPendingMs || 0) + elapsed;
+  }
+
+  const shouldPersist = force || (session.donationPendingMs || 0) >= DONATION_USAGE_TICK_MS;
+  if (!shouldPersist) return;
+
+  const deltaMs = session.donationPendingMs || 0;
+  session.donationPendingMs = 0;
+  const completedSession =
+    force &&
+    !session.donationSessionCounted &&
+    (session.donationSessionMs || 0) >= DONATION_MIN_SESSION_MS;
+  if (completedSession) session.donationSessionCounted = true;
+  queueDonationUsageUpdate(deltaMs, completedSession);
+}
 
 // --- PEERJS SETUP ---
 let hostPeer = null;
@@ -128,7 +211,8 @@ const createDefaultParams = () => ({
   dynLimit: 60,
   isVocalOn: false,
   vocalMode: "bypass", // "bypass", "karaoke", "acapella"
-  vocalProfile: "balanced", // "balanced" or "ai_remove" (higher-detail app profile)
+  vocalProfile: "ai_remove", // Production default: 16-hop Detail profile
+  aiPowerMode: "eco", // "eco" or "quality"; WEB AI only
   aiEngineType: "webgl", // "webgl" or "go_native"
 });
 
@@ -144,7 +228,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       msg.mode,
       msg.initialPreset,
       sendResponse,
-      msg.sampleRate
+      msg.sampleRate,
+      msg.aiPowerMode
     );
     return true;
   } else if (msg.type === "START_RECORDING") {
@@ -189,8 +274,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse(session?.aiVocal ? session.aiVocal.getDiagnostics() : null);
     return true;
   } else if (msg.type === "STOP_CAPTURE") {
-    stopAudio(tabId);
-    sendResponse({ success: true });
+    stopAudio(tabId).then(() => sendResponse({ success: true })).catch(() => {
+      sendResponse({ success: true });
+    });
+    return true;
   } else if (msg.type === "CHECK_ACTIVE_SESSIONS") {
     const otherSessions = Array.from(sessions.keys()).filter(
       (id) => id !== msg.currentTabId
@@ -255,16 +342,27 @@ async function startAudio(
   initialMode,
   initialPreset,
   sendResponse,
-  requestedSampleRate
+  requestedSampleRate,
+  initialPowerMode
 ) {
-  if (sessions.has(tabId)) stopAudio(tabId);
+  if (sessions.has(tabId)) await stopAudio(tabId);
+
+  // Supersede any previous START_CAPTURE that is still preparing its stream,
+  // even when it has not reached sessions.set(...) yet.
+  const captureEpoch = beginCaptureEpoch(tabId);
+  const isCurrentCapture = () => isCaptureEpochCurrent(tabId, captureEpoch);
+  let stream = null;
+  let audioCtx = null;
+  let aiVocal = null;
+  let sessionPublished = false;
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: streamId },
       },
     });
+    if (!isCurrentCapture()) throw new Error("Capture start cancelled");
 
     // "interactive" latencyHint = tiny ~3ms buffers → audio thread runs 300+ times/sec.
     // "balanced" = ~20ms buffers → ~50 times/sec. Same perceived quality for pitch shift use case.
@@ -283,27 +381,38 @@ async function startAudio(
     }
     // If requestedSampleRate === "auto", sampleRate is omitted so browser uses system default.
 
-    const audioCtx = new AudioContext(ctxOptions);
+    audioCtx = new AudioContext(ctxOptions);
     const source = audioCtx.createMediaStreamSource(stream);
 
-    // NextAmp AI Vocal Separator (UVR-MDX-Net WebGL)
-    const aiVocal = new AIVocalManager(audioCtx);
+    // NextStudio AI Vocal Separator (UVR-MDX-Net WebGL)
+    aiVocal = new AIVocalManager(audioCtx);
+    const selectedPowerMode = normalizeAiPowerMode(initialPowerMode);
+    await aiVocal.setPowerMode(selectedPowerMode);
+    if (!isCurrentCapture()) throw new Error("Capture start cancelled");
     aiVocal.onStatusChange = (status) => {
       chrome.runtime.sendMessage({
         type: "AI_VOCAL_STATUS",
         tabId: tabId,
-        status: status
+        status: status,
+        engine: aiVocal.engineType,
+        device: aiVocal.getHardwareDevice(),
+        hardwareDevice: aiVocal.getHardwareDevice(),
+        hardwareDeviceRaw: aiVocal.getHardwareDeviceRaw(),
+        api: aiVocal.getHardwareApi()
       }).catch(() => {});
     };
     const aiVocalNode = await aiVocal.init();
+    if (!isCurrentCapture()) throw new Error("Capture start cancelled");
 
     const pitchProc = new PitchProcessor(audioCtx);
     await pitchProc.init();
+    if (!isCurrentCapture()) throw new Error("Capture start cancelled");
     const effects = new AudioEffects(audioCtx);
     const effectsInput = effects.getInputNode(); // the GainNode at the start of the effects chain
 
     const defaultP = createDefaultParams();
     defaultP.eqPreset = initialPreset;
+    defaultP.aiPowerMode = selectedPowerMode;
 
     // Initial graph:
     // source -> [aiVocalNode] -> [stretchNode] -> effectsInput
@@ -354,17 +463,39 @@ async function startAudio(
       mode: initialMode,
       remoteToken: null,
       remoteConns: [],
+      donationSessionMs: 0,
+      donationPendingMs: 0,
+      donationLastUsageAt: Date.now(),
+      donationSessionCounted: false,
+      donationUsageClosed: false,
+      donationUsageTimer: null,
     };
+
+    if (!isCurrentCapture()) throw new Error("Capture start cancelled");
 
     setupRecorder(newSession, recordingStreamDest.stream);
     sessions.set(tabId, newSession);
+    sessionPublished = true;
+    newSession.donationUsageTimer = setInterval(
+      () => recordDonationUsage(newSession),
+      DONATION_USAGE_TICK_MS
+    );
 
     applyAllParams(newSession);
     startVisualizerLoop(tabId);
     sendResponse({ success: true, sampleRate: audioCtx.sampleRate });
   } catch (e) {
-    console.error(`[Tab ${tabId}] Start Error:`, e);
-    sendResponse({ success: false, error: e.message });
+    if (!sessionPublished) {
+      stopUnpublishedCapture({ stream, audioCtx, aiVocal });
+    }
+    if (isCurrentCapture()) {
+      console.error(`[Tab ${tabId}] Start Error:`, e);
+      sendResponse({ success: false, error: e.message });
+    } else {
+      // A superseded start is expected during a quick close/reopen or a
+      // rapid toggle. Do not surface it as a model failure in the popup.
+      sendResponse({ success: false, error: "Capture start cancelled" });
+    }
   }
 }
 
@@ -415,11 +546,28 @@ function stopRecording(tabId) {
   }
 }
 
-function stopAudio(tabId) {
+async function stopAudio(tabId) {
+  // Invalidate an in-flight start before looking for a published session.
+  // Previously the early return below left getUserMedia/model work alive.
+  beginCaptureEpoch(tabId);
   rtcServer.stopSession(tabId);
   const session = sessions.get(tabId);
   if (!session) return;
+  if (session.donationUsageTimer) clearInterval(session.donationUsageTimer);
+  // Flush usage before tearing down the audio context.
+  recordDonationUsage(session, true);
+  session.donationUsageClosed = true;
   if (session.remoteConns) session.remoteConns.forEach((c) => c.close());
+
+  // Finish an active recording before the session is torn down. Closing the
+  // popup normally does not reach here, but an explicit audio shutdown should
+  // never discard the chunks that have already been captured.
+  if (
+    session.mediaRecorder &&
+    session.mediaRecorder.state === "recording"
+  ) {
+    try { session.mediaRecorder.stop(); } catch (_) {}
+  }
 
   chrome.runtime
     .sendMessage({ type: "BG_RESET_DELAY", tabId: tabId })
@@ -436,6 +584,13 @@ function stopAudio(tabId) {
     } catch (e) {}
   }
   sessions.delete(tabId);
+
+  // A destroyed manager may still be finishing a model/backend promise. Give
+  // it a bounded grace period before reporting STOP_CAPTURE complete so a
+  // quick popup reopen does not start a second TensorFlow load on top of it.
+  try {
+    await session.aiVocal?.waitForEngineIdle?.(2000);
+  } catch (_) {}
 }
 
 function updateParams(msg) {
@@ -465,10 +620,82 @@ function getKeyByValue(map, searchValue) {
   return null;
 }
 
+function getPageActionNotification(key, value, params) {
+  const asNumber = Number(value);
+  const fixed = Number.isFinite(asNumber) ? asNumber.toFixed(2) : String(value ?? "");
+  switch (key) {
+    case "isAudioMasterOn":
+      return { message: `AUDIO ${value ? "ON" : "OFF"}`, icon: value ? "speaker" : "speaker-off" };
+    case "pitch":
+      return { group: "pitch", message: `KEY ${asNumber > 0 ? "+" : ""}${Math.round(asNumber)}`, icon: "music" };
+    case "reverb":
+      return { group: "reverb", message: `REVERB ${Number(value).toFixed(1)}`, icon: "wave" };
+    case "isEqOn":
+      return { message: `EQ ${value ? "ON" : "OFF"}`, icon: "eq" };
+    case "normalize":
+      return { message: `DYN ${value ? "ON" : "OFF"}`, icon: "dynamic" };
+    case "isVocalOn":
+      return { message: `AI VOCAL ${value ? "ON" : "OFF"}`, icon: "ai" };
+    case "vocalMode": {
+      const labels = { karaoke: "KARAOKE", acapella: "ACAPELLA", bypass: "ORIGINAL" };
+      return { message: `${labels[value] || String(value).toUpperCase()} ACTIVE`, icon: value === "karaoke" ? "vocal-off" : "speaker", tone: "loading" };
+    }
+    case "vocalProfile":
+      return { message: `AI PROFILE ${String(value).replace(/_/g, " ").toUpperCase()}`, icon: "profile" };
+    case "aiPowerMode":
+      return { message: `AI ${String(value).toUpperCase()}`, icon: "ai" };
+    case "aiEngineType":
+      return { message: `AI ENGINE ${value === "go_native" ? "GO" : "WEB"}`, icon: "engine" };
+    case "videoQuality":
+      return { message: `VIDEO ${String(value).toUpperCase()}`, icon: "video" };
+    case "videoDelay":
+      return { group: "videoDelay", message: `VIDEO DELAY ${fixed}s`, icon: "delay" };
+    case "videoZoom":
+    case "videoRotate":
+      return {
+        group: "videoTransform",
+        message: `VIDEO ${Math.round(Number(params.videoZoom || 1) * 100)}% / ${Number(params.videoRotate || 0)}°`,
+        icon: "transform",
+      };
+    case "videoPosX":
+    case "videoPosY":
+      return {
+        group: "videoPosition",
+        message: `VIDEO POS ${params.videoPosX || 0},${params.videoPosY || 0}`,
+        icon: "position",
+      };
+    case "isVideoMasterOn":
+      return { message: `VIDEO ${value ? "ON" : "OFF"}`, icon: value ? "video" : "video-off" };
+    default:
+      return null;
+  }
+}
+
+function notifyPageAction(session, key, value, source) {
+  if (source !== "remote") return;
+  const tId = getKeyByValue(sessions, session);
+  const action = getPageActionNotification(key, value, session.params);
+  if (!tId || !action) return;
+  chrome.runtime.sendMessage({
+    type: "BG_RELAY_TO_TAB",
+    tabId: Number(tId),
+    payload: {
+      type: "SHOW_ACTION_NOTIFICATION",
+      message: action.message,
+      group: action.group,
+      icon: action.icon,
+      tone: action.tone,
+      source: "remote",
+    },
+  }).catch(() => {});
+}
+
 function applyParamToSession(session, key, value, index, source) {
   const { params, effects, pitchProc } = session;
   if (key === "eq" && index !== null) params.eq[index] = value;
   else if (key in params) params[key] = value;
+
+  notifyPageAction(session, key, value, source);
 
   // -- VIDEO TRANSFORM MERGE LOGIC --
   // (Resolves zoom override or rotate resetting zoom issue)
@@ -550,12 +777,12 @@ function applyParamToSession(session, key, value, index, source) {
       if (session.aiVocal) {
         if (!params.isVocalOn) {
           session.aiVocal.unloadEngine();
+        } else if (params.vocalMode && params.vocalMode !== "bypass") {
+          session.aiVocal.setMode(params.vocalMode);
         } else {
-          if (params.vocalMode && params.vocalMode !== "bypass") {
-            session.aiVocal.setMode(params.vocalMode);
-          } else {
-            session.aiVocal.preloadEngine();
-          }
+          // ORIGINAL is a true lazy state. Keep the master toggle ON, but do
+          // not load the 15MB model until Karaoke/Acapella is selected.
+          session.aiVocal.unloadEngine();
         }
       }
       break;
@@ -570,9 +797,39 @@ function applyParamToSession(session, key, value, index, source) {
       }
       break;
     case "vocalProfile":
-      params.vocalProfile = value === "ai_remove" ? "ai_remove" : "balanced";
+      params.vocalProfile = value === "balanced"
+        ? "balanced"
+        : value === "reference"
+          ? "reference"
+          : "ai_remove";
       if (session.aiVocal) {
         session.aiVocal.setVocalProfile(params.vocalProfile);
+      }
+      break;
+    case "aiPowerMode":
+      params.aiPowerMode = normalizeAiPowerMode(value);
+      if (session.aiVocal) {
+        session.aiVocal.setPowerMode(params.aiPowerMode).then((result) => {
+          if (!result?.reverted) return;
+          params.aiPowerMode = result.mode;
+          try { chrome.storage.local.set({ aiPowerMode: result.mode }).catch(() => {}); } catch (_) {}
+          const tId = getKeyByValue(sessions, session);
+          if (tId) {
+            chrome.runtime.sendMessage({
+              type: "PARAM_UPDATE",
+              tabId: tId,
+              key: "aiPowerMode",
+              value: result.mode
+            }).catch(() => {});
+          }
+          if (session.remoteConns?.length) {
+            session.remoteConns.forEach((conn) => {
+              if (conn.open) conn.send({ type: "UPDATE_PARAM", key: "aiPowerMode", value: result.mode });
+            });
+          }
+        }).catch((error) => {
+          console.warn("[NextStudio AI] Power mode switch failed:", error);
+        });
       }
       break;
     case "vocalDiff":
@@ -712,6 +969,7 @@ function applyParamToSession(session, key, value, index, source) {
           key,
           value,
           index,
+          source,
         })
         .catch(() => {});
     }
@@ -782,15 +1040,16 @@ function applyAllParams(session) {
   // Apply AI Vocal parameters
   if (session.aiVocal) {
     if (params.aiEngineType) session.aiVocal.setEngineType(params.aiEngineType);
+    if (params.aiPowerMode) session.aiVocal.setPowerMode(params.aiPowerMode);
     if (params.vocalProfile) session.aiVocal.setVocalProfile(params.vocalProfile);
     if (!params.isVocalOn) {
       session.aiVocal.unloadEngine();
+    } else if (params.vocalMode && params.vocalMode !== "bypass") {
+      session.aiVocal.setMode(params.vocalMode);
     } else {
-      if (params.vocalMode && params.vocalMode !== "bypass") {
-        session.aiVocal.setMode(params.vocalMode);
-      } else {
-        session.aiVocal.preloadEngine();
-      }
+      // Preserve ON | ORIGINAL without starting a needless model load during
+      // popup/session restoration. AI starts when a processing mode is chosen.
+      session.aiVocal.unloadEngine();
     }
   }
 }

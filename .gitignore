@@ -4,16 +4,16 @@ node_modules/
 .DS_Store
 
 # Go native engine: local build outputs
-nextamp-engine-go/nextamp-engine
-nextamp-engine-go/nextamp-engine.exe
-nextamp-engine-go/nextamp-engine-go
+nextstudio-engine-go/nextstudio-engine
+nextstudio-engine-go/nextstudio-engine.exe
+nextstudio-engine-go/nextstudio-engine-go
 
 # Go native engine: large local packaging inputs
-# The compressed/encrypted files under nextamp-engine-go/assets/ are kept
+# The compressed/encrypted files under nextstudio-engine-go/assets/ are kept
 # because they are required by go:embed at runtime/build time.
-nextamp-engine-go/*.onnx
-nextamp-engine-go/*.dylib
-nextamp-engine-go/*.dll
+nextstudio-engine-go/*.onnx
+nextstudio-engine-go/*.dylib
+nextstudio-engine-go/*.dll
 
 # Local session metadata
-nextamp-engine-go/:memory:.ses
+nextstudio-engine-go/:memory:.ses

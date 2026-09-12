@@ -14,17 +14,17 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
 
-    <title>Nextamp Player – เครื่องมือปรับแต่งเสียงเพลงออนไลน์</title>
+    <title>NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync</title>
 
     <meta
       name="description"
-      content="NEXTAMP โปรแกรมเล่นเพลงผ่านเว็บไซต์ เปลี่ยนคีย์เพลง เพิ่มความเร็ว ปรับ EQ และใส่ Reverb ได้ฟรี พร้อมระบบ Remote Upload จากมือถือ"
+      content="NextStudio โปรแกรมเล่นเพลงผ่านเว็บไซต์ เปลี่ยนคีย์เพลง เพิ่มความเร็ว ปรับ EQ และใส่ Reverb ได้ฟรี พร้อมระบบ Remote Upload จากมือถือ"
     />
     <meta
       name="keywords"
-      content="nextamp, โปรแกรมเล่นเพลง, เปลี่ยนคีย์เพลง, เพิ่มความเร็วเพลง, reverb, remote upload, music player, pitch shift, time stretch, web audio, แกะเพลง, ฝึกร้องเพลง"
+      content="nextstudio, โปรแกรมเล่นเพลง, เปลี่ยนคีย์เพลง, เพิ่มความเร็วเพลง, reverb, remote upload, music player, pitch shift, time stretch, web audio, แกะเพลง, ฝึกร้องเพลง"
     />
-    <meta name="author" content="NEXTAMP Team" />
+    <meta name="author" content="NextStudio Team" />
     <link
       rel="icon"
       type="image/png"
@@ -41,7 +41,7 @@
     <meta property="og:url" content="https://next-amp-player.vercel.app/" />
     <meta
       property="og:title"
-      content="NEXTAMP – โปรแกรมเล่นเพลงสำหรับนักดนตรี"
+      content="NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync"
     />
     <meta
       property="og:description"
@@ -58,7 +58,7 @@
     />
     <meta
       property="twitter:title"
-      content="NEXTAMP – โปรแกรมเล่นเพลงสำหรับนักดนตรี"
+      content="NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync"
     />
     <meta
       property="twitter:description"
@@ -74,7 +74,7 @@
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
     />
-    <meta name="apple-mobile-web-app-title" content="Nextamp" />
+    <meta name="apple-mobile-web-app-title" content="NextStudio" />
     <link
       rel="apple-touch-icon"
       href="https://next-amp-player.vercel.app/assets/logo/logo.png"
@@ -118,6 +118,18 @@
       .btn-glow:hover {
         transform: translateY(-2px);
         box-shadow: 0 0 30px rgba(0, 255, 0, 0.6);
+      }
+
+      .ai-feature-card {
+        background:
+          radial-gradient(circle at 85% 20%, rgba(0, 240, 255, 0.14), transparent 34%),
+          linear-gradient(145deg, rgba(0, 40, 50, 0.45), rgba(0, 0, 0, 0.9));
+        border: 1px solid rgba(0, 240, 255, 0.28);
+        box-shadow: 0 0 28px rgba(0, 240, 255, 0.06);
+      }
+      .ai-feature-card:hover {
+        border-color: rgba(0, 240, 255, 0.6);
+        box-shadow: 0 0 34px rgba(0, 240, 255, 0.14);
       }
       .btn-glow::after {
         content: "";
@@ -224,7 +236,7 @@
           class="w-8 h-8 rounded shadow-lg"
         />
         <span class="font-display font-bold text-xl tracking-wider text-white"
-          >NEXTAMP</span
+          >NEXTSTUDIO</span
         >
       </div>
       <div class="hidden md:flex gap-6 text-sm text-gray-400 font-display">
@@ -251,7 +263,7 @@
         <h1
           class="text-5xl md:text-7xl font-bold mb-6 font-display bg-clip-text text-transparent bg-gradient-to-r from-white via-gray-200 to-gray-500"
         >
-          NEXTAMP PLAYER
+          NEXTSTUDIO PLAYER
         </h1>
 
         <p
@@ -291,6 +303,37 @@
       <div class="ad-container w-full"></div>
     </div>
 
+    <section id="ai-vocal" class="container mx-auto px-4 mb-12">
+      <div class="ai-feature-card rounded-2xl p-6 md:p-8 transition duration-300">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 shrink-0 rounded-xl border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="currentColor" viewBox="0 0 256 256" aria-hidden="true">
+                <path d="M128 24a72.08 72.08 0 0 0-72 72v32a72 72 0 0 0 144 0V96a72.08 72.08 0 0 0-72-72Zm56 104a56 56 0 0 1-112 0V96a56 56 0 0 1 112 0Zm-64 104h16a8 8 0 0 0 0-16h-8v-16a72.08 72.08 0 0 0 64-71.61V112a8 8 0 0 0-16 0v16a56 56 0 0 1-112 0v-16a8 8 0 0 0-16 0v16.39A72.08 72.08 0 0 0 120 200v16h-8a8 8 0 0 0 0 16h8Z"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="text-[10px] text-cyan-300 font-bold tracking-[0.2em] font-display mb-1">OPTIONAL AI FEATURE</div>
+              <h2 class="text-2xl md:text-3xl font-display font-bold text-white">AI VOCAL / KARAOKE</h2>
+              <p class="text-sm text-gray-400 mt-2 max-w-2xl leading-relaxed">
+                เปิด Web Player เพื่อใส่ MP3 แล้วตัดเสียงร้องแบบ real-time
+                ด้วย model และ pipeline เดียวกับ Extension
+                <span class="text-cyan-300">AI จะเริ่มโหลดเมื่อกดเปิดเท่านั้น</span>
+              </p>
+            </div>
+          </div>
+
+          <a href="app.html" onclick="event.preventDefault(); sessionStorage.setItem('access_allowed', 'true'); enterApp();" class="shrink-0 px-6 py-3 rounded-lg border border-cyan-400/60 bg-cyan-400/10 hover:bg-cyan-300 hover:text-black text-cyan-300 font-display font-bold transition flex items-center justify-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256" aria-hidden="true">
+              <path d="M128 24a104 104 0 1 0 104 104A104.11 104.11 0 0 0 128 24Zm36 112h-28v28a8 8 0 0 1-16 0v-28H92a8 8 0 0 1 0-16h28V92a8 8 0 0 1 16 0v28h28a8 8 0 0 1 0 16Z"></path>
+            </svg>
+            เปิด Web Player
+          </a>
+        </div>
+        <div class="mt-5 pt-4 border-t border-cyan-400/10 text-[11px] text-gray-500 font-mono">ON DEMAND • LOCAL PROCESSING • MODEL LOADS AFTER OPEN</div>
+      </div>
+    </section>
+
     <main
       class="container mx-auto px-4 py-12 grid grid-cols-1 lg:grid-cols-3 gap-12"
     >
@@ -300,7 +343,7 @@
             class="text-3xl font-display font-bold text-green-400 flex items-center gap-3"
           >
             <span class="w-1 h-8 bg-green-500 rounded-full"></span>
-            ทำไมต้องใช้ Nextamp?
+            ทำไมต้องใช้ NextStudio?
           </h2>
           <div
             class="prose prose-invert text-gray-300 max-w-none leading-relaxed"
@@ -310,13 +353,13 @@
               เป็นเรื่องที่ง่ายขึ้น
               แต่โปรแกรมส่วนใหญ่จำเป็นต้องติดตั้งลงในเครื่อง (Installation)
               หรือมีค่าใช้จ่ายสูง
-              <strong>Nextamp</strong> จึงถูกพัฒนาขึ้นเพื่อแก้ปัญหานี้ โดยเป็น
+              <strong>NextStudio</strong> จึงถูกพัฒนาขึ้นเพื่อแก้ปัญหานี้ โดยเป็น
               <em>Web-based Audio Player</em> ที่ทำงานบนเบราว์เซอร์ได้ทันที
             </p>
             <p>
               ไม่ว่าคุณจะเป็นนักร้องที่ต้องการเปลี่ยนคีย์เพลง (Pitch Shifting)
               เพื่อหาคีย์ที่เหมาะสม หรือนักกีตาร์ที่ต้องการลดความเร็วเพลง (Time
-              Stretching) เพื่อแกะโซโล่ที่รวดเร็ว Nextamp
+              Stretching) เพื่อแกะโซโล่ที่รวดเร็ว NextStudio
               ตอบโจทย์ทุกความต้องการด้วยคุณภาพเสียงระดับ Studio Grade
               พร้อมฟีเจอร์ใหม่ <strong>Reverb</strong> และระบบ
               <strong>Remote Upload</strong> ที่ช่วยให้ชีวิตนักดนตรีง่ายขึ้น
@@ -344,14 +387,14 @@
                 <h2
                   class="text-3xl md:text-4xl font-display font-bold text-white mb-4"
                 >
-                  NEXTAMP
+                  NEXTSTUDIO
                   <span
                     class="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600"
                     >EXTENSION</span
                   >
                 </h2>
                 <p class="text-gray-300 mb-6 leading-relaxed">
-                  ทางเลือกใหม่! ใช้งานฟีเจอร์ของ Nextamp บนทุกเว็บไซต์
+                  ทางเลือกใหม่! ใช้งานฟีเจอร์ของ NextStudio บนทุกเว็บไซต์
                   ไม่ว่าจะเป็น
                   <strong class="text-white"
                     >YouTube, Spotify, Soundcloud</strong
@@ -454,7 +497,7 @@
               <p>
                 การร้องเพลงแบบเสียงแห้ง (Dry Signal) อาจทำให้ขาดความมั่นใจ
                 การเติม <strong>Reverb</strong> หรือเสียงก้องเข้าไปเล็กน้อยใน
-                Nextamp จะช่วยจำลองสภาพแวดล้อมเหมือนร้องในห้องโถง
+                NextStudio จะช่วยจำลองสภาพแวดล้อมเหมือนร้องในห้องโถง
                 ทำให้ได้ยินหางเสียงและเนื้อเสียงที่นุ่มนวลขึ้น
                 ช่วยให้การฝึกซ้อมมีความสุขและผ่อนคลายมากยิ่งขึ้น
               </p>
@@ -464,12 +507,12 @@
                 ปัญหาหนึ่งที่นักร้องมือใหม่มักพบคือ
                 "เพลงต้นฉบับคีย์สูงหรือต่ำเกินไป"
                 ทำให้ต้องตะเบ็งเสียงจนเกิดอาการเจ็บคอ หรือร้องแล้วไม่มีพลัง
-                การใช้เครื่องมืออย่าง <strong>Pitch Shift</strong> ใน Nextamp
+                การใช้เครื่องมืออย่าง <strong>Pitch Shift</strong> ใน NextStudio
                 ช่วยให้คุณสามารถเลื่อนคีย์เพลง (Transpose) ให้เข้ากับช่วงเสียง
                 (Vocal Range) ของตัวเองได้ทันที
               </p>
 
-              <h3>Nextamp Remote ทำงานอย่างไร?</h3>
+              <h3>NextStudio Remote ทำงานอย่างไร?</h3>
               <p>
                 ระบบ Remote Upload ใช้เทคโนโลยี
                 <strong>Peer-to-Peer (WebRTC)</strong>
@@ -505,7 +548,7 @@
                 รองรับไฟล์ประเภทไหนบ้าง?
               </h3>
               <p class="text-sm text-gray-400">
-                Nextamp รองรับไฟล์เสียงยอดนิยมเกือบทั้งหมด ได้แก่ MP3, WAV, OGG
+                NextStudio รองรับไฟล์เสียงยอดนิยมเกือบทั้งหมด ได้แก่ MP3, WAV, OGG
                 และ M4A (AAC)
               </p>
             </div>
@@ -563,7 +606,7 @@
           class="w-12 h-12 mx-auto mb-4 grayscale hover:grayscale-0 transition opacity-50 hover:opacity-100"
         />
         <h3 class="font-display font-bold text-white text-lg mb-2">
-          NEXTAMP PLAYER
+          NEXTSTUDIO PLAYER
         </h3>
         <p class="text-gray-500 text-sm mb-6 max-w-md mx-auto">
           Web Audio Player for Musicians. Pitch Shift, Time Stretch, EQ, and
@@ -571,7 +614,7 @@
         </p>
 
         <p class="text-gray-700 text-xs font-mono">
-          &copy; 2025 Nextamp Project. All rights reserved.
+          &copy; 2025 NextStudio Project. All rights reserved.
         </p>
       </div>
     </footer>
@@ -630,7 +673,7 @@
           }, 500);
         } catch (error) {
           console.error(error);
-          alert("Error loading Nextamp. Please refresh.");
+          alert("Error loading NextStudio. Please refresh.");
           btn.innerHTML = originalContent;
           btn.classList.remove("opacity-80", "cursor-wait");
           btn.disabled = false;
