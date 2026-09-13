@@ -1,6 +1,6 @@
 # AI Vocal Robotic Residual Reduction Plan
 
-สถานะ: **Planning only — ยังไม่อนุญาตให้แก้ model, DSP หรือ Extension ตามแผนนี้**
+สถานะ: **Implementation in progress — กลุ่ม Diagnostic foundation เสร็จแล้ว; ยังไม่แก้ production model, DSP หรือ Extension**
 
 เอกสารนี้มีไว้ส่งต่อให้ AI/ผู้พัฒนารอบถัดไปทำงานได้โดยไม่ต้องเดาวิธีเอง
 เป้าหมายคือทดลองลดเสียงร้องตกค้างที่ฟังเป็นเสียงเบา ๆ แบบหุ่นยนต์ใน Karaoke
@@ -164,11 +164,11 @@ Phase นี้เป็นงานวิเคราะห์เท่าน�
 
 ### A1. สร้าง offline renderer ที่ใช้ pipeline เดียวกับ ECO
 
-- [ ] รับ mixture WAV 44.1 kHz stereo
-- [ ] ใช้ STFT `n_fft=2048`, hop `512`, context 64 และ cadence 15 frames
-- [ ] ใช้ output window frame `34..48`
-- [ ] ใช้ mask equation และ inverse STFT แบบเดียวกับ `stft_core.c`
-- [ ] render เป็น float WAV โดยไม่ผ่าน AudioWorklet, queue หรือ browser scheduling
+- [x] เพิ่ม offline renderer รับ mixture WAV 44.1 kHz mono/stereo และแปลง mono เป็น stereo
+- [x] ใช้ STFT `n_fft=2048`, hop `512`, context 64 และ cadence 15 frames
+- [x] ใช้ output window frame `34..48`
+- [x] ใช้ mask equation และ inverse STFT แบบเดียวกับ `stft_core.c`
+- [x] render เป็น float WAV โดยไม่ผ่าน AudioWorklet, queue หรือ browser scheduling
 - [ ] ยืนยันด้วย deterministic fixture ว่า offline output ตรงกับ runtime DSP ภายใน
       tolerance ที่กำหนด
 
@@ -191,9 +191,9 @@ queue หรือ realtime state ไม่ใช่ weights
 
 ### A3. ตรวจ mask และ alignment
 
-- [ ] วัด histogram ของ instrumental mask ในบริเวณที่ vocal stem มีพลังงานสูง
-- [ ] วัด frame-to-frame delta ของ mask แยก vocal/non-vocal regions
-- [ ] ตรวจ left/right mask disagreement
+- [x] วัด histogram ของ instrumental mask และบันทึก p05/p50/p95
+- [x] วัด frame-to-frame delta ของ mask
+- [x] ตรวจ left/right mask disagreement
 - [ ] render alignment sweep เฉพาะ offline ที่ `sliceStart` รอบค่าปัจจุบัน
       (`32, 33, 34, 35`) โดยห้ามนำค่าใดเข้า production ทันที
 - [ ] ทำ impulse/chirp fixture เพื่อตรวจว่า mask frame ถูกใช้กับ spectrum frame เดียวกัน

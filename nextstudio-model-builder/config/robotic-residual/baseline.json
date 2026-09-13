@@ -1,0 +1,31 @@
+{
+  "name": "eco-production-baseline",
+  "parent_commit": "c2e317b",
+  "profile": "balanced",
+  "sample_rate": 44100,
+  "fft_size": 2048,
+  "hop_size": 512,
+  "model_bins": 1024,
+  "context_frames": 64,
+  "active_frames": 15,
+  "slice_start": 34,
+  "chunk_samples": 7680,
+  "delay_chunks": 1,
+  "normalization": "rolling_context_max_from_last_four_chunk_peaks",
+  "model": {
+    "input_shape": [1, 1024, 64, 2],
+    "output_shape": [1, 1024, 64, 2],
+    "output_is_logits": true,
+    "activation": "sigmoid"
+  },
+  "runtime_contract": {
+    "optional_mask_smoothing": "not applied by this offline raw-model renderer",
+    "attenuation_floor": false,
+    "overlap_consensus": false,
+    "lookahead_added_by_this_tool": false
+  },
+  "latency_observation_ms": {
+    "p50_range": [45, 50],
+    "source": "user observation; informational only"
+  }
+}

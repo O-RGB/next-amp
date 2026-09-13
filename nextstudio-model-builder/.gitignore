@@ -1,0 +1,19 @@
+# Local model inputs and generated artifacts
+source/*.pth
+work/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+:memory:.ses
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
