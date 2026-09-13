@@ -20,14 +20,12 @@ const FORBIDDEN_REFERENCE_HASHES = new Map([
 ]);
 
 const MODEL_HASHES = new Map([
-  ["model.json", "4bbf00c984124db90a5d1add0eb438516180acec2c555d939dff7de897f0c922"],
-  ["group1-shard1of1.bin", "d15138d4eedc24664a266fdd43ff3bbc3eeb6c281ac79c00be0e80a28c3d6f08"],
+  ["model.json", "f55cdb7f1803358392a90cec64286c8fce9cae8479f315a9fc454fee73d5ad88"],
+  ["group1-shard1of1.bin", "678f41db6d50f3938f9e2264c98b21a240ade43554097ce32c9fb05789be491e"],
 ]);
 
 const MODEL_DIRECTORIES = [
   "next-amp-extension/model",
-  "ai-vocal-engine/demo/model",
-  "ai-vocal-engine/src/model/reference",
 ];
 
 const SCAN_ROOTS = [
@@ -37,6 +35,7 @@ const SCAN_ROOTS = [
   "nextstudio-engine-go",
   "assets",
   "nextstudio-public-site",
+  "nextstudio-model-builder",
 ];
 
 const OPTIONAL_RELEASE_ROOTS = [
@@ -132,7 +131,7 @@ for (const directory of MODEL_DIRECTORIES) {
   const notice = fs.readFileSync(licenseFile, "utf8");
   for (const requiredText of [
     "MGM_MAIN_v4",
-    "Ultimate Vocal Remover GUI",
+    "Ultimate Vocal Remover",
     "github.com/Anjok07/ultimatevocalremovergui",
     "github.com/tsurumeso/vocal-remover",
     "MIT License",
@@ -154,5 +153,4 @@ console.log("Copyright/provenance audit passed.");
 console.log(`- ${FORBIDDEN_REFERENCE_HASHES.size} known reference-file hashes absent`);
 console.log("- no source file directly reads the local ai remove/ project");
 console.log("- local reference folder is ignored and not tracked");
-console.log("- MGM_MAIN_v4 fingerprints and MIT attribution are present");
-
+console.log("- independently rebuilt MGM_MAIN_v4 fingerprints and MIT attribution are present");

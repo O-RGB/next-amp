@@ -43,9 +43,8 @@ cannot be changed by renaming code.
 - [x] The original CascadedASPPNet implementation is MIT-licensed by
   tsurumeso.
 - [x] The Store build copies `MODEL-LICENSE.txt` with the model.
-- [ ] Rebuild the complete TFJS GraphModel from the official UVR download with
-  a checked-in reproducible converter. This remains the cleanest way to remove
-  any argument about the PerfectBrain serialization chain.
+- [x] Rebuilt the complete TFJS GraphModel and ONNX model from the official UVR
+  download with a checked-in converter and executable parity gates.
 - [ ] Ask the UVR maintainers for written confirmation covering commercial
   redistribution of the converted `MGM_MAIN_v4` weights. The public MIT
   statement is strong evidence, but written confirmation is stronger.
@@ -102,4 +101,3 @@ The Chrome Store ZIP may be distributed only when:
 A report or lawsuit can never be made impossible. These controls reduce the
 chance of an accidental infringement and preserve evidence supporting the
 project's lawful use of MIT-licensed upstream work.
-

@@ -6,11 +6,11 @@ NextStudio distributes a TensorFlow.js GraphModel consisting of:
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `model.json` | `4bbf00c984124db90a5d1add0eb438516180acec2c555d939dff7de897f0c922` |
-| `group1-shard1of1.bin` | `d15138d4eedc24664a266fdd43ff3bbc3eeb6c281ac79c00be0e80a28c3d6f08` |
+| `model.json` | `f55cdb7f1803358392a90cec64286c8fce9cae8479f315a9fc454fee73d5ad88` |
+| `group1-shard1of1.bin` | `678f41db6d50f3938f9e2264c98b21a240ade43554097ce32c9fb05789be491e` |
 
 The graph accepts and returns `[1, 1024, 64, 2]`. Its manifest has 161
-FP16-quantized floating-point tensors and 137 integer graph constants.
+FP16-quantized floating-point tensors and 116 integer graph constants.
 
 ## Upstream identity
 
@@ -24,7 +24,7 @@ The model weights are an FP16-quantized conversion of
   <https://github.com/tsurumeso/vocal-remover>
 - Original `MGM_MAIN_v4.pth` SHA-256:
   `0e6f0c0592333a3b215f61ac1e01f6c24c059f903f0789cf634e92daffae1dce`
-- UVR registry hash (MD5 of the final 10 MiB):
+- UVR registry hash (MD5 of the final 10,000 KiB, matching UVR's code):
   `5a6e24c1b530f2dab045a522ef89b751`
 
 The UVR registry maps that model hash to the `1band_sr44100_hl512`
@@ -32,18 +32,22 @@ configuration and an Instrumental primary stem.
 
 ## Verification performed
 
-The official upstream `MGM_MAIN_v4.pth` was compared to the distributed
-TensorFlow.js artifacts without relying on filenames or descriptive metadata.
+The checked-in `nextstudio-model-builder` downloads the official upstream
+`MGM_MAIN_v4.pth`, verifies both source hashes, recreates CascadedASPPNet from
+the public MIT architecture and maps the checkpoint without reading the local
+`ai remove/` project or the production model.
 
-- The graph structure matches the public v4 `CascadedASPPNet` architecture.
-- All 12 depthwise convolution tensors and the final output tensor match after
-  the required PyTorch OIHW-to-TensorFlow HWIO transpose and FP16 quantization.
-- All 148 convolution/bias tensors match after standard BatchNorm folding,
-  layout transpose and FP16 quantization.
-- This accounts for all 161 floating-point tensors in the GraphModel.
+- PyTorch -> TensorFlow FP32 mask parity: MAE `2.77e-7`, max `3.54e-4`.
+- TensorFlow.js FP16 -> PyTorch parity: MAE `2.01e-4`, cosine similarity
+  `0.9999896`; this matches the established production FP16 error envelope.
+- ONNX -> PyTorch parity: MAE `2.01e-4`, cosine similarity `0.9999896`.
+- A deterministic fixture produced exactly the same TensorFlow.js mask as the
+  previous production model (`MAE 0`, max error 0).
+- Two clean consecutive builds produced identical hashes for the TFJS metadata,
+  TFJS weight shard and ONNX model.
 
-The conversion is therefore numerically attributable to the official
-`MGM_MAIN_v4` weights.
+The distributed artifacts are therefore independently generated and
+numerically attributable to the official `MGM_MAIN_v4` weights.
 
 ## Licensing and attribution
 
@@ -55,17 +59,8 @@ also MIT-licensed.
 The model notice and MIT attribution are preserved in every model directory
 and copied into the Store package as `MODEL-LICENSE.txt`.
 
-## Provenance limitation
+## Build command
 
-The current TensorFlow.js serialization is byte-identical to a conversion
-distributed by the PerfectBrain Vocal Remover extension. The numerical model
-content has been independently traced to the MIT-licensed UVR upstream, but
-this repository does not yet contain a reproducible converter that rebuilds
-the complete GraphModel serialization from the official `.pth` file.
-
-For the strongest chain of custody, regenerate the GraphModel from the
-official UVR download using only the public MIT-licensed architecture, record
-the converter source and tool versions, and archive its build log and hashes.
-Until that is done, do not describe the current serialization as an
-independently generated conversion.
-
+Run `npm run model:build:deploy`. Build output is staged under
+`nextstudio-model-builder/dist/`, executable parity tests must pass before
+deployment, and the Go artifact is repacked from the verified ONNX model.

@@ -21,3 +21,5 @@ nextstudio-engine-go/*.dll
 
 # Local session metadata
 nextstudio-engine-go/:memory:.ses
+# ONNX Runtime telemetry scratch file (ORT 1.30+)
+:memory:.ses

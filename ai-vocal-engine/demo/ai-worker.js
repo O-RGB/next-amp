@@ -93,7 +93,7 @@ async function init() {
       tf.env().set("PROD", true);
     }
 
-    model = await tf.loadGraphModel("model/model.json");
+    model = await tf.loadGraphModel("../../next-amp-extension/model/model.json");
     resetState();
 
     console.log(`[NextStudio AI] Initialized with backend: ${activeBackend.toUpperCase()}`);

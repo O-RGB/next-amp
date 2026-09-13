@@ -1,0 +1,47 @@
+{
+  "model_id": "mgm-main-v4",
+  "source": {
+    "url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/MGM_MAIN_v4.pth",
+    "sha256": "0e6f0c0592333a3b215f61ac1e01f6c24c059f903f0789cf634e92daffae1dce",
+    "uvr_md5_last_10000_kib": "5a6e24c1b530f2dab045a522ef89b751",
+    "allowed_hosts": ["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"]
+  },
+  "architecture": {
+    "name": "CascadedASPPNet",
+    "version": "v4",
+    "upstream": "https://github.com/tsurumeso/vocal-remover",
+    "upstream_license": "MIT",
+    "n_fft": 2048,
+    "hop_length": 512,
+    "dim": 128,
+    "num_res_blocks": 3,
+    "input_shape": [1, 1024, 64, 2],
+    "output_shape": [1, 1024, 64, 2],
+    "activation": "sigmoid"
+  },
+  "export": {
+    "tfjs": {
+      "format": "tfjs_graph_model",
+      "quantization": "float16",
+      "shard_size_bytes": 33554432,
+      "converter_version": "3.18.0",
+      "tensorflow_version": "2.21.0"
+    },
+    "onnx": {
+      "format": "onnx",
+      "precision": "float32-fp16-rounded",
+      "opset": 17,
+      "input_name": "input",
+      "output_name": "Identity"
+    }
+  },
+  "parity_thresholds": {
+    "tf_vs_pytorch_mae": 1e-5,
+    "tf_vs_pytorch_max": 1e-3,
+    "onnx_vs_pytorch_mae": 1e-3,
+    "onnx_vs_pytorch_max": 0.35,
+    "onnx_vs_pytorch_cosine_sim": 0.99998,
+    "tfjs_vs_tf_cosine_sim": 0.99998,
+    "tfjs_vs_tf_mae": 1e-3
+  }
+}

@@ -17,7 +17,12 @@
     "verify:extension:go-dev": "node scripts/verify-extension-artifact.js --profile=go-dev",
     "build:go": "bash nextstudio-engine-go/build.sh",
     "build:public-site": "node scripts/build-public-site.js",
-    "build:all-internal": "npm run build:web && npm run build:extension:store && npm run build:extension:go-dev && npm run build:public-site"
+    "build:all-internal": "npm run build:web && npm run build:extension:store && npm run build:extension:go-dev && npm run build:public-site",
+    "model:fetch": "bash nextstudio-model-builder/scripts/build.sh --fetch-only",
+    "model:build": "bash nextstudio-model-builder/scripts/build.sh",
+    "model:verify": "bash nextstudio-model-builder/scripts/verify.sh",
+    "model:deploy": "bash nextstudio-model-builder/scripts/deploy.sh",
+    "model:build:deploy": "npm run model:build && npm run model:verify && npm run model:deploy"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",
