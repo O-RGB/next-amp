@@ -1,6 +1,6 @@
 # AI Vocal Robotic Residual Reduction Plan
 
-สถานะ: **Implementation in progress — กลุ่ม Diagnostic, zero-runtime-cost, head-only training และ candidate contract tooling เสร็จแล้ว; ยังไม่แก้ production model, DSP หรือ Extension**
+สถานะ: **Implementation in progress — tooling ของ Diagnostic, zero-runtime-cost, head-only training, candidate contract และ offline quality gate เสร็จแล้ว; ยังไม่แก้ production model, DSP หรือ Extension**
 
 เอกสารนี้มีไว้ส่งต่อให้ AI/ผู้พัฒนารอบถัดไปทำงานได้โดยไม่ต้องเดาวิธีเอง
 เป้าหมายคือทดลองลดเสียงร้องตกค้างที่ฟังเป็นเสียงเบา ๆ แบบหุ่นยนต์ใน Karaoke
@@ -214,6 +214,13 @@ global alignment fix และห้ามเปลี่ยนค่า product
 - Peak, RMS และ integrated loudness เพื่อกันการชอบ candidate เพราะมันเบากว่า
 
 Metric ใช้เป็น gate ไม่ใช่ตัวแทนการฟัง ต้องเก็บ WAV comparison ด้วยเสมอ
+
+สถานะ implementation: เพิ่ม evaluator รวมหลายเพลงสำหรับ SI-SDR, residual, spectral
+distance, mask variation และ stereo แล้ว ส่วน transient regions และการตัดสินจาก
+เพลงจริงยังรอ corpus ที่มีสิทธิ์และยังไม่ถูกทำเครื่องหมายว่าเสร็จ
+
+ข้อจำกัดสำคัญ: จนกว่าจะมี manifest/stems ที่ได้รับอนุญาต การรันจริงของ Phase A/B/C
+ยังไม่ถือว่าเสร็จ และห้ามนำ synthetic smoke test ไปอ้างว่าเสียงดีขึ้น
 
 ### Exit ของ Phase A
 

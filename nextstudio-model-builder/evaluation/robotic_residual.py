@@ -459,7 +459,7 @@ def infer_root_cause(report: dict) -> list[str]:
         return ["not_decided: provide licensed vocal/instrumental stems for Phase A"]
     model = report["renders"]["current_model_raw"]
     oracle = report["renders"]["oracle_ideal_ratio_mask"]
-    if oracle["residual_rms_db"] - model["residual_rms_db"] > 3.0:
+    if model["residual_rms_db"] - oracle["residual_rms_db"] > 3.0:
         return ["model-mask leakage is plausible"]
     if oracle["residual_rms_db"] > -35.0:
         return ["mixture-phase/STFT limitation is plausible"]

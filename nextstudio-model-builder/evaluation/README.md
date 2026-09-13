@@ -109,3 +109,25 @@ python training/head_only_finetune.py \
 The candidate is not production-ready. It must still be converted through the
 normal builder, compared against the baseline on unseen songs, and pass all
 listening, latency, memory, and long-run gates before any deploy is considered.
+
+## Aggregate quality gate
+
+Use a separate song-level evaluation manifest for unseen licensed songs. The
+evaluator rejects a candidate unless average vocal residue improves by at least
+`0.3 dB`, instrumental SI-SDR does not regress by more than `0.1 dB`, no clip
+crosses the damage limit, and the spectral distance is not worse. These are
+conservative defaults and can be made stricter; they are not permission to
+relax the listening gate.
+
+```bash
+python evaluation/evaluate_candidate.py \
+  --manifest /private/manifests/test.json \
+  --baseline-model /private/baseline/saved_model \
+  --candidate-model /private/robotic-candidates/head-only-001/saved_model \
+  --output /private/robotic-candidates/head-only-001/QUALITY-GATE.json
+```
+
+An exit code of `0` means only the offline quality gate passed. It does not
+measure WebGPU latency, Windows 1050 Ti stability, queue underruns, memory
+growth, or 30-minute long-run behavior. Those must still be run on the actual
+Extension build.
