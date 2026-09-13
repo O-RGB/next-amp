@@ -70,8 +70,6 @@ body {
 }
 
 .win-btn {
-  background-color: #c0c0c0;
-  color: black;
   border-top: 1px solid #fff;
   border-left: 1px solid #fff;
   border-right: 1px solid #000;
@@ -84,8 +82,42 @@ body {
   font-weight: bold;
   font-size: 9px;
   line-height: 1;
+}
+
+/* Store CSS is concatenated after Tailwind. Keep defaults only when the
+   button does not provide its own utility value. */
+.win-btn:not([class*="bg-"]) {
+  background-color: #c0c0c0;
+}
+.win-btn:not([class*="text-"]) {
+  color: black;
+}
+.win-btn[class*="text-[4px]"] { font-size: 4px; }
+.win-btn[class*="text-[6px]"] { font-size: 6px; }
+.win-btn[class*="text-[7px]"] { font-size: 7px; }
+.win-btn[class*="text-[7.5px]"] { font-size: 7.5px; }
+.win-btn[class*="text-[8px]"] { font-size: 8px; }
+.win-btn[class*="text-[8.5px]"] { font-size: 8.5px; }
+.win-btn[class*="text-[9px]"] { font-size: 9px; }
+.win-btn[class*="text-[10px]"] { font-size: 10px; }
+.win-btn[class*="text-[11px]"] { font-size: 11px; }
+.win-btn:not([class*="h-"]) {
   height: 14px;
+}
+.win-btn:not([class*="p-"]):not([class*="px-"]):not([class*="py-"]) {
   padding: 0 4px;
+}
+
+#btn-open-player,
+#btn-remote-connect,
+#btn-rec-top,
+#btn-settings {
+  font-size: 8px;
+}
+.win-btn:disabled {
+  cursor: not-allowed;
+  filter: grayscale(100%);
+  opacity: 0.45;
 }
 .win-btn:active,
 .win-btn.pressed {
@@ -318,7 +350,7 @@ input[type="range"].h-slider::-webkit-slider-thumb {
   flex: 1;
   padding: 6px 4px;
   font-family: "Chakra Petch", sans-serif;
-  font-size: 10px;
+  font-size: 8px;
   font-weight: bold;
   color: #888;
   background: #151515;
@@ -327,6 +359,14 @@ input[type="range"].h-slider::-webkit-slider-thumb {
   border-bottom: 1px solid #444;
   cursor: pointer;
   text-align: center;
+}
+
+/* AI controls should look like the other disabled panels when master audio
+   is off, instead of falling back to the light retro button face. */
+#vocal-controls-area.master-disabled .win-btn {
+  background-color: #1a1a1a;
+  color: #555;
+  border-color: #333;
 }
 .tab-btn:last-child {
   border-right: none;

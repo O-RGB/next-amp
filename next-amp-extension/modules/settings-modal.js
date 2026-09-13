@@ -65,10 +65,6 @@ const MODAL_HTML = `
             <option value="auto">Auto (Device Default)</option>
           </select>
         </div>
-        <div class="setting-row">
-          <span>Show FPS / Stats</span>
-          <input type="checkbox" id="chk-show-stats" class="accent-green-500" />
-        </div>
       </div>
 
       <div id="tab-advanced" class="tab-content">
@@ -105,7 +101,7 @@ const MODAL_HTML = `
               <input type="text" id="txt-ext-id" class="flex-1 bg-[#111] border border-gray-600 text-[8px] text-gray-400 px-1 h-4 outline-none cursor-default" readonly value="Loading..." />
               <button id="btn-copy-id" class="win-btn w-8 h-4 text-[8px]" title="Copy ID">CPY</button>
           </div>
-          <button id="btn-reset" class="win-btn w-full py-0.5 text-red-900 font-bold bg-[#e0e0e0]">FACTORY RESET</button>
+          <button id="btn-reset" class="win-btn w-full h-4 py-0 text-[8px] text-red-900 font-bold bg-[#e0e0e0]">FACTORY RESET</button>
         </div>
       </div>
 

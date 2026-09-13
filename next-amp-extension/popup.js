@@ -1283,6 +1283,7 @@ function sendParam(key, value, index = null) {
 }
 
 async function toggleRecording() {
+  if (!isAudioMasterOn) return;
   if (!isRecording) {
     const success = await sendMessageWithRetry({
       type: "START_RECORDING",
@@ -1342,6 +1343,13 @@ function setupListeners() {
     if (isAudioMasterOn) {
       initCapture(sessionManager.sessionMode);
     } else {
+      if (isRecording) {
+        syncRecordingUI(false);
+        await sendMessageWithRetry({
+          type: "STOP_RECORDING",
+          tabId: currentTabId,
+        });
+      }
       captureRequestId++;
       if (currentTabId) {
         sendMessageWithRetry({ type: "STOP_CAPTURE", tabId: currentTabId });
@@ -1724,6 +1732,15 @@ function updateMasterTogglesUI() {
   const eqArea = $("#eq-controls-area");
   const eqContainer = $("#eq-container");
 
+  // Output, Remote and Recording all depend on an active tab-audio capture.
+  // Settings stays available so Video and preferences can still be adjusted.
+  [$("#btn-open-player"), $("#btn-remote-connect"), $("#btn-rec-top"), $("#btn-rec-action")]
+    .filter(Boolean)
+    .forEach((button) => {
+      button.disabled = !isAudioMasterOn;
+      button.setAttribute("aria-disabled", String(!isAudioMasterOn));
+    });
+
   if (isAudioMasterOn) {
     btnAudio.textContent = "ON";
     btnAudio.classList.add("pressed", "text-white");
@@ -1767,14 +1784,28 @@ function updateMasterTogglesUI() {
   }
 
   const vocalBlock = $("#block-vocal");
+  const vocalControls = $("#vocal-controls-area");
+  if (!isAudioMasterOn && isVocalOn) {
+    isVocalOn = false;
+    sessionManager.setSetting({ isVocalOn: false });
+    sendParam("isVocalOn", false);
+  }
   if (isAudioMasterOn) {
-    if (vocalBlock) vocalBlock.style.pointerEvents = "auto";
+    if (vocalBlock) {
+      vocalBlock.style.opacity = "1";
+      vocalBlock.style.pointerEvents = "auto";
+    }
+    vocalControls?.classList.remove("master-disabled");
     updateVocalUI(currentVocalMode);
   } else {
     if (vocalBlock) {
-      vocalBlock.style.opacity = "0.4";
+      vocalBlock.style.opacity = "1";
       vocalBlock.style.pointerEvents = "none";
     }
+    if (vocalControls) {
+      vocalControls.classList.add("master-disabled");
+    }
+    updateVocalMasterUI();
   }
 }
 
@@ -1880,12 +1911,12 @@ function updateNormalizeButton() {
   if (!btn || !indicator) return;
   if (isNormalizeOn) {
     btn.className =
-      "win-btn w-full h-full border text-[7px] font-bold flex items-center justify-center gap-0.5 border-[#00ff00] text-[#00ff00] bg-black";
+      "win-btn w-full h-full border text-[7px] px-1 font-bold flex items-center justify-center gap-0.5 border-[#00ff00] text-[#00ff00] bg-black";
     indicator.className =
       "w-1 h-1 rounded-full bg-[#00ff00] shadow-[0_0_5px_#00ff00]";
   } else {
     btn.className =
-      "win-btn w-full h-full border text-[7px] font-bold flex items-center justify-center gap-0.5 border-gray-500 text-gray-300 bg-gray-700";
+      "win-btn w-full h-full border text-[7px] px-1 font-bold flex items-center justify-center gap-0.5 border-gray-500 text-gray-300 bg-gray-700";
     indicator.className = "w-1 h-1 rounded-full bg-gray-400";
   }
 }
