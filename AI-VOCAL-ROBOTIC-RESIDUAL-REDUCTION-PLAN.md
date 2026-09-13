@@ -6,6 +6,28 @@
 เป้าหมายคือทดลองลดเสียงร้องตกค้างที่ฟังเป็นเสียงเบา ๆ แบบหุ่นยนต์ใน Karaoke
 โดยรักษาความเร็วและคุณภาพเครื่องดนตรีของ ECO ปัจจุบันไว้ก่อนทุกอย่าง
 
+### Implementation ledger
+
+- [x] กลุ่ม Diagnostic foundation: offline ECO renderer, STFT/ISTFT contract,
+  model output extraction, WAV comparison และ report JSON
+- [x] กลุ่ม Zero-runtime-cost: bake scalar เข้า final output head โดยไม่เพิ่ม
+  runtime operation/model call และไม่แก้ source artifact
+- [x] กลุ่ม Head-only training: private stem manifest, NPZ preparation,
+  reconstruction/leakage/trust-region losses และ deterministic checkpoint
+- [x] กลุ่ม Candidate contract: patch trained `[1,1,32,2]` kernel เข้า TFJS FP16
+  พร้อม topology/shape/weight-spec verifier
+- [x] กลุ่ม Quality gate: aggregate evaluator ที่ต้องดีขึ้นหลายเพลงพร้อมกัน
+- [x] กู้คืน reproducible model-builder source/config/scripts บน branch
+  `optimization` โดยไม่นำ `.pth`, `work`, `dist`, `.venv` หรือ `node_modules` เข้า Git
+- [x] รัน builder build/verify จริงบน local official source: source hash,
+  SavedModel, ONNX, TFJS FP16, checksum, license และ provenance ผ่าน
+- [ ] ยังไม่มีการเลือกหรือ deploy candidate เพราะ repository ไม่มี licensed
+  vocal/instrumental evaluation corpus และยังไม่มีผลฟังจริงจาก unseen songs
+
+ผลสำเร็จของ implementation รอบนี้คือ “pipeline พร้อมและ baseline ยังปลอดภัย”
+ไม่ใช่การอ้างว่าเสียงหุ่นยนต์ลดลงแล้ว การจะทำเครื่องหมายข้อสุดท้ายต้องมีข้อมูลเสียง
+ที่ได้รับอนุญาตและผ่านเกณฑ์ในส่วน Quality/Listening/Runtime ด้านล่าง
+
 ---
 
 ## 1. เป้าหมายที่แท้จริง
