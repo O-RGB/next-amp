@@ -1,6 +1,6 @@
 # AI Vocal Robotic Residual Reduction Plan
 
-สถานะ: **Implementation in progress — กลุ่ม Diagnostic, zero-runtime-cost และ head-only training tooling เสร็จแล้ว; ยังไม่แก้ production model, DSP หรือ Extension**
+สถานะ: **Implementation in progress — กลุ่ม Diagnostic, zero-runtime-cost, head-only training และ candidate contract tooling เสร็จแล้ว; ยังไม่แก้ production model, DSP หรือ Extension**
 
 เอกสารนี้มีไว้ส่งต่อให้ AI/ผู้พัฒนารอบถัดไปทำงานได้โดยไม่ต้องเดาวิธีเอง
 เป้าหมายคือทดลองลดเสียงร้องตกค้างที่ฟังเป็นเสียงเบา ๆ แบบหุ่นยนต์ใน Karaoke
@@ -246,6 +246,8 @@ Metric ใช้เป็น gate ไม่ใช่ตัวแทนการ�
 - [x] tool เขียน `CALIBRATION.json` และห้าม deploy อัตโนมัติ
 - [ ] ห้ามเพิ่ม bias/Add/Pow/threshold runtime op ในรอบแรก
 - [ ] export TFJS ผ่าน builder ปัจจุบันและตรวจ PyTorch→TFJS parity ของ candidate
+- [x] เพิ่ม tool patch `out_kernel.npy` เข้า TFJS FP16 shard โดยแก้เฉพาะ final head
+- [x] เพิ่ม static verifier ยืนยัน topology, input/output shape และ weight-spec contract ไม่เปลี่ยน
 - [ ] สร้าง baseline + candidate WAV และ package แยกชื่อชัดเจน
 
 เหตุผลที่ต้องวิเคราะห์ histogram ก่อน:

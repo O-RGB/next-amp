@@ -119,7 +119,7 @@ export function locateFinalOutputWeight(model) {
   };
 }
 
-function locateWeightByteRange(model, targetName) {
+export function locateWeightByteRange(model, targetName) {
   let globalIndex = 0;
   for (const [groupIndex, group] of (model.weightsManifest || []).entries()) {
     let offset = 0;
