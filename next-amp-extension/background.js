@@ -1,4 +1,53 @@
 let creating;
+const videoContentScriptTasks = new Map();
+
+async function ensureVideoContentScripts(tabId) {
+  const numericTabId = Number(tabId);
+  if (!Number.isInteger(numericTabId) || numericTabId < 0) {
+    return { success: false, error: "Invalid tab" };
+  }
+
+  const existingTask = videoContentScriptTasks.get(numericTabId);
+  if (existingTask) return existingTask;
+
+  const task = (async () => {
+    // Content scripts are not retroactively injected into a tab that was
+    // already open when the extension was installed. Check the main frame
+    // first so reopening the popup never creates duplicate handlers.
+    try {
+      const response = await chrome.tabs.sendMessage(numericTabId, {
+        type: "PING",
+      });
+      if (response?.pong) return { success: true, injected: false };
+    } catch (_) {
+      // No video content script is present yet. Inject it below.
+    }
+
+    try {
+      await chrome.scripting.executeScript({
+        // The notification and normal video controls live in the top frame.
+        // Injecting the fallback into every frame can fail on pages with a
+        // restricted/embed frame even when the main page is scriptable.
+        target: { tabId: numericTabId, allFrames: false },
+        files: ["video-delay.js", "video-zoom.js"],
+      });
+      return { success: true, injected: true };
+    } catch (error) {
+      // Restricted pages (for example chrome:// pages) cannot accept scripts.
+      // Audio capture can still work there when Chrome permits it, so this is
+      // a non-fatal video capability result.
+      console.warn("NextStudio: video content script injection failed", error);
+      return { success: false, error: error?.message || "Injection failed" };
+    }
+  })();
+
+  videoContentScriptTasks.set(numericTabId, task);
+  try {
+    return await task;
+  } finally {
+    videoContentScriptTasks.delete(numericTabId);
+  }
+}
 
 // Open a small first-run welcome page after a real installation. Chrome only
 // emits reason="install" once for an extension install, so normal popup use,
@@ -67,7 +116,10 @@ async function setupOffscreenDocument(path) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === "CHECK_OFFSCREEN") {
+  if (msg.type === "ENSURE_VIDEO_CONTENT_SCRIPTS") {
+    ensureVideoContentScripts(msg.tabId).then(sendResponse);
+    return true;
+  } else if (msg.type === "CHECK_OFFSCREEN") {
     checkOffscreenDocument().then((has) => sendResponse(has));
     return true;
   } else if (msg.type === "INIT_OFFSCREEN") {
@@ -113,7 +165,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   } else if (msg.type === "BG_RELAY_TO_TAB") {
     // New handler for Remote Control to Content Script Relay
     if (msg.tabId && msg.payload) {
-      chrome.tabs.sendMessage(Number(msg.tabId), msg.payload).catch(() => {});
+      ensureVideoContentScripts(msg.tabId)
+        .catch(() => {})
+        .finally(() => {
+          chrome.tabs.sendMessage(Number(msg.tabId), msg.payload).catch(() => {});
+        });
     }
   } else if (
     msg.type === "RTC_OFFER" ||
@@ -135,65 +191,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
       })();
     }
-  }
-});
-
-chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
-  if (msg.type === "PING") {
-    sendResponse({
-      status: "PONG",
-      version: chrome.runtime.getManifest().version,
-    });
-    return false;
-  }
-
-  if (msg.type === "START_CAPTURE") {
-    if (!sender || !sender.tab) {
-      sendResponse({ success: false, error: "No sender tab" });
-      return false;
-    }
-
-    chrome.tabCapture.getMediaStreamId(
-      { targetTabId: sender.tab.id },
-      (streamId) => {
-        if (chrome.runtime.lastError || !streamId) {
-          sendResponse({
-            success: false,
-            error: chrome.runtime.lastError?.message,
-          });
-          return;
-        }
-        chrome.runtime.sendMessage({
-          type: "START_CAPTURE",
-          streamId: streamId,
-          tabId: sender.tab.id,
-          latencyHint: msg.latencyHint,
-          sampleRate: msg.sampleRate,
-        });
-        sendResponse({ success: true });
-      }
-    );
-    return true;
-  } else if (msg.type === "STOP_CAPTURE") {
-    // Wait for the offscreen document to invalidate/tear down the capture.
-    // Returning immediately lets the popup close while START_CAPTURE is still
-    // preparing a stream, which used to leave an orphaned AI load behind.
-    chrome.runtime.sendMessage(msg, (response) => {
-      // Reading lastError prevents Chrome from reporting an unhandled
-      // "Receiving end does not exist" warning when the offscreen document is
-      // already gone.
-      void chrome.runtime.lastError;
-      sendResponse(response || { success: true });
-    });
-    return true;
-  } else if (msg.type === "SET_PARAM") {
-    chrome.runtime.sendMessage(msg);
-    sendResponse({ success: true });
-  } else if (msg.type === "GET_STATE") {
-    chrome.runtime.sendMessage(msg, (response) => {
-      sendResponse(response || {});
-    });
-    return true;
   }
 });
 

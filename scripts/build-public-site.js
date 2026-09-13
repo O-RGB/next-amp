@@ -9,7 +9,7 @@ const output = path.join(root, "dist", "nextstudio-public-site");
 const publicOrigin = (process.env.PUBLIC_SITE_ORIGIN || "http://localhost:5500").replace(/\/$/, "");
 const allowedFiles = [
   "index.html", "404.html", "robots.txt", "sitemap.xml", "site.webmanifest", "vercel.json", "README.md", "THIRD-PARTY-NOTICES.txt",
-  "remote/index.html", "privacy/index.html",
+  "remote/index.html", "privacy/index.html", "terms/index.html",
   "assets/css/site.css", "assets/css/remote.css", "assets/js/site.js", "assets/js/remote.js", "assets/js/remote-protocol.js", "assets/vendor/peerjs.min.js",
   "assets/images/logo.png", "assets/images/og-image.png", "assets/images/extension-preview.png", "assets/images/showcase-reference.png",
   "assets/images/screenshots/extension-overview.png", "assets/images/screenshots/extension-detail.png", "assets/images/screenshots/remote-preview.png", "assets/images/screenshots/video-preview.png"

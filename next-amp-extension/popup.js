@@ -2,10 +2,19 @@ import { DBManager } from "./db-manager.js";
 import { $, $$, sendMessageWithRetry } from "./assets/js/utils.js";
 import { SessionManager } from "./modules/session-manager.js";
 import { SettingsModal } from "./modules/settings-modal.js";
+import { requireAudioDisclosure } from "./modules/audio-disclosure.js";
 import { normalizeAiPowerMode } from "./modules/ai-vocal/ai-power-mode.mjs";
+import qrcode from "qrcode-generator";
+import { GO_ENGINE_ENABLED } from "./modules/ai-vocal/build-feature-flags.js";
+import {
+  ENGINE_TYPE,
+  ENGINE_DISPLAY_NAME,
+  ENGINE_API,
+  ENGINE_HEALTH_URL,
+  ENGINE_SWITCH_TO_BROWSER_LABEL,
+  ENGINE_ACTIVATE_LABEL,
+} from "./modules/ai-vocal/engine-client-runtime.js";
 
-const ITTY_BITTY_HASH =
-  "NextStudio-DOS/data:text/html;charset=utf-8;bxze64,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";
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 const LABELS = [
   "60",
@@ -32,7 +41,11 @@ const DONATION_MIN_USAGE_MS = 30 * 60 * 1000;
 const DONATION_MIN_SESSIONS = 3;
 const DONATION_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 const DONATION_MAX_PROMPTS = 3;
-const REMOTE_LINK_CACHE_KEY = "remoteLinkCache";
+const AI_VOCAL_INFO_SEEN_KEY = "hasSeenAiVocalInfoModal";
+const AUDIO_DISCLOSURE_ACCEPTED_KEY = "hasAcceptedAudioDisclosure";
+const REMOTE_PUBLIC_URL = "https://studio.nextfeeder.com/remote";
+// Version the cache so links generated by older builds can never be restored.
+const REMOTE_LINK_CACHE_KEY = "remoteLinkCacheV2";
 
 let isAudioMasterOn = true;
 let isVideoMasterOn = true;
@@ -40,7 +53,7 @@ let isVideoMasterOn = true;
 let isEqOn = true;
 let isVocalOn = false;
 let currentVocalMode = "bypass";
-let aiEngineType = "webgl"; // "webgl" or "go_native"
+let aiEngineType = "webgl";
 let aiPowerMode = "eco"; // "eco" or "quality"; WEB AI only
 // Detail is the single production profile. Keep experimental profiles
 // internal and do not expose a profile selector.
@@ -58,9 +71,12 @@ let db = new DBManager();
 let isTabReady = true;
 let currentTabId = null;
 let captureRequestId = 0;
+let videoContentScriptsReadyTabId = null;
+let videoContentScriptsReadyPromise = null;
 
 let sessionManager;
 let settingsModal;
+let extensionReadyPromise = null;
 const ACTION_NOTIFICATION_DELAY_MS = 280;
 const actionNotificationTimers = new Map();
 
@@ -70,12 +86,18 @@ function showActionNotification(message, { source = "local", tone = "success", i
   // Notifications live on the media page, not inside this popup. Remote
   // commands are relayed by the offscreen host when the popup is closed.
   if (source !== "remote" && currentTabId) {
-    chrome.tabs.sendMessage(currentTabId, {
+    const tabId = currentTabId;
+    const payload = {
       type: "SHOW_ACTION_NOTIFICATION",
       message,
       icon,
       tone,
-    }).catch(() => {});
+    };
+    ensureVideoContentScripts(tabId)
+      .catch(() => false)
+      .finally(() => {
+        chrome.tabs.sendMessage(tabId, payload).catch(() => {});
+      });
   }
 }
 
@@ -124,7 +146,7 @@ function getActionNotification(key, value) {
     case "aiPowerMode":
       return { message: `AI ${normalizeAiPowerMode(value).toUpperCase()}`, icon: normalizeAiPowerMode(value) === "eco" ? "ph-leaf" : "ph-sparkle" };
     case "aiEngineType":
-      return { message: `AI ENGINE ${value === "go_native" ? "GO" : "WEB"}`, icon: value === "go_native" ? "ph-lightning" : "ph-globe" };
+      return { message: `AI ENGINE ${GO_ENGINE_ENABLED && value === ENGINE_TYPE ? "GO" : "WEB"}`, icon: GO_ENGINE_ENABLED && value === ENGINE_TYPE ? "ph-lightning" : "ph-globe" };
     case "videoQuality":
       return { message: `VIDEO ${String(value).toUpperCase()}`, icon: "ph-monitor-play" };
     case "videoDelay":
@@ -162,29 +184,35 @@ function notifyAction(key, value, { source = "local", immediate = false, groupOv
 }
 
 async function checkFirstLaunchModal() {
-  const data = await chrome.storage.local.get(["hasSeenWelcomeDonateModal"]);
-  if (!data.hasSeenWelcomeDonateModal) {
-    const overlay = $("#first-launch-overlay");
-    if (!overlay) return;
+  const overlay = $("#first-launch-overlay");
 
-    const btnDonate = $("#btn-first-launch-donate");
-    const btnDismiss = $("#btn-first-launch-dismiss");
-    const btnClose = $("#btn-close-first-launch");
-
-    const dismissDonate = (openLink = false) => {
-      chrome.storage.local.set({ hasSeenWelcomeDonateModal: true });
-      overlay.classList.remove("active");
-      if (openLink) {
-        chrome.tabs.create({ url: DONATION_URL });
+  return requireAudioDisclosure({
+    readConsent: async () => {
+      const data = await chrome.storage.local.get(AUDIO_DISCLOSURE_ACCEPTED_KEY);
+      return Boolean(data[AUDIO_DISCLOSURE_ACCEPTED_KEY]);
+    },
+    saveConsent: () => chrome.storage.local.set({ [AUDIO_DISCLOSURE_ACCEPTED_KEY]: true }),
+    waitForDecision: () => new Promise((resolve) => {
+      if (!overlay) {
+        resolve(false);
+        return;
       }
-    };
-
-    if (btnDonate) btnDonate.onclick = () => dismissDonate(true);
-    if (btnDismiss) btnDismiss.onclick = () => dismissDonate(false);
-    if (btnClose) btnClose.onclick = () => dismissDonate(false);
-
-    overlay.classList.add("active");
-  }
+      let settled = false;
+      const finish = (accepted) => {
+        if (settled) return;
+        settled = true;
+        overlay.classList.remove("active");
+        resolve(accepted);
+      };
+      $("#btn-first-launch-continue").onclick = () => finish(true);
+      $("#btn-first-launch-cancel").onclick = () => finish(false);
+      $("#btn-close-first-launch").onclick = () => finish(false);
+      $("#btn-first-launch-privacy").onclick = () => {
+        chrome.tabs.create({ url: "https://studio.nextfeeder.com/privacy" });
+      };
+      overlay.classList.add("active");
+    }),
+  });
 }
 
 async function maybeShowUsageDonateModal(audioState) {
@@ -194,11 +222,7 @@ async function maybeShowUsageDonateModal(audioState) {
   const overlay = $("#usage-donate-overlay");
   if (!overlay || overlay.classList.contains("active")) return;
 
-  const data = await chrome.storage.local.get([
-    "hasSeenWelcomeDonateModal",
-    "donationUsage",
-  ]);
-  if (!data.hasSeenWelcomeDonateModal) return;
+  const data = await chrome.storage.local.get(["donationUsage"]);
 
   const usage = data.donationUsage || {};
   const usageMs = Number(usage.usageMs) || 0;
@@ -260,8 +284,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // decide whether the current tab is supported instead of blocking on a
   // YouTube/media-tab gate or requiring a content-script ping.
   isTabReady = true;
-  checkFirstLaunchModal();
-
+  const videoContentScriptsReady = ensureVideoContentScripts(currentTabId);
   sessionManager = new SessionManager(currentTabId);
   settingsModal = new SettingsModal(db, {
     onThemeChange: applyTheme,
@@ -283,10 +306,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupStorageListener();
   setupRemoteUI();
 
-  await sessionManager.init(async () => {
+  extensionReadyPromise = sessionManager.init(async () => {
     settingsModal.init();
+    await videoContentScriptsReady;
     await finalizeInitialization();
   });
+  await extensionReadyPromise;
 });
 
 async function finalizeInitialization() {
@@ -315,19 +340,26 @@ async function finalizeInitialization() {
   if (["bypass", "karaoke", "acapella"].includes(savedToggles.vocalMode)) {
     currentVocalMode = savedToggles.vocalMode;
   }
-  if (savedToggles.aiEngineType !== undefined) aiEngineType = savedToggles.aiEngineType;
-  if (savedToggles.aiPowerMode !== undefined) {
-    aiPowerMode = normalizeAiPowerMode(savedToggles.aiPowerMode);
-    if (savedToggles.aiPowerMode === "medium" && sessionManager.sessionMode === "shared") {
-      await chrome.storage.local.set({ aiPowerMode: aiPowerMode });
+  if (savedToggles.aiEngineType !== undefined) {
+    aiEngineType = GO_ENGINE_ENABLED && savedToggles.aiEngineType === ENGINE_TYPE
+      ? ENGINE_TYPE
+      : "webgl";
+    if (!GO_ENGINE_ENABLED && savedToggles.aiEngineType === ENGINE_TYPE) {
+      await sessionManager.setSetting({ aiEngineType: "webgl" });
     }
+  }
+  // ECO is the only user-facing production mode. Migrate any older FULL or
+  // legacy value so reopening the popup cannot silently restore a hidden mode.
+  aiPowerMode = "eco";
+  if (savedToggles.aiPowerMode !== aiPowerMode) {
+    await sessionManager.setSetting({ aiPowerMode });
   }
   currentVocalProfile = "ai_remove";
   await sessionManager.setSetting({ vocalProfile: currentVocalProfile });
   updateVocalProfileUI(currentVocalProfile);
   updateAiPowerModeUI(aiPowerMode);
   updateAiEngineUI();
-  checkGoEngineHealth();
+  if (GO_ENGINE_ENABLED) checkGoEngineHealth();
 
   if (sessionManager.sessionMode === "shared") {
     // [NEW] Add videoPosX and videoPosY to load
@@ -405,10 +437,9 @@ async function finalizeInitialization() {
         updateVocalMasterUI();
       }
       if (sharedParams.vocalProfile) updateVocalProfileUI("ai_remove");
-      if (sharedParams.aiPowerMode !== undefined) {
-        aiPowerMode = normalizeAiPowerMode(sharedParams.aiPowerMode);
-        updateAiPowerModeUI(aiPowerMode);
-      }
+      // Keep the hidden power-mode control on the single production default.
+      aiPowerMode = "eco";
+      updateAiPowerModeUI(aiPowerMode);
 
       if (sharedParams.reverbTime)
         $("#adv-rev-time").value = sharedParams.reverbTime;
@@ -453,7 +484,10 @@ async function finalizeInitialization() {
 
   if (state && state.isAudioActive) {
     loadAudioState(state);
-    isAudioMasterOn = true;
+    // The offscreen session can remain alive while output is muted/suspended
+    // (for example after a Remote client sends AUDIO OFF). Restore the real
+    // state instead of forcing the popup UI to ON whenever a session exists.
+    isAudioMasterOn = state.isAudioMasterOn !== false;
     // The popup is recreated every time it is reopened. Restore the recorder
     // state from the offscreen session instead of trusting the new popup's
     // default (false) value. Otherwise a still-recording MediaRecorder looks
@@ -462,7 +496,13 @@ async function finalizeInitialization() {
   } else {
     syncRecordingUI(false);
     if (isAudioMasterOn && isTabReady) {
-      initCapture(sessionManager.sessionMode);
+      const accepted = await checkFirstLaunchModal();
+      if (accepted) {
+        initCapture(sessionManager.sessionMode);
+      } else {
+        isAudioMasterOn = false;
+        await sessionManager.setSetting({ isAudioMasterOn: false });
+      }
     }
   }
 
@@ -480,6 +520,23 @@ async function finalizeInitialization() {
   // Check only when the user opens the popup and the audio session is idle.
   // It never interrupts playback or model loading.
   maybeShowUsageDonateModal(state).catch(() => {});
+}
+
+async function ensureVideoContentScripts(tabId) {
+  if (!Number.isInteger(tabId) || tabId < 0) return false;
+  if (
+    videoContentScriptsReadyTabId === tabId &&
+    videoContentScriptsReadyPromise
+  ) {
+    return videoContentScriptsReadyPromise;
+  }
+
+  videoContentScriptsReadyTabId = tabId;
+  videoContentScriptsReadyPromise = sendMessageWithRetry({
+    type: "ENSURE_VIDEO_CONTENT_SCRIPTS",
+    tabId,
+  }).then((result) => result?.success === true);
+  return videoContentScriptsReadyPromise;
 }
 
 function setupStorageListener() {
@@ -525,68 +582,20 @@ function setupStorageListener() {
         updateEqToggleButton();
       }
       if (changes.aiPowerMode) {
-        aiPowerMode = normalizeAiPowerMode(changes.aiPowerMode.newValue);
+        aiPowerMode = "eco";
         updateAiPowerModeUI(aiPowerMode);
+        if (changes.aiPowerMode.newValue !== aiPowerMode) {
+          chrome.storage.local.set({ aiPowerMode }).catch(() => {});
+        }
       }
     }
   });
 }
 
-async function shortenUrl(longUrl) {
-  // 1. Try spoo.me (instant 302 redirect, no interstitial warning)
-  try {
-    const res = await fetch("https://spoo.me/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: new URLSearchParams({ url: longUrl }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.short_url) {
-        return data.short_url.replace(/^http:\/\//, "https://");
-      }
-    }
-  } catch (e) {
-    console.warn("spoo.me failed, trying fallback:", e);
-  }
-
-  // 2. Fallback: da.gd
-  try {
-    const res = await fetch("https://da.gd/s", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ url: longUrl }),
-    });
-    if (res.ok) {
-      const short = (await res.text()).trim();
-      if (short.startsWith("http")) return short;
-    }
-  } catch (e) {
-    console.warn("da.gd fallback failed:", e);
-  }
-
-  // 3. If shortening fails, return raw URL
-  return longUrl;
-}
-
-async function buildMicroBootloaderUrl(hostId, token) {
-  const bootloader = `Loading...<script src=https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js></script><script>let H=${JSON.stringify(hostId)},T=${JSON.stringify(token)},p=new Peer(),c;p.on('open',()=>{c=p.connect(H,{reliable:1});c.on('open',()=>c.send({type:'HANDSHAKE',token:T,needUI:1}));c.on('data',d=>{if(d.type==='MOUNT_UI'){if(d.css)document.head.appendChild(document.createElement('style')).textContent=d.css;document.body.innerHTML=d.html;if(d.js)(new Function('conn','initState','H','T','peer',d.js))(c,d.state,H,T,p);}});});<\/script>`;
-
-  // Compress using native browser CompressionStream("deflate")
-  // itty.bitty's format=gz decoder expects a gzip stream, not zlib/deflate.
-  const stream = new Blob([bootloader]).stream().pipeThrough(new CompressionStream("gzip"));
-  const buf = await new Response(stream).arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const b64 = btoa(binary);
-
-  return `https://itty.bitty.site/#NextStudio/data:text/html;charset=utf-8;format=gz;base64,${b64}`;
+function buildPublicRemoteUrl(hostId, token) {
+  const url = new URL(REMOTE_PUBLIC_URL);
+  url.hash = new URLSearchParams({ host: hostId, token }).toString();
+  return url.toString();
 }
 
 async function getCachedRemoteLink(tabId, hostId, token) {
@@ -636,8 +645,6 @@ async function setupRemoteUI() {
   const urlDisplay = $("#remote-url-display");
   const btnCloseQr = $("#btn-close-qr");
   const btnCopyUrl = $("#btn-copy-url");
-  let qrRequestUrl = "";
-  let qrRetryCount = 0;
   let qrLoadGeneration = 0;
 
   const setQrLoading = (message) => {
@@ -648,16 +655,34 @@ async function setupRemoteUI() {
     }
   };
 
-  const loadQrImage = (url) => {
-    qrRequestUrl = url;
-    qrRetryCount = 0;
+  const loadQrImage = (remoteUrl) => {
     qrLoadGeneration += 1;
     const generation = qrLoadGeneration;
-    setQrLoading("LOADING QR...");
-    if (qrImage) {
-      qrImage.dataset.qrGeneration = String(generation);
-      qrImage.src = `${url}&_=${Date.now()}`;
+    setQrLoading("CREATING QR...");
+    try {
+      const code = qrcode(0, "M");
+      code.addData(remoteUrl, "Byte");
+      code.make();
+      if (qrImage) {
+        qrImage.dataset.qrGeneration = String(generation);
+        qrImage.src = code.createDataURL(4, 8);
+      }
+    } catch (error) {
+      console.error("Local QR generation failed", error);
+      setQrLoading("QR UNAVAILABLE — COPY LINK");
     }
+  };
+
+  const getRemoteTokenWhenReady = async (tabId) => {
+    let response = null;
+    // Popup setup and START_CAPTURE are asynchronous. Give the offscreen
+    // session a short window to publish its session before showing an error.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      response = await sendMessageWithRetry({ type: "GET_REMOTE_TOKEN", tabId });
+      if (response?.hostId && response?.token) return response;
+      if (attempt < 19) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return response;
   };
 
   qrImage?.addEventListener("load", () => {
@@ -666,25 +691,10 @@ async function setupRemoteUI() {
     qrImage.classList.remove("hidden");
   });
 
-  qrImage?.addEventListener("error", () => {
-    if (qrImage.dataset.qrGeneration !== String(qrLoadGeneration)) return;
-    if (qrRetryCount < 2 && qrRequestUrl) {
-      qrRetryCount += 1;
-      setQrLoading(`RETRYING QR ${qrRetryCount}/2...`);
-      setTimeout(() => {
-        if (qrImage && qrImage.dataset.qrGeneration === String(qrLoadGeneration)) {
-          qrImage.src = `${qrRequestUrl}&_=${Date.now()}`;
-        }
-      }, 500);
-    } else {
-      setQrLoading("QR SERVER UNAVAILABLE");
-    }
-  });
+  qrImage?.addEventListener("error", () => setQrLoading("QR UNAVAILABLE — COPY LINK"));
 
   btnConnect.addEventListener("click", async () => {
     qrLoadGeneration += 1;
-    qrRequestUrl = "";
-    qrRetryCount = 0;
     setQrLoading("CONNECTING REMOTE...");
     qrOverlay.classList.remove("hidden");
     try {
@@ -696,10 +706,11 @@ async function setupRemoteUI() {
         await new Promise((r) => setTimeout(r, 500));
       }
 
-      const res = await sendMessageWithRetry({
-        type: "GET_REMOTE_TOKEN",
-        tabId: currentTabId,
-      });
+      if (extensionReadyPromise) {
+        try { await extensionReadyPromise; } catch (_) {}
+      }
+
+      const res = await getRemoteTokenWhenReady(currentTabId);
 
       if (res && res.hostId && res.token) {
         const elId = $("#remote-id-display");
@@ -709,7 +720,7 @@ async function setupRemoteUI() {
 
         // The offscreen audio session owns the remote token. Reuse the same
         // generated link while that session is alive so reopening the popup
-        // does not create a new QR/itty.bitty URL every time.
+        // does not create a new public Remote URL every time.
         const cachedLink = await getCachedRemoteLink(
           currentTabId,
           res.hostId,
@@ -723,18 +734,12 @@ async function setupRemoteUI() {
           urlDisplay.value = "Generating remote...";
           setQrLoading("GENERATING QR LINK...");
 
-          const fullUrl = await buildMicroBootloaderUrl(res.hostId, res.token);
-          urlDisplay.value = "Shortening link...";
-          setQrLoading("SHORTENING QR LINK...");
-          finalUrl = await shortenUrl(fullUrl);
+          finalUrl = buildPublicRemoteUrl(res.hostId, res.token);
           await cacheRemoteLink(currentTabId, res.hostId, res.token, finalUrl);
         }
 
         urlDisplay.value = finalUrl;
-        const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
-          finalUrl
-        )}`;
-        loadQrImage(qrApi);
+        loadQrImage(finalUrl);
       } else {
         setQrLoading("REMOTE ID NOT READY");
         alert("Remote ID not ready. Please turn Audio Master ON first.");
@@ -931,6 +936,25 @@ function showAiSlowModal(benchmarkMs, deviceLabel) {
   overlay.classList.add("active");
 }
 
+async function maybeShowAiVocalInfoModal() {
+  if (maybeShowAiVocalInfoModal.hasShown) return;
+  const data = await chrome.storage.local.get(AI_VOCAL_INFO_SEEN_KEY);
+  if (data[AI_VOCAL_INFO_SEEN_KEY]) {
+    maybeShowAiVocalInfoModal.hasShown = true;
+    return;
+  }
+
+  const overlay = $("#ai-vocal-info-overlay");
+  if (!overlay) return;
+  maybeShowAiVocalInfoModal.hasShown = true;
+  chrome.storage.local.set({ [AI_VOCAL_INFO_SEEN_KEY]: true }).catch(() => {});
+
+  const close = () => overlay.classList.remove("active");
+  $("#btn-close-ai-vocal-info")?.addEventListener("click", close, { once: true });
+  $("#btn-confirm-ai-vocal-info")?.addEventListener("click", close, { once: true });
+  overlay.classList.add("active");
+}
+
 function updateVocalUI(mode) {
   currentVocalMode = mode || "bypass";
   const btnBypass = $("#btn-vocal-bypass");
@@ -1003,7 +1027,9 @@ function updateVocalProfileUI(profile) {
 }
 
 function updateAiPowerModeUI(mode = aiPowerMode) {
-  aiPowerMode = normalizeAiPowerMode(mode);
+  // The power-mode selector is intentionally hidden. Keep ECO as the only
+  // production value even when an older popup/session sends another value.
+  aiPowerMode = "eco";
   const isEco = aiPowerMode === "eco";
   const ecoButton = $("#btn-ai-mode-eco");
   const fullButton = $("#btn-ai-mode-full");
@@ -1017,7 +1043,7 @@ function updateAiPowerModeUI(mode = aiPowerMode) {
 }
 
 function selectAiPowerMode(mode) {
-  const nextMode = normalizeAiPowerMode(mode);
+  const nextMode = "eco";
   aiPowerMode = nextMode;
   sessionManager.setSetting({ aiPowerMode: nextMode });
   sendParam("aiPowerMode", nextMode);
@@ -1042,31 +1068,31 @@ function updateVocalRuntimeUI(engine = aiEngineType, device, api, rawDevice) {
   const deviceText = $("#txt-vocal-device");
   const apiText = $("#txt-vocal-api");
   const runtimePanel = $("#vocal-runtime-status");
-  const normalizedEngine = engine === "go_native" ? "go_native" : "webgl";
+  const normalizedEngine = GO_ENGINE_ENABLED && engine === ENGINE_TYPE ? ENGINE_TYPE : "webgl";
 
   if (device !== undefined && device !== null && String(device).trim()) {
     currentVocalDevice = String(device).trim();
-  } else if (normalizedEngine === "go_native") {
-    currentVocalDevice = "Go Native Core";
+  } else if (normalizedEngine === ENGINE_TYPE) {
+    currentVocalDevice = ENGINE_DISPLAY_NAME;
   } else if (!currentVocalDevice) {
     currentVocalDevice = "Detecting GPU...";
   }
   if (rawDevice !== undefined && rawDevice !== null && String(rawDevice).trim()) {
     currentVocalDeviceRaw = String(rawDevice).trim();
-  } else if (!currentVocalDeviceRaw || normalizedEngine === "go_native") {
+  } else if (!currentVocalDeviceRaw || normalizedEngine === ENGINE_TYPE) {
     currentVocalDeviceRaw = currentVocalDevice;
   }
   if (api !== undefined && api !== null && String(api).trim()) {
     currentVocalApi = String(api).trim().toUpperCase();
-  } else if (normalizedEngine === "go_native") {
-    currentVocalApi = "DIRECTML";
+  } else if (normalizedEngine === ENGINE_TYPE) {
+    currentVocalApi = ENGINE_API;
   } else if (!currentVocalApi) {
     currentVocalApi = "WEBGL";
   }
 
-  const deviceLabel = currentVocalDevice || (normalizedEngine === "go_native" ? "Go Native Core" : "Detecting GPU...");
+  const deviceLabel = currentVocalDevice || (normalizedEngine === ENGINE_TYPE ? ENGINE_DISPLAY_NAME : "Detecting GPU...");
   const visibleDevice = deviceLabel.replace(/\s*\(DirectML\s+Device\s+#\d+\)\s*$/i, "").trim();
-  const apiLabel = currentVocalApi || (normalizedEngine === "go_native" ? "DIRECTML" : "WEBGL");
+  const apiLabel = currentVocalApi || (normalizedEngine === ENGINE_TYPE ? ENGINE_API : "WEBGL");
   const fullHardware = currentVocalDeviceRaw || deviceLabel;
   const isCpu = /cpu|swiftshader|software|loopback/i.test(deviceLabel);
   const isOffline = /offline|unavailable|lost|error/i.test(deviceLabel);
@@ -1160,7 +1186,7 @@ function updateUIFromExternal(key, value, index) {
     aiPowerMode = normalizeAiPowerMode(value);
     updateAiPowerModeUI(aiPowerMode);
   } else if (key === "aiEngineType") {
-    aiEngineType = value;
+    aiEngineType = GO_ENGINE_ENABLED && value === ENGINE_TYPE ? ENGINE_TYPE : "webgl";
     updateAiEngineUI();
   }
 }
@@ -1168,7 +1194,7 @@ function updateUIFromExternal(key, value, index) {
 function updateAiEngineUI() {
   const btnToggle = $("#btn-engine-toggle");
   const selEngine = $("#sel-ai-engine");
-  const isGo = (aiEngineType === "go_native");
+  const isGo = GO_ENGINE_ENABLED && aiEngineType === ENGINE_TYPE;
 
   if (btnToggle) {
     if (isGo) {
@@ -1184,9 +1210,9 @@ function updateAiEngineUI() {
   if (selEngine) {
     selEngine.value = aiEngineType;
   }
-  currentVocalDevice = isGo ? "Go Native Core" : "Detecting GPU...";
+  currentVocalDevice = isGo ? ENGINE_DISPLAY_NAME : "Detecting GPU...";
   currentVocalDeviceRaw = currentVocalDevice;
-  currentVocalApi = isGo ? "DIRECTML" : "WEBGL";
+  currentVocalApi = isGo ? ENGINE_API : "WEBGL";
   updateVocalRuntimeUI(aiEngineType);
 }
 
@@ -1199,7 +1225,8 @@ async function checkGoEngineHealth() {
 
   try {
     const t0 = performance.now();
-    const res = await fetch("http://127.0.0.1:41919/health", { cache: "no-store" });
+    if (!ENGINE_HEALTH_URL) return { ok: false, disabled: true };
+    const res = await fetch(ENGINE_HEALTH_URL, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       const pingMs = Math.round((performance.now() - t0) * 10) / 10;
@@ -1211,10 +1238,10 @@ async function checkGoEngineHealth() {
         txtStatus.className = "text-[9px] font-bold font-pixel text-emerald-400";
         txtStatus.textContent = "ONLINE (Connected to Go Core)";
       }
-      if (txtDevice) txtDevice.textContent = data.engine || "Go Native Core";
+      if (txtDevice) txtDevice.textContent = data.engine || ENGINE_DISPLAY_NAME;
       if (txtPing) txtPing.textContent = `${pingMs} ms`;
       if (btnSwitch) {
-        btnSwitch.textContent = (aiEngineType === "go_native") ? "SWITCH TO BROWSER WEBGL" : "ACTIVATE GO ENGINE ⚡";
+        btnSwitch.textContent = (aiEngineType === ENGINE_TYPE) ? ENGINE_SWITCH_TO_BROWSER_LABEL : ENGINE_ACTIVATE_LABEL;
       }
       return { ok: true, pingMs };
     }
@@ -1229,7 +1256,7 @@ async function checkGoEngineHealth() {
   }
   if (txtPing) txtPing.textContent = "Offline";
   if (btnSwitch) {
-    btnSwitch.textContent = (aiEngineType === "go_native") ? "SWITCH TO BROWSER WEBGL" : "ACTIVATE GO ENGINE ⚡";
+    btnSwitch.textContent = (aiEngineType === ENGINE_TYPE) ? ENGINE_SWITCH_TO_BROWSER_LABEL : ENGINE_ACTIVATE_LABEL;
   }
   return { ok: false };
 }
@@ -1305,8 +1332,10 @@ async function handleRecordingSaved() {
 }
 
 function setupListeners() {
-  $("#btn-toggle-audio").addEventListener("click", () => {
-    isAudioMasterOn = !isAudioMasterOn;
+  $("#btn-toggle-audio").addEventListener("click", async () => {
+    const nextAudioState = !isAudioMasterOn;
+    if (nextAudioState && !(await checkFirstLaunchModal())) return;
+    isAudioMasterOn = nextAudioState;
     updateMasterTogglesUI();
     sessionManager.setSetting({ isAudioMasterOn });
 
@@ -1417,6 +1446,7 @@ function setupListeners() {
     sessionManager.setSetting({ isVocalOn });
     sendParam("isVocalOn", isVocalOn);
     notifyAction("isVocalOn", isVocalOn, { immediate: true });
+    if (isVocalOn) maybeShowAiVocalInfoModal().catch(() => {});
   });
   $("#btn-vocal-bypass")?.addEventListener("click", () => {
     sendParam("vocalMode", "bypass");
@@ -1493,7 +1523,7 @@ function setupListeners() {
   });
 
   $("#btn-go-switch-mode")?.addEventListener("click", () => {
-    aiEngineType = (aiEngineType === "go_native") ? "webgl" : "go_native";
+    aiEngineType = (aiEngineType === ENGINE_TYPE) ? "webgl" : ENGINE_TYPE;
     updateAiEngineUI();
     sessionManager.setSetting({ aiEngineType });
     sendParam("aiEngineType", aiEngineType);
@@ -1660,10 +1690,14 @@ function setupListeners() {
   const openCoffeeDonation = () => {
     chrome.tabs.create({ url: DONATION_URL });
   };
-  const buyCoffeeBtn = $("#btn-buy-coffee");
-  if (buyCoffeeBtn) buyCoffeeBtn.addEventListener("click", openCoffeeDonation);
   const donateAboutBtn = $("#btn-donate-about");
   if (donateAboutBtn) donateAboutBtn.addEventListener("click", openCoffeeDonation);
+  const privacyAboutBtn = $("#btn-privacy-about");
+  if (privacyAboutBtn) {
+    privacyAboutBtn.addEventListener("click", () => {
+      chrome.tabs.create({ url: "https://studio.nextfeeder.com/privacy" });
+    });
+  }
 }
 
 function updateEqToggleButton() {
@@ -1994,9 +2028,10 @@ function loadAudioState(state) {
   if (state.vocalProfile !== "ai_remove") {
     sendParam("vocalProfile", "ai_remove");
   }
-  if (state.aiPowerMode !== undefined) {
-    aiPowerMode = normalizeAiPowerMode(state.aiPowerMode);
+  if (state.aiPowerMode !== "eco") {
+    sendParam("aiPowerMode", "eco");
   }
+  aiPowerMode = "eco";
   updateAiPowerModeUI(aiPowerMode);
   if (state.aiVocalDiagnostics) {
     updateVocalRuntimeUI(

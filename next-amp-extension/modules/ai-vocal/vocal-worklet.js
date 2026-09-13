@@ -11,6 +11,12 @@
  */
 
 const GO_CHUNK_SIZE = 8192; // 16 frames * 512 hop (GO wire protocol)
+// The build pipeline replaces this compile-time value for the Store profile.
+// The fallback keeps the unbundled internal development worklet compatible.
+const NATIVE_ENGINE_TYPE = typeof __NEXTSTUDIO_GO_ENGINE_TYPE__ !== "undefined"
+  ? __NEXTSTUDIO_GO_ENGINE_TYPE__
+  : "go_native";
+const NATIVE_ENGINE_ENABLED = NATIVE_ENGINE_TYPE !== "webgl";
 const BROWSER_CHUNK_SIZE = 7680; // 15 hops * 512 (~174.1ms), ECO profile
 const DEFAULT_BROWSER_CHUNK_SIZE = GO_CHUNK_SIZE; // 16 hops, Detail production profile
 const MAX_CHUNK_SIZE = GO_CHUNK_SIZE;
@@ -133,7 +139,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           ? data.generation : this.streamGeneration + (modeChanged ? 1 : 0);
         const generationChanged = nextGeneration !== this.streamGeneration;
         this.streamGeneration = nextGeneration;
-        if (data.engineType === "go_native" || data.engineType === "webgl") {
+        if (data.engineType === NATIVE_ENGINE_TYPE || data.engineType === "webgl") {
           this.engineType = data.engineType;
           this.setChunkSizeForEngine(this.engineType, data.browserChunkSize);
         }
@@ -147,9 +153,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.targetMode = data.mode;
           // Purge all audio queues and state on ANY mode transition
           this.isAiReady = false;
-          this.readyThreshold = this.engineType === "go_native"
+          this.readyThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
             ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
-          this.maxQueueThreshold = this.engineType === "go_native"
+          this.maxQueueThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
             ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
           this.releaseCurrentChunk();
           this.clearOutputQueue();
@@ -172,7 +178,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           }
         }
       } else if (data.type === "SET_ENGINE") {
-        const nextEngine = data.engineType === "go_native" ? "go_native" : "webgl";
+        const nextEngine = NATIVE_ENGINE_ENABLED && data.engineType === NATIVE_ENGINE_TYPE
+          ? NATIVE_ENGINE_TYPE : "webgl";
         if (Number.isInteger(data.generation)) this.streamGeneration = data.generation;
         if (this.engineType !== nextEngine) {
           this.engineType = nextEngine;
@@ -192,9 +199,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.chunkPeak = 0.0;
           this.aiGain = 0.0;
         }
-        this.readyThreshold = this.engineType === "go_native"
+        this.readyThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
           ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
-        this.maxQueueThreshold = this.engineType === "go_native"
+        this.maxQueueThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
           ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
       } else if (data.type === "SET_PROFILE") {
         const nextProfile = data.profile === "eco" || data.profile === "balanced"
@@ -212,9 +219,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
 
         if (profileChanged || generationChanged) {
           this.isAiReady = false;
-          this.readyThreshold = this.engineType === "go_native"
+          this.readyThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
             ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
-          this.maxQueueThreshold = this.engineType === "go_native"
+          this.maxQueueThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
             ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
           this.releaseCurrentChunk();
           this.clearOutputQueue();
@@ -262,15 +269,15 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         this.silentChunks = 0;
         this.inSilenceBoundary = false;
       } else if (data.type === "SET_QUEUE_TARGET") {
-        const targetEngine = data.engineType === "go_native" || data.engineType === "webgl"
+        const targetEngine = data.engineType === NATIVE_ENGINE_TYPE || data.engineType === "webgl"
           ? data.engineType : null;
         if (!targetEngine || targetEngine !== this.engineType) return;
         const ready = Number(data.readyThreshold);
         const max = Number(data.maxQueueThreshold);
         if (!Number.isFinite(ready) || !Number.isFinite(max)) return;
-        const maxReady = targetEngine === "go_native"
+        const maxReady = NATIVE_ENGINE_ENABLED && targetEngine === NATIVE_ENGINE_TYPE
           ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD - 1;
-        const maxMax = targetEngine === "go_native"
+        const maxMax = NATIVE_ENGINE_ENABLED && targetEngine === NATIVE_ENGINE_TYPE
           ? GO_MAX_QUEUE_THRESHOLD + 1 : MAX_QUEUE_THRESHOLD;
         this.readyThreshold = Math.max(
           1,
@@ -304,7 +311,8 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     const requestedSize = Number(browserChunkSize);
     const browserSize = [BROWSER_CHUNK_SIZE, GO_CHUNK_SIZE].includes(requestedSize)
       ? requestedSize : DEFAULT_BROWSER_CHUNK_SIZE;
-    const nextSize = engineType === "go_native" ? GO_CHUNK_SIZE : browserSize;
+    const nextSize = NATIVE_ENGINE_ENABLED && engineType === NATIVE_ENGINE_TYPE
+      ? GO_CHUNK_SIZE : browserSize;
     if (this.chunkSize === nextSize) return;
     this.chunkSize = nextSize;
     // A partial packet belongs to the previous cadence. Drop it so a mode
@@ -401,7 +409,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     // Do not allow a browser result that is already far behind live audio to
     // enter the playback queue. Playing it would create a delayed vocal/music
     // jump after a tab switch or a CPU-heavy page update.
-    if (this.engineType !== "go_native" &&
+    if ((!NATIVE_ENGINE_ENABLED || this.engineType !== NATIVE_ENGINE_TYPE) &&
         chunkIndex !== null &&
         this.latestInputChunkIndex !== null &&
         chunkIndex < this.latestInputChunkIndex - BROWSER_MAX_LAG_CHUNKS) {
@@ -435,7 +443,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.inAccumPos = 0;
     this.chunkPeak = 0.0;
     this.isAiReady = false;
-    this.readyThreshold = this.engineType === "go_native"
+    this.readyThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
       ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
     this.releaseCurrentChunk();
     this.clearOutputQueue();

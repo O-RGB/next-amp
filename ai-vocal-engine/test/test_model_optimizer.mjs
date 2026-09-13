@@ -1,17 +1,41 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-import { optimizeVocalModelArtifacts } from '../../next-amp-extension/modules/ai-vocal/model-optimizer.mjs';
+import { optimizeVocalModelArtifacts } from '../../nextstudio-model-builder/src/optimize_tfjs_graph.mjs';
 
 const require = createRequire(import.meta.url);
 const tf = require('../../next-amp-extension/assets/libs/js/tf.min.js');
 const modelDir = new URL('../../next-amp-extension/model/', import.meta.url);
-const json = JSON.parse(fs.readFileSync(new URL('model.json', modelDir)));
+const runtimeJson = JSON.parse(fs.readFileSync(new URL('model.json', modelDir)));
+const buildMetadata = runtimeJson.userDefinedMetadata?.nextstudioModelOptimization;
+assert.ok(buildMetadata?.fallback?.modelTopology, 'runtime model is missing its compatibility topology');
+const runtimeWeightSpecs = runtimeJson.weightsManifest.flatMap(group => group.weights);
+const sourceWeightSpecs = runtimeWeightSpecs.filter(spec => !spec.name.startsWith('NextStudio/'));
+const sourceWeightNames = new Set(sourceWeightSpecs.map(spec => spec.name));
+const sourceTopology = {
+  ...buildMetadata.fallback.modelTopology,
+  node: buildMetadata.fallback.modelTopology.node.filter(node =>
+    !node.name.startsWith('NextStudio/') || sourceWeightNames.has(node.name)
+  )
+};
+const json = {
+  ...runtimeJson,
+  modelTopology: sourceTopology,
+  signature: buildMetadata.fallback.signature
+};
 const bytes = fs.readFileSync(new URL('group1-shard1of1.bin', modelDir));
+const dtypeBytes = spec => {
+  const dtype = spec.quantization?.dtype || spec.dtype;
+  if (dtype === 'float16') return 2;
+  if (dtype === 'uint8' || dtype === 'bool') return 1;
+  return 4;
+};
+const sourceWeightByteLength = sourceWeightSpecs.reduce((total, spec) =>
+  total + spec.shape.reduce((count, size) => count * Number(size), 1) * dtypeBytes(spec), 0);
 const original = {
   ...json,
-  weightSpecs: json.weightsManifest.flatMap(group => group.weights),
-  weightData: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+  weightSpecs: sourceWeightSpecs,
+  weightData: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + sourceWeightByteLength)
 };
 const before = JSON.stringify(original.modelTopology);
 const baselineResult = optimizeVocalModelArtifacts(original, { optimizeGraph: false });
@@ -22,27 +46,26 @@ assert.equal(baselineResult.artifacts, original, 'quality baseline must keep the
 const { artifacts: optimized, foldedCount, explicitPadCount } = optimizeVocalModelArtifacts(original);
 const outputHeadResult = optimizeVocalModelArtifacts(original, {
   outputHead: {
-    start: 32,
-    frames: 32,
+    start: 34,
+    frames: 15,
     bins: 1024,
     headStart: 0,
-    sourceCrop: { start: 32, frames: 32, inputFrames: 64, bins: 1024 },
-    decoderCrop: { start: 31, frames: 33, inputFrames: 64, channels: 96, bins: 1024 }
+    sourceCrop: { start: 34, frames: 15, inputFrames: 64, bins: 1024 }
   }
 });
 assert.equal(foldedCount, 12);
 assert.equal(explicitPadCount, 16);
 assert.deepEqual(outputHeadResult.outputHead, {
-  start: 32,
-  frames: 32,
+  start: 34,
+  frames: 15,
   bins: 1024,
   inputFrames: 64,
   activation: 'sigmoid',
   layout: '[2,frames,bins]',
-  decoderRoi: { start: 1, frames: 32, inputFrames: 33, channels: 32 },
-  decoderLayerRoi: { start: 31, frames: 33, inputFrames: 64, channels: 96 }
+  decoderRoi: { start: 34, frames: 15, inputFrames: 64, channels: 32 },
+  decoderLayerRoi: null
 });
-assert.equal(outputHeadResult.artifacts.weightData.byteLength, original.weightData.byteLength + 172);
+assert.equal(outputHeadResult.artifacts.weightData.byteLength, original.weightData.byteLength + 76);
 assert.equal(optimized.modelTopology.node.length, original.modelTopology.node.length - 40);
 assert.equal(optimized.weightData, original.weightData);
 assert.equal(optimized.weightSpecs, original.weightSpecs);
@@ -102,10 +125,10 @@ try {
   const headData = await headOutput.data();
   let maxHeadError = 0;
   for (let bin = 0; bin < 1024; bin++) {
-    for (let frame = 0; frame < 32; frame++) {
+    for (let frame = 0; frame < 15; frame++) {
       for (let channel = 0; channel < 2; channel++) {
-        const fullIndex = ((bin * 64) + frame + 32) * 2 + channel;
-        const headIndex = (channel * 32 + frame) * 1024 + bin;
+        const fullIndex = ((bin * 64) + frame + 34) * 2 + channel;
+        const headIndex = (channel * 15 + frame) * 1024 + bin;
         const expected = 1 / (1 + Math.exp(-fullData[fullIndex]));
         maxHeadError = Math.max(maxHeadError, Math.abs(expected - headData[headIndex]));
       }
@@ -122,3 +145,20 @@ try {
   outputHeadModel.dispose();
 }
 assert.equal(tf.memory().numTensors, 0, 'model validation leaked tensors');
+
+// The production compatibility topology shares the optimized shard. Its
+// disconnected build constants must still be owned and released by TFJS.
+const runtimeWeightData = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+const runtimeArtifacts = {
+  ...runtimeJson,
+  weightSpecs: runtimeWeightSpecs,
+  weightData: runtimeWeightData
+};
+const runtimeFallbackArtifacts = {
+  ...runtimeArtifacts,
+  modelTopology: buildMetadata.fallback.modelTopology,
+  signature: buildMetadata.fallback.signature
+};
+const runtimeModels = [await load(runtimeArtifacts), await load(runtimeFallbackArtifacts)];
+runtimeModels.forEach(model => model.dispose());
+assert.equal(tf.memory().numTensors, 0, 'production model load/dispose leaked tensors');

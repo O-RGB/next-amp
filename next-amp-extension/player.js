@@ -18,8 +18,6 @@ for (let i = 0; i < 40; i++) {
 
 async function initAudioDevices() {
   try {
-    await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
-
     const devices = await navigator.mediaDevices.enumerateDevices();
     const audioOutputs = devices.filter((d) => d.kind === "audiooutput");
 
@@ -27,7 +25,7 @@ async function initAudioDevices() {
 
     const defaultOption = document.createElement("option");
     defaultOption.value = "default";
-    defaultOption.text = "SYSTEM DEFAULT";
+    defaultOption.text = audioOutputs.length ? "SYSTEM DEFAULT" : "SYSTEM DEFAULT ONLY";
     outputSelect.appendChild(defaultOption);
 
     if (audioOutputs.length > 0) {
@@ -43,11 +41,6 @@ async function initAudioDevices() {
         option.text = label;
         outputSelect.appendChild(option);
       });
-    } else {
-      const option = document.createElement("option");
-      option.text = "NO DEVICES FOUND";
-      option.disabled = true;
-      outputSelect.appendChild(option);
     }
 
     outputSelect.addEventListener("change", async (e) => {

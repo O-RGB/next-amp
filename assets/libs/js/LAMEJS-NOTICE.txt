@@ -1,0 +1,35 @@
+LAMEjs — MP3 encoder
+====================
+
+The standalone Web player includes the vendored JavaScript file
+`lame.min.js` for local MP3 export. It is derived from the lamejs project:
+
+  https://github.com/zhuker/lamejs
+
+The upstream project identifies the code as LGPL-3.0 and asks commercial
+users to keep LAMEjs as a separate library, acknowledge its use and link to
+the LAME project. The NextStudio Web build keeps this encoder as a separate
+asset and does not modify it at build time.
+
+The exact bytes shipped in this repository have SHA-256:
+  cfcba65b0fee8a4fc4494f7d6f4d35c53b62385e42bfe501c84833df04fbff31
+
+Upstream license/source information:
+  https://github.com/zhuker/lamejs/blob/master/LICENSE
+  https://github.com/zhuker/lamejs
+
+LAMEjs license notice (from the upstream distribution):
+
+Can I use LAME in my commercial program?
+
+Yes, you can, under the restrictions of the LGPL. The easiest way to do this
+is to:
+
+1. Link to LAME as a separate library (`lame.min.js` or `lame.all.js`).
+2. Fully acknowledge that you are using LAME, and give a link to
+   https://lame.sourceforge.net/.
+3. If you make modifications to LAME, release those modifications back to the
+   LAME project under the LGPL.
+
+This notice is included for the Web build. The Chrome Web Store extension
+uses WebM recording and does not package this MP3 encoder.

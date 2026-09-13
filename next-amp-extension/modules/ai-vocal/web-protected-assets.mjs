@@ -89,8 +89,10 @@ export function createProtectedModelSource(tf, url) {
 
       return {
         modelTopology: modelJson.modelTopology,
+        signature: modelJson.signature,
         weightSpecs,
-        weightData
+        weightData,
+        userDefinedMetadata: modelJson.userDefinedMetadata
       };
     }
   };

@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;600;700&family=Inter:wght@300;400;600&display=swap");
 /* next-amp-extension/styles.css */
 
 :root {
@@ -267,6 +266,7 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 #first-launch-overlay,
 #usage-donate-overlay,
 #ai-slow-overlay,
+#ai-vocal-info-overlay,
 #go-engine-overlay {
   position: fixed;
   inset: 0;
@@ -283,6 +283,7 @@ input[type="range"].h-slider::-webkit-slider-thumb {
 #first-launch-overlay.active,
 #usage-donate-overlay.active,
 #ai-slow-overlay.active,
+#ai-vocal-info-overlay.active,
 #go-engine-overlay.active {
   display: flex;
 }

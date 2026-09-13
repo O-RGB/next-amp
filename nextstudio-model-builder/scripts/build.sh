@@ -43,6 +43,9 @@ env PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python "$TFJS_CONVERTER_BIN" \
   --weight_shard_size_bytes=33554432 \
   work/saved_model \
   dist/mgm-main-v4/tfjs
+node src/optimize_tfjs_graph.mjs \
+  dist/mgm-main-v4/tfjs/model.json \
+  dist/mgm-main-v4/tfjs/group1-shard1of1.bin
 "$PYTHON_BIN" src/canonicalize_tfjs.py dist/mgm-main-v4/tfjs/model.json
 
 echo "Phase 4: Exporting ONNX..."

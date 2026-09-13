@@ -2,9 +2,15 @@ import { PitchProcessor } from "./pitch-processor.js";
 import { AudioEffects } from "./audio-effects.js";
 import { DBManager } from "./db-manager.js";
 import { RTCServer } from "./modules/rtc-server.js";
-import { REMOTE_UI } from "./remote/remote-ui-bundle.js";
+import {
+  isAllowedRemoteMessage,
+  isValidRemoteHandshake,
+  sanitizeRemoteCommand,
+} from "./modules/remote-protocol.js";
 import { AIVocalManager } from "./modules/ai-vocal/ai-vocal-manager.js";
 import { normalizeAiPowerMode } from "./modules/ai-vocal/ai-power-mode.mjs";
+import { GO_ENGINE_ENABLED } from "./modules/ai-vocal/build-feature-flags.js";
+import { ENGINE_TYPE } from "./modules/ai-vocal/engine-client-runtime.js";
 import "./assets/js/peerjs.min.js";
 
 const sessions = new Map();
@@ -94,52 +100,166 @@ function recordDonationUsage(session, force = false) {
 }
 
 // --- PEERJS SETUP ---
+const REMOTE_LINK_CACHE_KEY = "remoteLinkCacheV2";
 let hostPeer = null;
 let hostPeerId = null;
+let hostPeerReadyPromise = null;
 
-function initHostPeer() {
-  if (hostPeer) return;
-  hostPeer = new Peer(null, { debug: 1 });
+function destroyHostPeerIfUnused() {
+  // Keep the signaling host alive while at least one active audio session has
+  // a Remote token. This preserves reconnect and multi-tab behavior. Once no
+  // session can accept a Remote handshake, close the PeerJS connection so a
+  // normal audio session does not keep a third-party signaling socket alive.
+  for (const session of sessions.values()) {
+    if (session.remoteToken) return;
+  }
 
-  hostPeer.on("open", (id) => {
-    console.log("[PeerJS] Host Ready. ID:", id);
-    hostPeerId = id;
-  });
-
-  hostPeer.on("connection", (conn) => {
-    conn.on("data", (data) => {
-      if (data.type === "HANDSHAKE" && data.token) {
-        mapConnectionToSession(conn, data.token, data.needUI);
-      } else {
-        handleRemoteCommand(conn, data);
-      }
-    });
-    conn.on("close", () => cleanupConnection(conn));
-    conn.on("error", () => cleanupConnection(conn));
-  });
+  const peer = hostPeer;
+  hostPeer = null;
+  hostPeerId = null;
+  hostPeerReadyPromise = null;
+  try { peer?.destroy(); } catch (_) {}
 }
 
-function mapConnectionToSession(conn, token, needUI = false) {
+async function clearCachedRemoteLink(tabId) {
+  if (!tabId || !chrome.storage?.session) return;
+  try {
+    const data = await chrome.storage.session.get(REMOTE_LINK_CACHE_KEY);
+    const cache = data[REMOTE_LINK_CACHE_KEY] || {};
+    const key = String(tabId);
+    if (!Object.prototype.hasOwnProperty.call(cache, key)) return;
+    delete cache[key];
+    await chrome.storage.session.set({ [REMOTE_LINK_CACHE_KEY]: cache });
+  } catch (_) {
+    // Session cache is only a popup convenience. Token validation still uses
+    // the live offscreen session, so a storage cleanup failure cannot revive a
+    // stopped Remote session.
+  }
+}
+
+function initHostPeer() {
+  if (hostPeer && hostPeer.open && !hostPeer.disconnected && hostPeerId) {
+    return Promise.resolve(hostPeerId);
+  }
+  if (hostPeerReadyPromise) return hostPeerReadyPromise;
+
+  // A PeerJS object can remain in memory after its signaling socket has
+  // disconnected. Do not keep returning its stale/null ID forever.
+  if (hostPeer && (hostPeer.disconnected || hostPeer.destroyed)) {
+    try { hostPeer.destroy(); } catch (_) {}
+    hostPeer = null;
+    hostPeerId = null;
+  }
+
+  hostPeerReadyPromise = new Promise((resolve, reject) => {
+    let opened = false;
+    let peer;
+    try {
+      peer = new Peer(null, { debug: 1 });
+      hostPeer = peer;
+    } catch (error) {
+      hostPeer = null;
+      hostPeerId = null;
+      hostPeerReadyPromise = null;
+      reject(error);
+      return;
+    }
+
+    peer.on("open", (id) => {
+      opened = true;
+      if (peer !== hostPeer) return;
+      console.log("[PeerJS] Host Ready. ID:", id);
+      hostPeerId = id;
+      hostPeerReadyPromise = null;
+      resolve(id);
+    });
+
+    peer.on("connection", (conn) => {
+      if (peer !== hostPeer) return;
+      conn.on("data", (data) => {
+        if (!isAllowedRemoteMessage(data)) {
+          conn.close();
+          return;
+        }
+        if (!conn._targetTabId) {
+          if (!isValidRemoteHandshake(data)) {
+            conn.close();
+            return;
+          }
+          mapConnectionToSession(conn, data.token);
+          return;
+        }
+        handleRemoteCommand(conn, data);
+      });
+      conn.on("close", () => cleanupConnection(conn));
+      conn.on("error", () => cleanupConnection(conn));
+    });
+
+    peer.on("disconnected", () => {
+      if (peer !== hostPeer) return;
+      hostPeerId = null;
+    });
+
+    peer.on("close", () => {
+      if (peer !== hostPeer) return;
+      hostPeer = null;
+      hostPeerId = null;
+      if (!opened && hostPeerReadyPromise) {
+        const error = new Error("PeerJS host closed before becoming ready");
+        hostPeerReadyPromise = null;
+        reject(error);
+      }
+    });
+
+    peer.on("error", (error) => {
+      if (peer !== hostPeer) return;
+      if (!opened) {
+        hostPeer = null;
+        hostPeerId = null;
+        hostPeerReadyPromise = null;
+        reject(error instanceof Error ? error : new Error("PeerJS host failed"));
+      } else {
+        console.warn("[PeerJS] Host connection error:", error);
+      }
+    });
+  });
+
+  return hostPeerReadyPromise;
+}
+
+async function waitForHostPeerId(timeoutMs = 8000) {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      initHostPeer(),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("Remote host timeout")), timeoutMs);
+      }),
+    ]);
+  } catch (error) {
+    // A timed-out Peer must not poison the next Remote attempt. Destroy the
+    // stale instance and clear the pending promise so a fresh host can start.
+    if (!hostPeerId) {
+      const stalePeer = hostPeer;
+      hostPeer = null;
+      hostPeerId = null;
+      hostPeerReadyPromise = null;
+      try { stalePeer?.destroy(); } catch (_) {}
+    }
+    throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+function mapConnectionToSession(conn, token) {
   for (const [tabId, session] of sessions.entries()) {
     if (session.remoteToken === token) {
       if (!session.remoteConns) session.remoteConns = [];
       session.remoteConns.push(conn);
       conn._targetTabId = tabId;
 
-      if (needUI) {
-        const currentEq = session.effects
-          ? session.effects.getEQNodes().map((n) => n.gain.value)
-          : session.params.eq;
-        conn.send({
-          type: "MOUNT_UI",
-          css: REMOTE_UI.css,
-          html: REMOTE_UI.html,
-          js: REMOTE_UI.js,
-          state: { ...session.params, eq: currentEq },
-        });
-      } else {
-        syncStateToRemote(session, conn);
-      }
+      syncStateToRemote(session, conn);
       return;
     }
   }
@@ -158,20 +278,22 @@ function cleanupConnection(conn) {
 function handleRemoteCommand(conn, data) {
   const tabId = conn._targetTabId;
   if (!tabId || !sessions.has(tabId)) return;
+  const command = sanitizeRemoteCommand(data);
+  if (!command) return;
 
-  if (data.type === "SET_PARAM") {
+  if (command.type === "SET_PARAM") {
     // Update Params and Broadcast
     updateParams({
-      ...data,
+      ...command,
       tabId: tabId,
       isShared: false,
       source: "remote",
     });
-  } else if (data.type === "GET_STATE") {
+  } else if (command.type === "GET_STATE") {
     const session = sessions.get(tabId);
     if (session) syncStateToRemote(session, conn);
-  } else if (data.type === "PING") {
-    conn.send({ type: "PONG", ts: data.ts });
+  } else if (command.type === "PING") {
+    conn.send({ type: "PONG", ts: command.ts });
   }
 }
 
@@ -213,14 +335,13 @@ const createDefaultParams = () => ({
   vocalMode: "bypass", // "bypass", "karaoke", "acapella"
   vocalProfile: "ai_remove", // Production default: 16-hop Detail profile
   aiPowerMode: "eco", // "eco" or "quality"; WEB AI only
-  aiEngineType: "webgl", // "webgl" or "go_native"
+  aiEngineType: "webgl",
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = msg.tabId;
 
   if (msg.type === "START_CAPTURE") {
-    initHostPeer();
     startAudio(
       msg.streamId,
       tabId,
@@ -287,14 +408,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
   } else if (msg.type === "GET_REMOTE_TOKEN") {
     const session = sessions.get(tabId);
-    if (session && hostPeerId) {
-      if (!session.remoteToken) {
-        session.remoteToken = `tab-${tabId}-${Date.now().toString(36)}`;
-      }
-      sendResponse({ hostId: hostPeerId, token: session.remoteToken });
-    } else {
+    if (!session) {
       sendResponse({ error: "Session not ready" });
+      return true;
     }
+
+    // PeerJS obtains the host ID asynchronously. Waiting here removes the
+    // startup race where the audio session is ready but the Remote button is
+    // clicked before the signaling connection has emitted `open`.
+    waitForHostPeerId().then((readyId) => {
+      if (!readyId || !sessions.has(tabId)) {
+        sendResponse({ error: "Session not ready" });
+        return;
+      }
+      if (!session.remoteToken) {
+        const tokenBytes = new Uint8Array(24);
+        crypto.getRandomValues(tokenBytes);
+        session.remoteToken = btoa(String.fromCharCode(...tokenBytes))
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/g, "");
+      }
+      sendResponse({ hostId: readyId, token: session.remoteToken });
+    }).catch((error) => {
+      console.warn("[PeerJS] Remote host is not ready:", error);
+      sendResponse({ error: "Remote host unavailable" });
+    });
     return true;
   } else if (msg.type === "START_WEBRTC_STREAM") {
     startWebRTC(msg.sourceTabId, msg.playerTabId);
@@ -552,7 +691,11 @@ async function stopAudio(tabId) {
   beginCaptureEpoch(tabId);
   rtcServer.stopSession(tabId);
   const session = sessions.get(tabId);
-  if (!session) return;
+  if (!session) {
+    await clearCachedRemoteLink(tabId);
+    destroyHostPeerIfUnused();
+    return;
+  }
   if (session.donationUsageTimer) clearInterval(session.donationUsageTimer);
   // Flush usage before tearing down the audio context.
   recordDonationUsage(session, true);
@@ -584,6 +727,8 @@ async function stopAudio(tabId) {
     } catch (e) {}
   }
   sessions.delete(tabId);
+  await clearCachedRemoteLink(tabId);
+  destroyHostPeerIfUnused();
 
   // A destroyed manager may still be finishing a model/backend promise. Give
   // it a bounded grace period before reporting STOP_CAPTURE complete so a
@@ -645,7 +790,7 @@ function getPageActionNotification(key, value, params) {
     case "aiPowerMode":
       return { message: `AI ${String(value).toUpperCase()}`, icon: "ai" };
     case "aiEngineType":
-      return { message: `AI ENGINE ${value === "go_native" ? "GO" : "WEB"}`, icon: "engine" };
+      return { message: `AI ENGINE ${GO_ENGINE_ENABLED && value === ENGINE_TYPE ? "GO" : "WEB"}`, icon: "engine" };
     case "videoQuality":
       return { message: `VIDEO ${String(value).toUpperCase()}`, icon: "video" };
     case "videoDelay":
@@ -838,9 +983,12 @@ function applyParamToSession(session, key, value, index, source) {
       if (session.aiVocal) session.aiVocal.setDiffLevel(2);
       break;
     case "aiEngineType":
-      params.aiEngineType = value;
+      // Store builds accept legacy persisted messages but always normalize to
+      // the browser engine because the optional native provider is not part of
+      // that artifact.
+      params.aiEngineType = GO_ENGINE_ENABLED && value === ENGINE_TYPE ? value : "webgl";
       if (session.aiVocal) {
-        session.aiVocal.setEngineType(value);
+        session.aiVocal.setEngineType(params.aiEngineType);
       }
       break;
     case "volume":

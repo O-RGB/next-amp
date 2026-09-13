@@ -98,6 +98,14 @@ function copy(source, destination) {
   fs.copyFileSync(source, destination);
 }
 
+function removePackagingMetadata(directory) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) removePackagingMetadata(fullPath);
+    else if (entry.name === ".DS_Store" || entry.name === "Thumbs.db") fs.unlinkSync(fullPath);
+  }
+}
+
 function replaceAll(value, search, replacement) {
   return value.split(search).join(replacement);
 }
@@ -295,6 +303,9 @@ function buildHtmlFiles() {
 function copyStaticWebAssets() {
   copy(path.join(SRC_DIR, "assets", "logo", "logo.png"), path.join(DIST_DIR, "assets", "logo", "logo.png"));
   copy(path.join(SRC_DIR, "assets", "post", "image.png"), path.join(DIST_DIR, "assets", "post", "image.png"));
+  copy(path.join(SRC_DIR, "assets", "THIRD-PARTY-NOTICES.txt"), path.join(DIST_DIR, "THIRD-PARTY-NOTICES.txt"));
+  copy(path.join(SRC_DIR, "next-amp-extension", "LICENSE-APACHE-2.0.txt"), path.join(DIST_DIR, "LICENSE-APACHE-2.0.txt"));
+  copy(path.join(SRC_DIR, "next-amp-extension", "model", "LICENSE"), path.join(DIST_DIR, "MODEL-LICENSE.txt"));
   for (const fileName of ["startup.mp3", "allow-sound.mp3"]) {
     copy(path.join(SRC_DIR, "assets", "sounds", fileName), path.join(DIST_DIR, "assets", "sounds", fileName));
   }
@@ -318,6 +329,7 @@ function buildLibraries() {
   // the stable source paths while preserving the tested vendor runtime.
   copy(path.join(SRC_DIR, "assets", "libs", "js", "tailwindcss.js"), path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.tailwind));
   copy(path.join(SRC_DIR, "assets", "libs", "js", "lame.min.js"), path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.lame));
+  copy(path.join(SRC_DIR, "assets", "libs", "js", "LAMEJS-NOTICE.txt"), path.join(DIST_DIR, "assets", "libs", "js", "LAMEJS-NOTICE.txt"));
   copy(path.join(SRC_DIR, "next-amp-extension", "assets", "libs", "js", "tf.min.js"), path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.tf));
   copy(path.join(SRC_DIR, "next-amp-extension", "assets", "libs", "js", "tf-backend-webgpu.min.js"), path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.tfWebgpu));
   copy(path.join(SRC_DIR, "assets", "libs", "worker", "mp3-worker.js"), path.join(DIST_DIR, "assets", "libs", "worker", FILE_NAMES.mp3Worker));
@@ -388,6 +400,11 @@ function verifyOutput() {
       throw new Error(`Protected header missing: ${fileName}`);
     }
   }
+  for (const required of ["THIRD-PARTY-NOTICES.txt", "LICENSE-APACHE-2.0.txt", "MODEL-LICENSE.txt", "assets/libs/js/LAMEJS-NOTICE.txt"]) {
+    if (!fs.existsSync(path.join(DIST_DIR, required))) {
+      throw new Error(`Required production notice missing: ${required}`);
+    }
+  }
 }
 
 function main() {
@@ -406,6 +423,7 @@ function main() {
     buildApplicationCode();
     buildHtmlFiles();
     copyStaticWebAssets();
+    removePackagingMetadata(DIST_DIR);
     verifyOutput();
     console.log("✅ Web production build and protection verification complete.");
   } finally {

@@ -5,6 +5,13 @@
  * to the standalone Go Native Desktop Engine (ws://127.0.0.1:41919/ws).
  */
 
+export const ENGINE_TYPE = "go_native";
+export const ENGINE_DISPLAY_NAME = "Go Native Core";
+export const ENGINE_API = "DIRECTML";
+export const ENGINE_HEALTH_URL = "http://127.0.0.1:41919/health";
+export const ENGINE_SWITCH_TO_BROWSER_LABEL = "SWITCH TO BROWSER WEBGL";
+export const ENGINE_ACTIVATE_LABEL = "ACTIVATE GO ENGINE ⚡";
+
 export class GoEngineClient {
   constructor() {
     this.ws = null;

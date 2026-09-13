@@ -102,5 +102,16 @@ assert.equal(healthManager.liveGpuWarningActive, false);
 assert.equal(healthManager.isHardwareSlow, false);
 healthManager.destroy();
 
+const ecoHeadManager = makeManager();
+ecoHeadManager.modelOutputHead = { start: 34, frames: 15 };
+const exactEcoOutput = {};
+globalThis.tf.tidy = callback => callback();
+assert.equal(ecoHeadManager.extractModelMask(exactEcoOutput, {
+  frames: 15,
+  maskFrames: 15,
+  sliceStart: 34
+}), exactEcoOutput, 'exact ECO output must bypass a redundant per-chunk GPU slice');
+ecoHeadManager.destroy();
+
 globalThis.tf = oldTf;
 console.log('AIVocalManager WebGPU stall recovery lifecycle passed.');
