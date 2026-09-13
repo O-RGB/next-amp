@@ -3,6 +3,10 @@ dist/
 node_modules/
 .DS_Store
 
+# Local HTTPS development certificates (never commit private keys)
+cert.pem
+key.pem
+
 # Go native engine: local build outputs
 nextstudio-engine-go/nextstudio-engine
 nextstudio-engine-go/nextstudio-engine.exe

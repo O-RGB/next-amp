@@ -25,7 +25,7 @@
   function validateParam(key, value, index) {
     const rule = PARAM_SCHEMA[key];
     if (!rule) return null;
-    if (key === "eq" && (!Number.isInteger(Number(index)) || Number(index) < 0 || Number(index) > 9)) return null;
+    if (key === "eq" && (!Number.isInteger(index) || index < 0 || index > 9)) return null;
     if (rule.type === "boolean") return typeof value === "boolean" ? value : null;
     if (rule.type === "enum") return typeof value === "string" && rule.values.includes(value) ? value : null;
     const numeric = Number(value);
@@ -36,6 +36,7 @@
     VERSION: 1,
     MAX_MESSAGE_BYTES: 4096,
     ALLOWED_KEYS: Object.freeze(Object.keys(PARAM_SCHEMA)),
+    PARAM_SCHEMA: Object.freeze(PARAM_SCHEMA),
     readFragment,
     validateParam,
     isMessage(value) { return value && typeof value === "object" && typeof value.type === "string"; },

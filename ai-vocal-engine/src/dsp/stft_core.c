@@ -192,9 +192,10 @@ void stft_init(void) {
         }
     }
 
-    // AI Remove's reference WASM receives its analysis/synthesis window from
-    // JS. Reproduce its even/odd denominator and COLA normalization only on
-    // the isolated reference timeline; the proven app/GO window is unchanged.
+    // Boundary-aware analysis/synthesis window used by the 18-frame cadence.
+    // Keep its even/odd denominator and COLA normalization isolated from the
+    // default app/GO window so changing one processing path cannot affect the
+    // other.
     for (int i = 0; i < FFT_SIZE; i++) {
         int denominator = FFT_SIZE + (1 - (i & 1)) - 1;
         double angle = 2.0 * M_PI * (double)i / (double)denominator;
@@ -428,10 +429,9 @@ void stft_forward(int num_frames) {
     stft_forward_internal(num_frames, 0, num_frames, num_frames, 0);
 }
 
-// Reference-compatible cadence: compute 18 boundary-aware spectra, expose
-// the same byte-offset magnitude view used by AI Remove, and advance the
-// model window by 15 hops. The manager consumes the 18-frame delayed spectrum
-// separately.
+// Boundary-aware cadence: compute 18 spectra, expose the centered 16-frame
+// magnitude view, and advance the model window by 15 hops. The manager
+// consumes the delayed 18-frame spectrum separately.
 void stft_forward_reference(void) {
     stft_forward_internal(
         REFERENCE_SPECTRUM_FRAMES,

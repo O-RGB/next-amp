@@ -33,6 +33,12 @@ function fail(message) {
   process.exit(1);
 }
 
+function requireByteIdentical(sourcePath, packagedPath, label) {
+  const source = fs.readFileSync(sourcePath);
+  const packaged = fs.readFileSync(packagedPath);
+  if (!source.equals(packaged)) fail(`${label} differs from its reviewed source bytes`);
+}
+
 if (!fs.existsSync(distDir)) fail(`missing output directory: ${distDir}`);
 if (!fs.existsSync(zipPath)) fail(`missing ZIP: ${zipPath}`);
 
@@ -67,14 +73,23 @@ const forbiddenStoreTokens = [
   "activate go engine",
   "nextstudio-engine",
   "nativemessaging",
+  "api.qrserver.com",
+  "fonts.googleapis.com",
+  "itty.bitty.site",
+  "spoo.me",
+  "da.gd",
+  "unpkg.com",
+  "cdn.jsdelivr.net",
+  "mount_ui",
+  "remote_ui",
+  "security-core-protected",
+  "nampweb1",
 ];
 
 function checkStoreFileName(relativePath) {
   const lower = relativePath.toLowerCase();
-  if (/\.(exe|dylib|dll|bin|wasm\.js)$/.test(lower)) {
-    // Protected model/STFT assets use the .dat extension. A raw native or
-    // source binary must never be copied into the Store package.
-    if (!lower.endsWith(".dat")) fail(`native/raw binary-looking file in Store ZIP: ${relativePath}`);
+  if (/\.(exe|dylib|dll|wasm\.js)$/.test(lower)) {
+    fail(`native/raw binary-looking file in Store ZIP: ${relativePath}`);
   }
   if (/(^|\/)(go|native|nextstudio-engine)(\/|\.|$)/.test(lower)) {
     fail(`Go/native artifact name in Store ZIP: ${relativePath}`);
@@ -92,6 +107,17 @@ function scanText(file, label) {
   for (const token of forbiddenStoreTokens) {
     if (contents.includes(token)) fail(`${token} found in ${label}`);
   }
+  if (path.extname(file).toLowerCase() === ".html" && /\son[a-z]+\s*=/i.test(contents)) {
+    fail(`inline HTML event handler found in ${label}`);
+  }
+  if (
+    /\.(html|js|mjs|css)$/i.test(file) &&
+    (/<script[^>]+(?:src|href)\s*=\s*["']https?:/i.test(contents) ||
+      /\b(?:import|fetch)\s*\(\s*["'`]https?:/i.test(contents) ||
+      /@import\s+(?:url\()?\s*["']?https?:/i.test(contents))
+  ) {
+    fail(`remote executable/stylesheet URL found in ${label}`);
+  }
 }
 
 if (profile === "store") {
@@ -102,8 +128,69 @@ if (profile === "store") {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   const csp = manifest.content_security_policy?.extension_pages || "";
   if (/127\.0\.0\.1|localhost/i.test(csp)) fail("Store CSP still allows loopback access");
-  if ((manifest.permissions || []).some((permission) => permission === "nativeMessaging")) {
-    fail("Store manifest requests nativeMessaging");
+  if (/qrserver|fonts\.googleapis/i.test(csp)) fail("Store CSP still allows an unnecessary external asset host");
+  if (/\*\.peerjs\.com/i.test(csp)) fail("Store CSP still grants wildcard PeerJS access");
+  if (!/https:\/\/0\.peerjs\.com/.test(csp) || !/wss:\/\/0\.peerjs\.com/.test(csp)) {
+    fail("Store CSP is missing the exact PeerJS signaling host");
+  }
+  const minimumChrome = Number.parseInt(manifest.minimum_chrome_version, 10);
+  if (!Number.isInteger(minimumChrome) || minimumChrome < 116) {
+    fail("Store minimum_chrome_version must be at least 116");
+  }
+
+  const expectedPermissions = ["activeTab", "offscreen", "scripting", "storage", "tabCapture"].sort();
+  const actualPermissions = [...(manifest.permissions || [])].sort();
+  if (JSON.stringify(actualPermissions) !== JSON.stringify(expectedPermissions)) {
+    fail(`Store permissions changed: ${actualPermissions.join(", ")}`);
+  }
+  if (manifest.host_permissions?.length) fail("Store manifest requests broad host permissions");
+  if (manifest.content_scripts?.length) fail("Store manifest statically injects content scripts");
+
+  const webResources = manifest.web_accessible_resources || [];
+  if (
+    webResources.length !== 1 ||
+    webResources[0].resources?.length !== 1 ||
+    webResources[0].resources[0] !== "video-delay-worker.js"
+  ) {
+    fail("Store web-accessible resources are broader than the required video worker");
+  }
+
+  for (const requiredFile of [
+    "THIRD-PARTY-NOTICES.txt",
+    "MODEL-LICENSE.txt",
+    "model/model.json",
+    "model/group1-shard1of1.bin",
+    "stft_simd.wasm",
+    "stft_scalar.wasm",
+  ]) {
+    if (!fs.existsSync(path.join(distDir, requiredFile))) fail(`required Store file is missing: ${requiredFile}`);
+  }
+  requireByteIdentical(
+    path.join(ROOT_DIR, "next-amp-extension", "model", "model.json"),
+    path.join(distDir, "model", "model.json"),
+    "Store model JSON"
+  );
+  requireByteIdentical(
+    path.join(ROOT_DIR, "next-amp-extension", "model", "group1-shard1of1.bin"),
+    path.join(distDir, "model", "group1-shard1of1.bin"),
+    "Store model weights"
+  );
+  requireByteIdentical(
+    path.join(ROOT_DIR, "next-amp-extension", "modules", "ai-vocal", "stft_simd.wasm"),
+    path.join(distDir, "stft_simd.wasm"),
+    "Store SIMD STFT WASM"
+  );
+  requireByteIdentical(
+    path.join(ROOT_DIR, "next-amp-extension", "modules", "ai-vocal", "stft_scalar.wasm"),
+    path.join(distDir, "stft_scalar.wasm"),
+    "Store scalar STFT WASM"
+  );
+  if (outputFiles.some((file) => file.endsWith(".dat"))) fail("encrypted/concealed .dat asset found in Store output");
+  if (outputFiles.some((file) => /remote-app|security-core/i.test(path.basename(file)))) {
+    fail("legacy remote UI or security core found in Store output");
+  }
+  if (outputFiles.some((file) => /^(?:tailwindcss|config)\.js$/i.test(path.basename(file)))) {
+    fail("runtime Tailwind compiler/config found in Store output");
   }
   if (fs.existsSync(path.join(distDir, "INTERNAL-GO-DEV-BUILD.txt"))) {
     fail("internal Go marker was copied into Store output");
@@ -118,6 +205,21 @@ if (profile === "store") {
     for (const token of forbiddenStoreTokens) {
       if (contents.includes(token)) fail(`${token} found in ZIP entry ${entry}`);
     }
+    if (entry.toLowerCase().endsWith(".html") && /\son[a-z]+\s*=/i.test(contents)) {
+      fail(`inline HTML event handler found in ZIP entry ${entry}`);
+    }
+    if (
+      /\.(html|js|mjs|css)$/i.test(entry) &&
+      (/<script[^>]+(?:src|href)\s*=\s*["']https?:/i.test(contents) ||
+        /\b(?:import|fetch)\s*\(\s*["'`]https?:/i.test(contents) ||
+        /@import\s+(?:url\()?\s*["']?https?:/i.test(contents))
+    ) {
+      fail(`remote executable/stylesheet URL found in ZIP entry ${entry}`);
+    }
+  }
+  const playerJsPath = path.join(distDir, "player.js");
+  if (fs.existsSync(playerJsPath) && /getUserMedia\s*\(/i.test(fs.readFileSync(playerJsPath, "utf8"))) {
+    fail("Store player still requests microphone access");
   }
 } else {
   const markerPath = path.join(distDir, "INTERNAL-GO-DEV-BUILD.txt");

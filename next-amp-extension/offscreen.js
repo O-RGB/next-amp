@@ -2,7 +2,11 @@ import { PitchProcessor } from "./pitch-processor.js";
 import { AudioEffects } from "./audio-effects.js";
 import { DBManager } from "./db-manager.js";
 import { RTCServer } from "./modules/rtc-server.js";
-import { REMOTE_UI } from "./remote/remote-ui-bundle.js";
+import {
+  isAllowedRemoteMessage,
+  isValidRemoteHandshake,
+  sanitizeRemoteCommand,
+} from "./modules/remote-protocol.js";
 import { AIVocalManager } from "./modules/ai-vocal/ai-vocal-manager.js";
 import { normalizeAiPowerMode } from "./modules/ai-vocal/ai-power-mode.mjs";
 import { GO_ENGINE_ENABLED } from "./modules/ai-vocal/build-feature-flags.js";
@@ -96,9 +100,42 @@ function recordDonationUsage(session, force = false) {
 }
 
 // --- PEERJS SETUP ---
+const REMOTE_LINK_CACHE_KEY = "remoteLinkCacheV2";
 let hostPeer = null;
 let hostPeerId = null;
 let hostPeerReadyPromise = null;
+
+function destroyHostPeerIfUnused() {
+  // Keep the signaling host alive while at least one active audio session has
+  // a Remote token. This preserves reconnect and multi-tab behavior. Once no
+  // session can accept a Remote handshake, close the PeerJS connection so a
+  // normal audio session does not keep a third-party signaling socket alive.
+  for (const session of sessions.values()) {
+    if (session.remoteToken) return;
+  }
+
+  const peer = hostPeer;
+  hostPeer = null;
+  hostPeerId = null;
+  hostPeerReadyPromise = null;
+  try { peer?.destroy(); } catch (_) {}
+}
+
+async function clearCachedRemoteLink(tabId) {
+  if (!tabId || !chrome.storage?.session) return;
+  try {
+    const data = await chrome.storage.session.get(REMOTE_LINK_CACHE_KEY);
+    const cache = data[REMOTE_LINK_CACHE_KEY] || {};
+    const key = String(tabId);
+    if (!Object.prototype.hasOwnProperty.call(cache, key)) return;
+    delete cache[key];
+    await chrome.storage.session.set({ [REMOTE_LINK_CACHE_KEY]: cache });
+  } catch (_) {
+    // Session cache is only a popup convenience. Token validation still uses
+    // the live offscreen session, so a storage cleanup failure cannot revive a
+    // stopped Remote session.
+  }
+}
 
 function initHostPeer() {
   if (hostPeer && hostPeer.open && !hostPeer.disconnected && hostPeerId) {
@@ -140,11 +177,19 @@ function initHostPeer() {
     peer.on("connection", (conn) => {
       if (peer !== hostPeer) return;
       conn.on("data", (data) => {
-        if (data.type === "HANDSHAKE" && data.token) {
-          mapConnectionToSession(conn, data.token, data.needUI);
-        } else {
-          handleRemoteCommand(conn, data);
+        if (!isAllowedRemoteMessage(data)) {
+          conn.close();
+          return;
         }
+        if (!conn._targetTabId) {
+          if (!isValidRemoteHandshake(data)) {
+            conn.close();
+            return;
+          }
+          mapConnectionToSession(conn, data.token);
+          return;
+        }
+        handleRemoteCommand(conn, data);
       });
       conn.on("close", () => cleanupConnection(conn));
       conn.on("error", () => cleanupConnection(conn));
@@ -207,27 +252,14 @@ async function waitForHostPeerId(timeoutMs = 8000) {
   }
 }
 
-function mapConnectionToSession(conn, token, needUI = false) {
+function mapConnectionToSession(conn, token) {
   for (const [tabId, session] of sessions.entries()) {
     if (session.remoteToken === token) {
       if (!session.remoteConns) session.remoteConns = [];
       session.remoteConns.push(conn);
       conn._targetTabId = tabId;
 
-      if (needUI) {
-        const currentEq = session.effects
-          ? session.effects.getEQNodes().map((n) => n.gain.value)
-          : session.params.eq;
-        conn.send({
-          type: "MOUNT_UI",
-          css: REMOTE_UI.css,
-          html: REMOTE_UI.html,
-          js: REMOTE_UI.js,
-          state: { ...session.params, eq: currentEq },
-        });
-      } else {
-        syncStateToRemote(session, conn);
-      }
+      syncStateToRemote(session, conn);
       return;
     }
   }
@@ -246,20 +278,22 @@ function cleanupConnection(conn) {
 function handleRemoteCommand(conn, data) {
   const tabId = conn._targetTabId;
   if (!tabId || !sessions.has(tabId)) return;
+  const command = sanitizeRemoteCommand(data);
+  if (!command) return;
 
-  if (data.type === "SET_PARAM") {
+  if (command.type === "SET_PARAM") {
     // Update Params and Broadcast
     updateParams({
-      ...data,
+      ...command,
       tabId: tabId,
       isShared: false,
       source: "remote",
     });
-  } else if (data.type === "GET_STATE") {
+  } else if (command.type === "GET_STATE") {
     const session = sessions.get(tabId);
     if (session) syncStateToRemote(session, conn);
-  } else if (data.type === "PING") {
-    conn.send({ type: "PONG", ts: data.ts });
+  } else if (command.type === "PING") {
+    conn.send({ type: "PONG", ts: command.ts });
   }
 }
 
@@ -308,7 +342,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = msg.tabId;
 
   if (msg.type === "START_CAPTURE") {
-    initHostPeer().catch(() => {});
     startAudio(
       msg.streamId,
       tabId,
@@ -389,7 +422,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return;
       }
       if (!session.remoteToken) {
-        session.remoteToken = `tab-${tabId}-${Date.now().toString(36)}`;
+        const tokenBytes = new Uint8Array(24);
+        crypto.getRandomValues(tokenBytes);
+        session.remoteToken = btoa(String.fromCharCode(...tokenBytes))
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/g, "");
       }
       sendResponse({ hostId: readyId, token: session.remoteToken });
     }).catch((error) => {
@@ -653,7 +691,11 @@ async function stopAudio(tabId) {
   beginCaptureEpoch(tabId);
   rtcServer.stopSession(tabId);
   const session = sessions.get(tabId);
-  if (!session) return;
+  if (!session) {
+    await clearCachedRemoteLink(tabId);
+    destroyHostPeerIfUnused();
+    return;
+  }
   if (session.donationUsageTimer) clearInterval(session.donationUsageTimer);
   // Flush usage before tearing down the audio context.
   recordDonationUsage(session, true);
@@ -685,6 +727,8 @@ async function stopAudio(tabId) {
     } catch (e) {}
   }
   sessions.delete(tabId);
+  await clearCachedRemoteLink(tabId);
+  destroyHostPeerIfUnused();
 
   // A destroyed manager may still be finishing a model/backend promise. Give
   // it a bounded grace period before reporting STOP_CAPTURE complete so a

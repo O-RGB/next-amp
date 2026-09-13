@@ -1,14 +1,38 @@
 NextStudio Public Site — Third-party notices
 
-PeerJS
--------
-The Remote page bundles the PeerJS browser client locally so it does not load
-remote JavaScript from a CDN. The bundled file is copied from:
-  next-amp-extension/assets/js/peerjs.min.js
+PeerJS 1.5.5
+------------
+Copyright PeerJS contributors. Licensed under the MIT License.
+Upstream: https://github.com/peers/peerjs
 
-Before production publication, verify and preserve the upstream PeerJS license
-notice/version that applies to the bundled file. The public site does not
-execute JavaScript, HTML, CSS or WASM received from an Extension session.
+The Remote page bundles the PeerJS browser client locally so it does not load
+remote JavaScript from a CDN. The public copy is byte-identical to the
+Extension vendor copy and has this SHA-256 fingerprint:
+  95f57b9e94e1b96c829145b3f3ef0d04b332c9bda0567e144bed70d13712e3d0
+
+The public site does not execute JavaScript, HTML, CSS or WASM received from an
+Extension session.
+
+MIT License
+-----------
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 External services
 -----------------

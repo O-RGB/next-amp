@@ -1,18 +1,15 @@
 {
   "manifest_version": 3,
   "name": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
-  "description": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
+  "description": "Adjust browser audio with pitch, EQ, AI vocal modes, recording, remote control, and video synchronization.",
   "version": "1.0",
+  "minimum_chrome_version": "116",
   "permissions": [
     "tabCapture",
     "offscreen",
     "activeTab",
-    "tabs",
     "scripting",
     "storage"
-  ],
-  "host_permissions": [
-    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
@@ -26,36 +23,11 @@
   },
   "web_accessible_resources": [
     {
-      "resources": [
-        "assets/libs/mjs/SignalsmithStretch.mjs",
-        "assets/libs/js/tailwindcss.js",
-        "assets/css/phosphor.css",
-        "assets/fonts/Phosphor-Bold.woff2",
-        "assets/libs/js/peerjs.min.js",
-        "assets/libs/js/tf.min.js",
-        "assets/libs/js/tf-backend-webgpu.min.js",
-        "modules/ai-vocal/vocal-worklet.js",
-        "modules/ai-vocal/vocal-worker.js",
-        "modules/ai-vocal/stft_simd.wasm",
-        "modules/ai-vocal/stft_scalar.wasm",
-        "model/model.json",
-        "model/group1-shard1of1.bin",
-        "remote/dos-remote.html",
-        "debug-ai.html",
-        "debug-ai.js"
-      ],
+      "resources": ["video-delay-worker.js"],
       "matches": ["<all_urls>"]
     }
   ],
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["video-delay.js", "video-zoom.js"],
-      "run_at": "document_start",
-      "all_frames": true
-    }
-  ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:* ws://localhost:* http://localhost:* https://*.peerjs.com wss://*.peerjs.com; img-src 'self' data: https://api.qrserver.com"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:* ws://localhost:* http://localhost:* https://0.peerjs.com wss://0.peerjs.com; img-src 'self' data:"
   }
 }

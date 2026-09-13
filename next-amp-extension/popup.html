@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NextStudio - Pitch Shifter, AI Vocal &amp; Video Sync</title>
 
-    <link
-      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;600&family=Sarabun:wght@300;400;600&display=swap"
-      rel="stylesheet"
-    />
     <script src="./assets/js/tailwindcss.js"></script>
     <script src="./assets/js/config.js"></script>
     <link rel="stylesheet" href="./assets/css/phosphor.css" />
@@ -81,45 +77,46 @@
       </div>
     </div>
 
-    <!-- First-Launch "Buy Me a Coffee" Modal -->
-    <div id="first-launch-overlay" class="z-[160000]">
+    <!-- One-time disclosure shown before the first tab-audio capture. -->
+    <div id="first-launch-overlay" class="z-[160000]" role="dialog" aria-modal="true" aria-labelledby="first-launch-title">
       <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">
         <div class="theme-bar justify-between mb-2">
           <span class="flex items-center gap-1 font-bold">
-            <i class="ph-bold ph-coffee text-amber-300"></i>
-            <span>SUPPORT NEXTSTUDIO</span>
+            <i class="ph-bold ph-shield-check text-emerald-300"></i>
+            <span id="first-launch-title">BEFORE AUDIO STARTS</span>
           </span>
           <button id="btn-close-first-launch" class="win-btn text-red-900 font-bold bg-[#e0e0e0]">X</button>
         </div>
         <div class="bg-[#222] p-4 flex flex-col gap-3 items-center text-center">
-          <div class="w-12 h-12 rounded-full border border-amber-500/60 bg-amber-500/10 flex items-center justify-center text-amber-400 text-2xl animate-pulse">
-            <i class="ph-bold ph-coffee"></i>
+          <div class="w-12 h-12 rounded-full border border-emerald-500/60 bg-emerald-500/10 flex items-center justify-center text-emerald-300 text-2xl">
+            <i class="ph-bold ph-waveform"></i>
           </div>
           <div class="flex flex-col gap-0.5">
-            <span class="text-[11px] font-bold text-amber-300 font-pixel uppercase tracking-wide">
-              Buy Me a Coffee!
+            <span class="text-[11px] font-bold text-emerald-300 font-pixel uppercase tracking-wide">
+              LOCAL TAB AUDIO PROCESSING
             </span>
             <span class="text-[7.5px] text-gray-400 font-pixel">
-              COMMUNITY SUPPORT
+              YOUR CHOICE · YOUR CURRENT TAB
             </span>
           </div>
-          <p class="text-white text-[9.5px] font-pixel leading-relaxed">
-            Thank you for using NextStudio! If you enjoy this tool, please consider buying me a coffee to support continuous development and updates.
+          <p class="text-white text-[9px] font-pixel leading-relaxed text-left">
+            When Audio is ON, NextStudio captures sound from the selected tab and processes it locally for audio effects and optional AI Vocal. Ordinary audio is not uploaded to NextFeeder Labs. Remote sends control values only, while its connection service may receive technical connection metadata.
+          </p>
+          <p class="text-gray-400 text-[8px] font-pixel leading-relaxed text-left">
+            Recording starts only when you press REC and stays in local Extension storage. Record only content you own or are authorized to record.
           </p>
           <div class="flex flex-col gap-2 w-full mt-1">
             <button
-              id="btn-first-launch-donate"
-              class="win-btn h-8 bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] text-[#4a2810] font-bold font-pixel text-[9px] flex items-center justify-center gap-1.5 border border-[#b48608] shadow cursor-pointer active:scale-95"
+              id="btn-first-launch-continue"
+              class="win-btn h-8 bg-emerald-900 hover:bg-emerald-800 text-emerald-100 font-bold font-pixel text-[9px] flex items-center justify-center gap-1.5 border border-emerald-500 shadow cursor-pointer active:scale-95"
             >
-              <i class="ph-bold ph-coffee text-[10px]"></i>
-              <span class="tracking-wide uppercase">BUY ME A COFFEE</span>
+              <i class="ph-bold ph-check text-[10px]"></i>
+              <span class="tracking-wide uppercase">CONTINUE</span>
             </button>
-            <button
-              id="btn-first-launch-dismiss"
-              class="win-btn h-6 bg-gray-700 text-gray-300 hover:bg-gray-600 cursor-pointer"
-            >
-              <span class="text-[8px]">MAYBE LATER</span>
-            </button>
+            <div class="flex gap-1.5">
+              <button id="btn-first-launch-cancel" class="win-btn h-6 flex-1 bg-gray-700 text-gray-300 hover:bg-gray-600 cursor-pointer"><span class="text-[8px]">KEEP AUDIO OFF</span></button>
+              <button id="btn-first-launch-privacy" class="win-btn h-6 flex-1 bg-gray-800 text-gray-300 hover:bg-gray-700 cursor-pointer"><span class="text-[8px]">PRIVACY POLICY</span></button>
+            </div>
           </div>
         </div>
       </div>
@@ -533,6 +530,9 @@
                   <i class="ph-bold ph-coffee text-[9px]"></i>
                   <span>BUY ME A COFFEE</span>
                 </button>
+                <button id="btn-privacy-about" class="win-btn h-5 px-2 text-[8px] text-gray-300 bg-gray-800 hover:bg-gray-700 cursor-pointer mt-0.5">
+                  <span>PRIVACY POLICY</span>
+                </button>
               </div>
             </div>
           </div>
@@ -827,14 +827,6 @@
           <i class="ph-bold ph-monitor-play"></i>
           <span>VIDEO</span>
         </div>
-        <button
-          id="btn-buy-coffee"
-          class="win-btn h-3.5 px-1.5 text-[8px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center gap-1 border border-[#b48608] shadow-sm cursor-pointer select-none transition-transform"
-          title="Buy Me a Coffee (Support developer)"
-        >
-          <i class="ph-bold ph-coffee text-[9px] text-[#5c3814]"></i>
-          <span class="tracking-tight uppercase">BUY ME A COFFEE</span>
-        </button>
       </div>
       <div
         class="p-1.5 grid grid-cols-2 gap-1 bg-[#222]"

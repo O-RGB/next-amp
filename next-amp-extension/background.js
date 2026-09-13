@@ -194,65 +194,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
-  if (msg.type === "PING") {
-    sendResponse({
-      status: "PONG",
-      version: chrome.runtime.getManifest().version,
-    });
-    return false;
-  }
-
-  if (msg.type === "START_CAPTURE") {
-    if (!sender || !sender.tab) {
-      sendResponse({ success: false, error: "No sender tab" });
-      return false;
-    }
-
-    chrome.tabCapture.getMediaStreamId(
-      { targetTabId: sender.tab.id },
-      (streamId) => {
-        if (chrome.runtime.lastError || !streamId) {
-          sendResponse({
-            success: false,
-            error: chrome.runtime.lastError?.message,
-          });
-          return;
-        }
-        chrome.runtime.sendMessage({
-          type: "START_CAPTURE",
-          streamId: streamId,
-          tabId: sender.tab.id,
-          latencyHint: msg.latencyHint,
-          sampleRate: msg.sampleRate,
-        });
-        sendResponse({ success: true });
-      }
-    );
-    return true;
-  } else if (msg.type === "STOP_CAPTURE") {
-    // Wait for the offscreen document to invalidate/tear down the capture.
-    // Returning immediately lets the popup close while START_CAPTURE is still
-    // preparing a stream, which used to leave an orphaned AI load behind.
-    chrome.runtime.sendMessage(msg, (response) => {
-      // Reading lastError prevents Chrome from reporting an unhandled
-      // "Receiving end does not exist" warning when the offscreen document is
-      // already gone.
-      void chrome.runtime.lastError;
-      sendResponse(response || { success: true });
-    });
-    return true;
-  } else if (msg.type === "SET_PARAM") {
-    chrome.runtime.sendMessage(msg);
-    sendResponse({ success: true });
-  } else if (msg.type === "GET_STATE") {
-    chrome.runtime.sendMessage(msg, (response) => {
-      sendResponse(response || {});
-    });
-    return true;
-  }
-});
-
 chrome.tabs.onRemoved.addListener((tabId) => {
   removeMap(tabId).then((sourceTabId) => {
     if (sourceTabId) {

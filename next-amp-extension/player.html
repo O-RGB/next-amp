@@ -218,6 +218,33 @@
         margin-bottom: 2px;
       }
 
+      .support-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: #141200;
+        border: 1px solid #4d3e00;
+        color: #ffd966;
+        text-decoration: none;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+        padding: 7px 14px;
+        border-radius: 2px;
+        transition: background 0.2s, border-color 0.2s;
+      }
+
+      .support-link:hover {
+        background: #262000;
+        border-color: #997a00;
+      }
+
+      .support-link span:first-child {
+        font-size: 0.9rem;
+        line-height: 1;
+      }
+
       audio {
         display: none;
       }
@@ -257,9 +284,7 @@
             href="https://ganknow.com/nextfeederlabs/tip"
             target="_blank"
             rel="noopener noreferrer"
-            style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: #141200; border: 1px solid #4d3e00; color: #ffd966; text-decoration: none; font-size: 0.72rem; font-weight: 700; letter-spacing: 1px; padding: 7px 14px; border-radius: 2px; transition: all 0.2s;"
-            onmouseover="this.style.background='#262000'; this.style.borderColor='#997a00';"
-            onmouseout="this.style.background='#141200'; this.style.borderColor='#4d3e00';"
+            class="support-link"
           >
             <span style="font-size: 0.9rem; line-height: 1;">☕</span>
             <span>BUY ME A COFFEE</span>

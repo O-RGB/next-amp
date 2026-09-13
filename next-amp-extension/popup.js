@@ -2,7 +2,9 @@ import { DBManager } from "./db-manager.js";
 import { $, $$, sendMessageWithRetry } from "./assets/js/utils.js";
 import { SessionManager } from "./modules/session-manager.js";
 import { SettingsModal } from "./modules/settings-modal.js";
+import { requireAudioDisclosure } from "./modules/audio-disclosure.js";
 import { normalizeAiPowerMode } from "./modules/ai-vocal/ai-power-mode.mjs";
+import qrcode from "qrcode-generator";
 import { GO_ENGINE_ENABLED } from "./modules/ai-vocal/build-feature-flags.js";
 import {
   ENGINE_TYPE,
@@ -13,8 +15,6 @@ import {
   ENGINE_ACTIVATE_LABEL,
 } from "./modules/ai-vocal/engine-client-runtime.js";
 
-const ITTY_BITTY_HASH =
-  "NextStudio-DOS/data:text/html;charset=utf-8;bxze64,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";
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 const LABELS = [
   "60",
@@ -42,6 +42,7 @@ const DONATION_MIN_SESSIONS = 3;
 const DONATION_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 const DONATION_MAX_PROMPTS = 3;
 const AI_VOCAL_INFO_SEEN_KEY = "hasSeenAiVocalInfoModal";
+const AUDIO_DISCLOSURE_ACCEPTED_KEY = "hasAcceptedAudioDisclosure";
 const REMOTE_PUBLIC_URL = "https://studio.nextfeeder.com/remote";
 // Version the cache so links generated by older builds can never be restored.
 const REMOTE_LINK_CACHE_KEY = "remoteLinkCacheV2";
@@ -183,29 +184,35 @@ function notifyAction(key, value, { source = "local", immediate = false, groupOv
 }
 
 async function checkFirstLaunchModal() {
-  const data = await chrome.storage.local.get(["hasSeenWelcomeDonateModal"]);
-  if (!data.hasSeenWelcomeDonateModal) {
-    const overlay = $("#first-launch-overlay");
-    if (!overlay) return;
+  const overlay = $("#first-launch-overlay");
 
-    const btnDonate = $("#btn-first-launch-donate");
-    const btnDismiss = $("#btn-first-launch-dismiss");
-    const btnClose = $("#btn-close-first-launch");
-
-    const dismissDonate = (openLink = false) => {
-      chrome.storage.local.set({ hasSeenWelcomeDonateModal: true });
-      overlay.classList.remove("active");
-      if (openLink) {
-        chrome.tabs.create({ url: DONATION_URL });
+  return requireAudioDisclosure({
+    readConsent: async () => {
+      const data = await chrome.storage.local.get(AUDIO_DISCLOSURE_ACCEPTED_KEY);
+      return Boolean(data[AUDIO_DISCLOSURE_ACCEPTED_KEY]);
+    },
+    saveConsent: () => chrome.storage.local.set({ [AUDIO_DISCLOSURE_ACCEPTED_KEY]: true }),
+    waitForDecision: () => new Promise((resolve) => {
+      if (!overlay) {
+        resolve(false);
+        return;
       }
-    };
-
-    if (btnDonate) btnDonate.onclick = () => dismissDonate(true);
-    if (btnDismiss) btnDismiss.onclick = () => dismissDonate(false);
-    if (btnClose) btnClose.onclick = () => dismissDonate(false);
-
-    overlay.classList.add("active");
-  }
+      let settled = false;
+      const finish = (accepted) => {
+        if (settled) return;
+        settled = true;
+        overlay.classList.remove("active");
+        resolve(accepted);
+      };
+      $("#btn-first-launch-continue").onclick = () => finish(true);
+      $("#btn-first-launch-cancel").onclick = () => finish(false);
+      $("#btn-close-first-launch").onclick = () => finish(false);
+      $("#btn-first-launch-privacy").onclick = () => {
+        chrome.tabs.create({ url: "https://studio.nextfeeder.com/privacy" });
+      };
+      overlay.classList.add("active");
+    }),
+  });
 }
 
 async function maybeShowUsageDonateModal(audioState) {
@@ -215,11 +222,7 @@ async function maybeShowUsageDonateModal(audioState) {
   const overlay = $("#usage-donate-overlay");
   if (!overlay || overlay.classList.contains("active")) return;
 
-  const data = await chrome.storage.local.get([
-    "hasSeenWelcomeDonateModal",
-    "donationUsage",
-  ]);
-  if (!data.hasSeenWelcomeDonateModal) return;
+  const data = await chrome.storage.local.get(["donationUsage"]);
 
   const usage = data.donationUsage || {};
   const usageMs = Number(usage.usageMs) || 0;
@@ -282,8 +285,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // YouTube/media-tab gate or requiring a content-script ping.
   isTabReady = true;
   const videoContentScriptsReady = ensureVideoContentScripts(currentTabId);
-  checkFirstLaunchModal();
-
   sessionManager = new SessionManager(currentTabId);
   settingsModal = new SettingsModal(db, {
     onThemeChange: applyTheme,
@@ -483,7 +484,10 @@ async function finalizeInitialization() {
 
   if (state && state.isAudioActive) {
     loadAudioState(state);
-    isAudioMasterOn = true;
+    // The offscreen session can remain alive while output is muted/suspended
+    // (for example after a Remote client sends AUDIO OFF). Restore the real
+    // state instead of forcing the popup UI to ON whenever a session exists.
+    isAudioMasterOn = state.isAudioMasterOn !== false;
     // The popup is recreated every time it is reopened. Restore the recorder
     // state from the offscreen session instead of trusting the new popup's
     // default (false) value. Otherwise a still-recording MediaRecorder looks
@@ -492,7 +496,13 @@ async function finalizeInitialization() {
   } else {
     syncRecordingUI(false);
     if (isAudioMasterOn && isTabReady) {
-      initCapture(sessionManager.sessionMode);
+      const accepted = await checkFirstLaunchModal();
+      if (accepted) {
+        initCapture(sessionManager.sessionMode);
+      } else {
+        isAudioMasterOn = false;
+        await sessionManager.setSetting({ isAudioMasterOn: false });
+      }
     }
   }
 
@@ -635,8 +645,6 @@ async function setupRemoteUI() {
   const urlDisplay = $("#remote-url-display");
   const btnCloseQr = $("#btn-close-qr");
   const btnCopyUrl = $("#btn-copy-url");
-  let qrRequestUrl = "";
-  let qrRetryCount = 0;
   let qrLoadGeneration = 0;
 
   const setQrLoading = (message) => {
@@ -647,15 +655,21 @@ async function setupRemoteUI() {
     }
   };
 
-  const loadQrImage = (url) => {
-    qrRequestUrl = url;
-    qrRetryCount = 0;
+  const loadQrImage = (remoteUrl) => {
     qrLoadGeneration += 1;
     const generation = qrLoadGeneration;
-    setQrLoading("LOADING QR...");
-    if (qrImage) {
-      qrImage.dataset.qrGeneration = String(generation);
-      qrImage.src = `${url}&_=${Date.now()}`;
+    setQrLoading("CREATING QR...");
+    try {
+      const code = qrcode(0, "M");
+      code.addData(remoteUrl, "Byte");
+      code.make();
+      if (qrImage) {
+        qrImage.dataset.qrGeneration = String(generation);
+        qrImage.src = code.createDataURL(4, 8);
+      }
+    } catch (error) {
+      console.error("Local QR generation failed", error);
+      setQrLoading("QR UNAVAILABLE — COPY LINK");
     }
   };
 
@@ -677,25 +691,10 @@ async function setupRemoteUI() {
     qrImage.classList.remove("hidden");
   });
 
-  qrImage?.addEventListener("error", () => {
-    if (qrImage.dataset.qrGeneration !== String(qrLoadGeneration)) return;
-    if (qrRetryCount < 2 && qrRequestUrl) {
-      qrRetryCount += 1;
-      setQrLoading(`RETRYING QR ${qrRetryCount}/2...`);
-      setTimeout(() => {
-        if (qrImage && qrImage.dataset.qrGeneration === String(qrLoadGeneration)) {
-          qrImage.src = `${qrRequestUrl}&_=${Date.now()}`;
-        }
-      }, 500);
-    } else {
-      setQrLoading("QR SERVER UNAVAILABLE");
-    }
-  });
+  qrImage?.addEventListener("error", () => setQrLoading("QR UNAVAILABLE — COPY LINK"));
 
   btnConnect.addEventListener("click", async () => {
     qrLoadGeneration += 1;
-    qrRequestUrl = "";
-    qrRetryCount = 0;
     setQrLoading("CONNECTING REMOTE...");
     qrOverlay.classList.remove("hidden");
     try {
@@ -740,10 +739,7 @@ async function setupRemoteUI() {
         }
 
         urlDisplay.value = finalUrl;
-        const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
-          finalUrl
-        )}`;
-        loadQrImage(qrApi);
+        loadQrImage(finalUrl);
       } else {
         setQrLoading("REMOTE ID NOT READY");
         alert("Remote ID not ready. Please turn Audio Master ON first.");
@@ -1336,8 +1332,10 @@ async function handleRecordingSaved() {
 }
 
 function setupListeners() {
-  $("#btn-toggle-audio").addEventListener("click", () => {
-    isAudioMasterOn = !isAudioMasterOn;
+  $("#btn-toggle-audio").addEventListener("click", async () => {
+    const nextAudioState = !isAudioMasterOn;
+    if (nextAudioState && !(await checkFirstLaunchModal())) return;
+    isAudioMasterOn = nextAudioState;
     updateMasterTogglesUI();
     sessionManager.setSetting({ isAudioMasterOn });
 
@@ -1692,10 +1690,14 @@ function setupListeners() {
   const openCoffeeDonation = () => {
     chrome.tabs.create({ url: DONATION_URL });
   };
-  const buyCoffeeBtn = $("#btn-buy-coffee");
-  if (buyCoffeeBtn) buyCoffeeBtn.addEventListener("click", openCoffeeDonation);
   const donateAboutBtn = $("#btn-donate-about");
   if (donateAboutBtn) donateAboutBtn.addEventListener("click", openCoffeeDonation);
+  const privacyAboutBtn = $("#btn-privacy-about");
+  if (privacyAboutBtn) {
+    privacyAboutBtn.addEventListener("click", () => {
+      chrome.tabs.create({ url: "https://studio.nextfeeder.com/privacy" });
+    });
+  }
 }
 
 function updateEqToggleButton() {
