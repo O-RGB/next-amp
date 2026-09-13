@@ -6,11 +6,14 @@ NextStudio distributes a TensorFlow.js GraphModel consisting of:
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `model.json` | `f55cdb7f1803358392a90cec64286c8fce9cae8479f315a9fc454fee73d5ad88` |
-| `group1-shard1of1.bin` | `678f41db6d50f3938f9e2264c98b21a240ade43554097ce32c9fb05789be491e` |
+| `model.json` | `8917532971a28410af9c01011c1c1cfbb6ce6e6bfbe667bb2c7d09e425fbaa07` |
+| `group1-shard1of1.bin` | `13cafca89123ac168bf2d45adbd916b2d67bbbdc7cfeee56ed03947f7421f135` |
 
-The graph accepts and returns `[1, 1024, 64, 2]`. Its manifest has 161
-FP16-quantized floating-point tensors and 116 integer graph constants.
+The browser graph accepts the complete `[1, 1024, 64, 2]` context and returns
+the 15-frame ECO mask as `[2, 15, 1024]`. Its manifest has 161 FP16-quantized
+floating-point tensors and 121 integer graph constants. A conservative full
+output topology is embedded as compatibility metadata and shares the same
+weight shard; it does not require a second model download.
 
 ## Upstream identity
 
@@ -41,8 +44,13 @@ the public MIT architecture and maps the checkpoint without reading the local
 - TensorFlow.js FP16 -> PyTorch parity: MAE `2.01e-4`, cosine similarity
   `0.9999896`; this matches the established production FP16 error envelope.
 - ONNX -> PyTorch parity: MAE `2.01e-4`, cosine similarity `0.9999896`.
-- A deterministic fixture produced exactly the same TensorFlow.js mask as the
-  previous production model (`MAE 0`, max error 0).
+- Build-time graph folding removes converter-only reordering and standalone
+  padding nodes. Only the frame-independent final 1x1 projection is restricted
+  to ECO's 15 output frames; the decoder and its 64-frame input context remain
+  complete.
+- A deterministic fixture produced exactly the same active ECO mask as the
+  conservative full-output graph (`MAE 0`, max error 0), which in turn matches
+  the established production model.
 - Two clean consecutive builds produced identical hashes for the TFJS metadata,
   TFJS weight shard and ONNX model.
 

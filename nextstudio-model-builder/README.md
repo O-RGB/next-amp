@@ -8,6 +8,9 @@ This directory contains the automated pipeline for reproducing the `MGM_MAIN_v4`
 - Exact architecture definition matching `CascadedASPPNet v4`
 - Folds PyTorch BatchNorm operations into Convolution/Dense weights
 - Exports to TensorFlow SavedModel, TensorFlow.js FP16, and ONNX
+- Prebuilds the browser graph folds and the exact 15-frame ECO projection so
+  client devices do not parse and rewrite the model at startup
+- Embeds a conservative compatibility topology that shares the same weights
 - Executes PyTorch, SavedModel, TensorFlow.js and ONNX parity tests before deploy
 - Atomic deployment pipeline
 
@@ -15,7 +18,10 @@ The generated files are not expected to have the same byte hash as a model
 serialized by a different TensorFlow version. Verification compares the
 effective mask produced from deterministic input. The browser artifact also
 has to stay within the same FP16 error envelope as the previous production
-model.
+model. Its optimized ECO mask must additionally match the embedded full-output
+topology with zero measured error. The optimization does not shorten the
+model's 64-frame input or decoder context; it crops only the input to the final
+frame-independent 1x1 projection.
 
 ## Usage
 
@@ -39,7 +45,7 @@ npm run model:build:deploy
 ```
 
 ## Structure
-- `src/` - Python scripts for conversion and weight mapping
+- `src/` - conversion, weight mapping, and build-time TFJS graph optimization
 - `scripts/` - Bash scripts for build/verify/deploy automation
 - `source/` - Contains the downloaded `.pth` and `SOURCE.json`
 - `config/` - Model architecture parameters and parity thresholds

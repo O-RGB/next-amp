@@ -20,8 +20,8 @@ const FORBIDDEN_REFERENCE_HASHES = new Map([
 ]);
 
 const MODEL_HASHES = new Map([
-  ["model.json", "f55cdb7f1803358392a90cec64286c8fce9cae8479f315a9fc454fee73d5ad88"],
-  ["group1-shard1of1.bin", "678f41db6d50f3938f9e2264c98b21a240ade43554097ce32c9fb05789be491e"],
+  ["model.json", "8917532971a28410af9c01011c1c1cfbb6ce6e6bfbe667bb2c7d09e425fbaa07"],
+  ["group1-shard1of1.bin", "13cafca89123ac168bf2d45adbd916b2d67bbbdc7cfeee56ed03947f7421f135"],
 ]);
 
 const MODEL_DIRECTORIES = [

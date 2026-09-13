@@ -39,13 +39,6 @@ const DEFAULT_VOCAL_PROFILE = "ai_remove";
 // absolute frames from the existing full model output. This does not enable
 // the rejected compact output head, alter the Detail timeline, or touch GO.
 const WEB_OVERLAP_CONSENSUS_CANDIDATE = false;
-// Exact graph folding is enabled independently: it preserves weights and
-// model equations while removing export-only data-reordering/padding nodes.
-const EXACT_MODEL_GRAPH_OPTIMIZATION = true;
-// Keep the output-head/ROI candidate available for isolated provider tests,
-// but leave it off in production until CoreML and DirectML audio listening
-// gates confirm that backend-specific slicing does not add vocal artifacts.
-const EXACT_MODEL_OUTPUT_HEAD = false;
 // Phase B1 listening candidate. Keep the current baseline available by
 // changing this single flag back to false; the floor never affects Acapella.
 const ENABLE_ATTENUATION_FLOOR_CANDIDATE = false;
@@ -860,9 +853,12 @@ export class AIVocalManager {
         if (includeOverlapWindow) {
           return outTensor;
         }
-        // The exact output head already crops, transposes, reshapes and applies
-        // sigmoid. Only select the active profile's sub-range from its shared
-        // output window.
+        // ECO's build-time head is already the exact active profile window.
+        // Return it directly instead of launching an identical GPU slice on
+        // every chunk. A wider compatibility head may still use the slice.
+        if (localStart === 0 && frames === this.modelOutputHead.frames) {
+          return outTensor;
+        }
         return outTensor.slice([0, localStart, 0], [2, frames, _]);
       }
 
@@ -1958,29 +1954,10 @@ export class AIVocalManager {
 
       const modelUrl = chrome.runtime.getURL("model/model.json");
       const ioHandler = createProtectedModelSource(tf, modelUrl);
-      const modelLoader = createVocalModelLoader(tf, ioHandler, {
-        optimizeGraph: EXACT_MODEL_GRAPH_OPTIMIZATION,
-        // Smooth (15 frames, start 34) and Detail (16 frames, start 32) use
-        // the first half of this shared 32-frame output window. The second
-        // half is the already-computed tail used by overlap consensus. GO
-        // keeps its original ONNX path.
-        outputHead: EXACT_MODEL_OUTPUT_HEAD ? {
-          start: 32,
-          frames: 32,
-          bins: _,
-          // The final 1x1 projection is frame-independent. Restrict only
-          // that projection to the shared window; the decoder and all
-          // boundary context remain unchanged. The optimizer rejects this
-          // candidate automatically if the exported graph is different.
-          headStart: 0,
-          sourceCrop: { start: 32, frames: 32, inputFrames: 64, bins: _ },
-          // The preceding 3x3 SAME decoder layer needs one-frame halo on
-          // the left. Crop only its input to [31..63], then select [32..63]
-          // from its local [0..32] output. All other decoder layers keep
-          // their full context until this candidate is proven exact.
-          decoderCrop: { start: 31, frames: 33, inputFrames: 64, channels: 96, bins: _ }
-        } : undefined
-      });
+      // Graph folding and the safe projection-only output crop are generated
+      // once by nextstudio-model-builder. Runtime loading only selects the
+      // verified graph or its embedded compatibility topology.
+      const modelLoader = createVocalModelLoader(tf, ioHandler);
 
       const runWarmup = async () => {
         const processing = this.getProcessingConfig();
@@ -1994,7 +1971,7 @@ export class AIVocalManager {
           // Flush the accelerator pipeline and compile the readback path too.
           await maskTensor.data();
         } finally {
-          if (maskTensor) maskTensor.dispose();
+          if (maskTensor && maskTensor !== outTensor) maskTensor.dispose();
           if (outTensor) outTensor.dispose();
           dummyInput.dispose();
         }
@@ -2111,7 +2088,7 @@ export class AIVocalManager {
         const benchOut = this.model.execute(benchIn);
         benchIn.dispose();
         const benchMask = this.extractModelMask(benchOut, processing);
-        benchOut.dispose();
+        if (benchMask !== benchOut) benchOut.dispose();
         await benchMask.data();
         benchMask.dispose();
         benchmarkMs = Math.round(performance.now() - tBench0);
