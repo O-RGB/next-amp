@@ -1,6 +1,6 @@
 # AI Vocal Robotic Residual Reduction Plan
 
-สถานะ: **Implementation in progress — กลุ่ม Diagnostic foundation และ zero-runtime-cost artifact tooling เสร็จแล้ว; ยังไม่แก้ production model, DSP หรือ Extension**
+สถานะ: **Implementation in progress — กลุ่ม Diagnostic, zero-runtime-cost และ head-only training tooling เสร็จแล้ว; ยังไม่แก้ production model, DSP หรือ Extension**
 
 เอกสารนี้มีไว้ส่งต่อให้ AI/ผู้พัฒนารอบถัดไปทำงานได้โดยไม่ต้องเดาวิธีเอง
 เป้าหมายคือทดลองลดเสียงร้องตกค้างที่ฟังเป็นเสียงเบา ๆ แบบหุ่นยนต์ใน Karaoke
@@ -280,14 +280,15 @@ Metric ใช้เป็น gate ไม่ใช่ตัวแทนการ�
 
 ### Training contract
 
-- [ ] Input ต้องใช้ preprocessing เดียวกับ production: 44.1 kHz stereo,
+- [x] เพิ่ม private stem manifest/NPZ preparation tool ที่ใช้ preprocessing เดียวกับ production
+- [x] Input ต้องใช้ preprocessing เดียวกับ production: 44.1 kHz stereo,
       FFT 2048, hop 512, magnitude normalization และ context 64 frames
-- [ ] Loss หลักคำนวณเฉพาะ active ECO frames `34..48` แต่ input context ต้องยังครบ
-- [ ] Reconstruction ต้องใช้ mixture complex STFT/phase แบบเดียวกับ runtime
-- [ ] Freeze ทุก parameter ยกเว้น final `out.weight`
-- [ ] เริ่มจาก official/reproducible MGM checkpoint ปัจจุบัน
-- [ ] ใช้ learning rate ต่ำ, deterministic seed และ early stopping
-- [ ] แบ่ง validation/test ตามเพลงและบันทึกทุก run config
+- [x] Loss หลักคำนวณเฉพาะ active ECO frames `34..48` แต่ input context ต้องยังครบ
+- [x] Reconstruction ใช้ mixture complex STFT/phase แบบเดียวกับ runtime
+- [x] Freeze ทุก parameter ยกเว้น final `out.weight`
+- [x] เริ่มจาก official/reproducible SavedModel checkpoint ปัจจุบัน
+- [x] ใช้ learning rate ต่ำ, deterministic seed และเลือก best validation checkpoint
+- [x] แบ่ง validation/test ตามเพลงผ่าน manifest และบันทึกทุก run config
 
 ### Loss ที่ต้องมี
 

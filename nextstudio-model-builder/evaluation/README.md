@@ -66,3 +66,46 @@ The accepted range is deliberately limited to `0.95..1.10`. The script fails
 if the final head cannot be proven to be `[1,1,32,2]` FP16 storage, preserves
 the original model, writes `CALIBRATION.json`, and never deploys the output.
 The scalar is not a quality setting; it must come from validation data.
+
+## Head-only fine-tuning
+
+Create a private manifest first. Each row must identify one complete song and
+point to three matching 44.1 kHz WAV files:
+
+```json
+[
+  {
+    "id": "owned-song-001",
+    "mixture": "/private/audio/owned-song-001-mixture.wav",
+    "vocal": "/private/audio/owned-song-001-vocal.wav",
+    "instrumental": "/private/audio/owned-song-001-instrumental.wav"
+  }
+]
+```
+
+Prepare train and validation caches separately:
+
+```bash
+python training/prepare_stem_examples.py \
+  --manifest /private/manifests/train.json \
+  --output /private/robotic-work/train.npz
+python training/prepare_stem_examples.py \
+  --manifest /private/manifests/validation.json \
+  --output /private/robotic-work/validation.npz
+```
+
+Then run the conservative head-only training. It freezes the full backbone,
+trains only `out/kernel`, keeps the full `[1,1024,64,2]` input contract, and
+writes a candidate SavedModel outside the repository:
+
+```bash
+python training/head_only_finetune.py \
+  --train /private/robotic-work/train.npz \
+  --validation /private/robotic-work/validation.npz \
+  --model work/saved_model \
+  --output-dir /private/robotic-candidates/head-only-001
+```
+
+The candidate is not production-ready. It must still be converted through the
+normal builder, compared against the baseline on unseen songs, and pass all
+listening, latency, memory, and long-run gates before any deploy is considered.
