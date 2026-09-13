@@ -1,6 +1,6 @@
 # AI Vocal Robotic Residual Reduction Plan
 
-สถานะ: **Implementation in progress — กลุ่ม Diagnostic foundation เสร็จแล้ว; ยังไม่แก้ production model, DSP หรือ Extension**
+สถานะ: **Implementation in progress — กลุ่ม Diagnostic foundation และ zero-runtime-cost artifact tooling เสร็จแล้ว; ยังไม่แก้ production model, DSP หรือ Extension**
 
 เอกสารนี้มีไว้ส่งต่อให้ AI/ผู้พัฒนารอบถัดไปทำงานได้โดยไม่ต้องเดาวิธีเอง
 เป้าหมายคือทดลองลดเสียงร้องตกค้างที่ฟังเป็นเสียงเบา ๆ แบบหุ่นยนต์ใน Karaoke
@@ -241,7 +241,9 @@ Metric ใช้เป็น gate ไม่ใช่ตัวแทนการ�
 - [ ] ใช้ validation stems หา scalar ที่ลด vocal leakage โดยจำกัด instrument damage
 - [ ] เริ่มค้นหาเฉพาะบริเวณใกล้ baseline เช่น scale `1.00–1.10`
 - [ ] สร้าง candidate จากค่าที่ได้จริง ไม่ hard-code ค่าจากการคาดเดา
-- [ ] scale final `out.weight` ก่อน export/FP16 conversion
+- [x] เพิ่ม tool สำหรับ scale final `out.weight` ใน artifact ก่อน export/FP16 conversion
+- [x] tool จำกัด scalar ไว้ที่ `0.95..1.10`, ตรวจ final head shape และไม่แก้ input model
+- [x] tool เขียน `CALIBRATION.json` และห้าม deploy อัตโนมัติ
 - [ ] ห้ามเพิ่ม bias/Add/Pow/threshold runtime op ในรอบแรก
 - [ ] export TFJS ผ่าน builder ปัจจุบันและตรวจ PyTorch→TFJS parity ของ candidate
 - [ ] สร้าง baseline + candidate WAV และ package แยกชื่อชัดเจน

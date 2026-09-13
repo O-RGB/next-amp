@@ -47,3 +47,22 @@ The tool rejects other sample rates, more than two channels, malformed WAV
 files, missing model signatures, and model output shapes that do not match the
 64-frame production contract. It pads only the final analysis chunk, and it
 records that fact in the report.
+
+## Create a zero-runtime-cost calibration candidate
+
+Only run this after a licensed validation corpus has selected a scalar and the
+metric/listening gates in the main plan pass. The command copies the model to a
+new directory and changes only the final output-head FP16 values:
+
+```bash
+node training/bake_output_head_calibration.mjs \
+  --model /absolute/path/to/model.json \
+  --scale 1.03 \
+  --candidate-id eco-logit-calibration-103 \
+  --output-dir /absolute/path/robotic-candidates/eco-logit-calibration-103
+```
+
+The accepted range is deliberately limited to `0.95..1.10`. The script fails
+if the final head cannot be proven to be `[1,1,32,2]` FP16 storage, preserves
+the original model, writes `CALIBRATION.json`, and never deploys the output.
+The scalar is not a quality setting; it must come from validation data.
