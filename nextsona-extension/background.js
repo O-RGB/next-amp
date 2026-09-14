@@ -1,6 +1,164 @@
 let creating;
 const videoContentScriptTasks = new Map();
 
+// The toolbar action icon is the one place Chrome can show extension runtime
+// status without injecting UI into a website. Draw the indicator on top of
+// the packaged logo so the Store build keeps one reviewed icon asset.
+const ACTION_ACTIVITY_STORAGE_KEY = "actionActivityByTab";
+const ACTION_ICON_SIZES = [16, 32, 48, 128];
+const actionActivityByTab = new Map();
+const actionIconRevisions = new Map();
+let actionIconBitmapPromise = null;
+
+function getNumericTabId(tabId) {
+  const numericTabId = Number(tabId);
+  return Number.isInteger(numericTabId) && numericTabId >= 0
+    ? numericTabId
+    : null;
+}
+
+async function getActionIconBitmap() {
+  if (!actionIconBitmapPromise) {
+    actionIconBitmapPromise = fetch(chrome.runtime.getURL("assets/logo.png"))
+      .then((response) => {
+        if (!response.ok) throw new Error(`Icon request failed: ${response.status}`);
+        return response.blob();
+      })
+      .then((blob) => createImageBitmap(blob))
+      .catch((error) => {
+        actionIconBitmapPromise = null;
+        throw error;
+      });
+  }
+  return actionIconBitmapPromise;
+}
+
+function drawActionIcon(bitmap, indicatorColor, size) {
+  const canvas = new OffscreenCanvas(size, size);
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, size, size);
+  context.drawImage(bitmap, 0, 0, size, size);
+
+  if (indicatorColor) {
+    const radius = Math.max(2, size * 0.15);
+    const center = size - radius - Math.max(1, size * 0.06);
+    context.beginPath();
+    context.arc(center, center, radius, 0, Math.PI * 2);
+    context.fillStyle = indicatorColor;
+    context.fill();
+    context.lineWidth = Math.max(1, size * 0.06);
+    context.strokeStyle = "#161616";
+    context.stroke();
+  }
+
+  return context.getImageData(0, 0, size, size);
+}
+
+function getActionIndicatorColor(activity) {
+  if (activity?.audio === true) return "#ff5a36";
+  if (activity?.video === true) return "#4da6ff";
+  return null;
+}
+
+function normalizeActionActivity(activity) {
+  return {
+    audio: activity?.audio === true,
+    video: activity?.video === true,
+  };
+}
+
+async function updateActionIcon(tabId, activity) {
+  const numericTabId = getNumericTabId(tabId);
+  if (numericTabId === null) return;
+  const indicatorColor = getActionIndicatorColor(activity);
+
+  const revision = (actionIconRevisions.get(numericTabId) || 0) + 1;
+  actionIconRevisions.set(numericTabId, revision);
+
+  try {
+    if (typeof OffscreenCanvas === "undefined" || typeof createImageBitmap !== "function") {
+      // Chrome 116+ supports OffscreenCanvas. Keep a visible fallback for an
+      // unusual embedded Chromium runtime instead of failing silently.
+      await chrome.action.setBadgeText({
+        tabId: numericTabId,
+        text: indicatorColor ? "●" : "",
+      });
+      if (indicatorColor) {
+        await chrome.action.setBadgeBackgroundColor({
+          tabId: numericTabId,
+          color: indicatorColor,
+        });
+      }
+      return;
+    }
+
+    const bitmap = await getActionIconBitmap();
+    if (actionIconRevisions.get(numericTabId) !== revision) return;
+
+    const imageData = {};
+    for (const size of ACTION_ICON_SIZES) {
+      imageData[size] = drawActionIcon(bitmap, indicatorColor, size);
+    }
+    await chrome.action.setIcon({ tabId: numericTabId, imageData });
+    await chrome.action.setBadgeText({ tabId: numericTabId, text: "" });
+  } catch (error) {
+    // Status decoration must never affect audio capture or popup startup.
+    console.warn("NextSona: action status icon update failed", error);
+  }
+}
+
+async function persistActionActivity() {
+  const state = Object.fromEntries(actionActivityByTab);
+  try {
+    await chrome.storage.session.set({ [ACTION_ACTIVITY_STORAGE_KEY]: state });
+  } catch (_) {
+    // The icon still works for the current worker lifetime if session storage
+    // is temporarily unavailable.
+  }
+}
+
+async function setActionActivity(tabId, active) {
+  const numericTabId = getNumericTabId(tabId);
+  if (numericTabId === null) return;
+
+  const activity = normalizeActionActivity(active);
+  if (activity.audio || activity.video) actionActivityByTab.set(numericTabId, activity);
+  else actionActivityByTab.delete(numericTabId);
+
+  await Promise.all([
+    persistActionActivity(),
+    updateActionIcon(numericTabId, activity),
+  ]);
+}
+
+async function setActionActivityChannel(tabId, channel, active) {
+  const numericTabId = getNumericTabId(tabId);
+  if (numericTabId === null || !["audio", "video"].includes(channel)) return;
+
+  const current = normalizeActionActivity(await getActionActivity(numericTabId));
+  current[channel] = active === true;
+  await setActionActivity(numericTabId, current);
+}
+
+async function getActionActivity(tabId) {
+  const numericTabId = getNumericTabId(tabId);
+  if (numericTabId === null) return { audio: false, video: false };
+  if (actionActivityByTab.has(numericTabId)) {
+    return actionActivityByTab.get(numericTabId);
+  }
+
+  try {
+    const stored = await chrome.storage.session.get(ACTION_ACTIVITY_STORAGE_KEY);
+    const activity = normalizeActionActivity(
+      stored[ACTION_ACTIVITY_STORAGE_KEY]?.[String(numericTabId)]
+    );
+    if (activity.audio || activity.video) actionActivityByTab.set(numericTabId, activity);
+    return activity;
+  } catch (_) {
+    return { audio: false, video: false };
+  }
+}
+
 async function ensureVideoContentScripts(tabId) {
   const numericTabId = Number(tabId);
   if (!Number.isInteger(numericTabId) || numericTabId < 0) {
@@ -116,7 +274,16 @@ async function setupOffscreenDocument(path) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === "ENSURE_VIDEO_CONTENT_SCRIPTS") {
+  if (msg.type === "SET_VIDEO_ACTIVITY") {
+    setActionActivityChannel(msg.tabId, "video", msg.active === true);
+  } else if (msg.type === "SET_ACTION_ACTIVITY") {
+    setActionActivity(msg.tabId, {
+      // `active` remains accepted for compatibility with an older internal
+      // build, but new senders provide the two channels independently.
+      audio: msg.audioActive === true || msg.active === true,
+      video: msg.videoActive === true,
+    });
+  } else if (msg.type === "ENSURE_VIDEO_CONTENT_SCRIPTS") {
     ensureVideoContentScripts(msg.tabId).then(sendResponse);
     return true;
   } else if (msg.type === "CHECK_OFFSCREEN") {
@@ -194,7 +361,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  getActionActivity(tabId).then((activity) => updateActionIcon(tabId, activity));
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
+  actionActivityByTab.delete(tabId);
+  actionIconRevisions.delete(tabId);
+  persistActionActivity();
   removeMap(tabId).then((sourceTabId) => {
     if (sourceTabId) {
       chrome.runtime

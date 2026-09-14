@@ -74,11 +74,45 @@ let captureRequestId = 0;
 let videoContentScriptsReadyTabId = null;
 let videoContentScriptsReadyPromise = null;
 
+const VIDEO_ACTIVITY_KEYS = new Set([
+  "isVideoMasterOn",
+  "videoDelay",
+  "videoQuality",
+  "videoZoom",
+  "videoRotate",
+  "videoPosX",
+  "videoPosY",
+]);
+
 let sessionManager;
 let settingsModal;
 let extensionReadyPromise = null;
 const ACTION_NOTIFICATION_DELAY_MS = 280;
 const actionNotificationTimers = new Map();
+
+function isVideoConfiguredForActivity() {
+  if (!isVideoMasterOn) return false;
+
+  return (
+    Number(document.querySelector("#video-delay")?.value || 0) !== 0 ||
+    Number(document.querySelector("#video-zoom")?.value || 1) !== 1 ||
+    Number(document.querySelector("#video-rotate")?.value || 0) !== 0 ||
+    Number(document.querySelector("#video-pos-x")?.value || 0) !== 0 ||
+    Number(document.querySelector("#video-pos-y")?.value || 0) !== 0 ||
+    (document.querySelector("#video-quality")?.value || "max") !== "max"
+  );
+}
+
+function notifyActionActivityFromPopup() {
+  if (currentTabId === null) return;
+  chrome.runtime
+    .sendMessage({
+      type: "SET_VIDEO_ACTIVITY",
+      tabId: currentTabId,
+      active: isVideoConfiguredForActivity(),
+    })
+    .catch(() => {});
+}
 
 function showActionNotification(message, { source = "local", tone = "success", icon = "ph-check-circle" } = {}) {
   if (!message) return;
@@ -505,6 +539,8 @@ async function finalizeInitialization() {
       }
     }
   }
+
+  notifyActionActivityFromPopup();
 
   updateMasterTogglesUI();
   updateEqToggleButton();
@@ -1280,6 +1316,7 @@ function sendParam(key, value, index = null) {
       chrome.storage.local.set({ [key]: value });
     }
   }
+  if (VIDEO_ACTIVITY_KEYS.has(key)) notifyActionActivityFromPopup();
 }
 
 async function toggleRecording() {

@@ -286,6 +286,7 @@ replaceInFile(popupTemp, 'assets/libs/mjs/SignalsmithStretch.mjs', FILE_NAMES.si
 const backgroundTemp = path.join(TEMP_DIR, 'background.tmp.js');
 replaceInFile(backgroundTemp, 'video-delay.js', FILE_NAMES.videoDelay);
 replaceInFile(backgroundTemp, 'video-zoom.js', FILE_NAMES.videoZoom);
+replaceInFile(backgroundTemp, 'assets/logo.png', FILE_NAMES.logo);
 
 // Rewrite in offscreen bundle
 const offscreenTemp = path.join(TEMP_DIR, 'offscreen.tmp.js');

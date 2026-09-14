@@ -21,6 +21,33 @@ const captureEpochs = new Map();
 const db = new DBManager();
 const rtcServer = new RTCServer();
 
+function isVideoActivityActive(params) {
+  if (!params || params.isVideoMasterOn === false) return false;
+
+  return (
+    Number(params.videoDelay || 0) !== 0 ||
+    Number(params.videoZoom || 1) !== 1 ||
+    Number(params.videoRotate || 0) !== 0 ||
+    Number(params.videoPosX || 0) !== 0 ||
+    Number(params.videoPosY || 0) !== 0 ||
+    (params.videoQuality || "max") !== "max"
+  );
+}
+
+function notifyActionActivity(tabId, audioActive, videoActive) {
+  const numericTabId = Number(tabId);
+  if (!Number.isInteger(numericTabId) || numericTabId < 0) return;
+
+  chrome.runtime
+    .sendMessage({
+      type: "SET_ACTION_ACTIVITY",
+      tabId: numericTabId,
+      audioActive: audioActive === true,
+      videoActive: videoActive === true,
+    })
+    .catch(() => {});
+}
+
 function beginCaptureEpoch(tabId) {
   const nextEpoch = (captureEpochs.get(tabId) || 0) + 1;
   captureEpochs.set(tabId, nextEpoch);
@@ -324,6 +351,8 @@ const createDefaultParams = () => ({
   videoQuality: "max",
   videoZoom: 1.0, // Zoom value
   videoRotate: 0, // Rotate value
+  videoPosX: 0,
+  videoPosY: 0,
   normalize: false,
   eq: new Array(10).fill(0),
   eqPreset: "flat",
@@ -621,6 +650,11 @@ async function startAudio(
     );
 
     applyAllParams(newSession);
+    notifyActionActivity(
+      tabId,
+      newSession.params.isAudioMasterOn !== false,
+      isVideoActivityActive(newSession.params)
+    );
     startVisualizerLoop(tabId);
     sendResponse({ success: true, sampleRate: audioCtx.sampleRate });
   } catch (e) {
@@ -628,6 +662,7 @@ async function startAudio(
       stopUnpublishedCapture({ stream, audioCtx, aiVocal });
     }
     if (isCurrentCapture()) {
+      notifyActionActivity(tabId, false, false);
       console.error(`[Tab ${tabId}] Start Error:`, e);
       sendResponse({ success: false, error: e.message });
     } else {
@@ -689,6 +724,7 @@ async function stopAudio(tabId) {
   // Invalidate an in-flight start before looking for a published session.
   // Previously the early return below left getUserMedia/model work alive.
   beginCaptureEpoch(tabId);
+  notifyActionActivity(tabId, false, false);
   rtcServer.stopSession(tabId);
   const session = sessions.get(tabId);
   if (!session) {
@@ -845,6 +881,11 @@ function applyParamToSession(session, key, value, index, source) {
   // -- VIDEO TRANSFORM MERGE LOGIC --
   // (Resolves zoom override or rotate resetting zoom issue)
   const tId = getKeyByValue(sessions, session);
+  notifyActionActivity(
+    tId,
+    params.isAudioMasterOn !== false,
+    isVideoActivityActive(params)
+  );
 
   if (key === "videoZoom" || key === "videoRotate") {
     try {
