@@ -278,7 +278,7 @@ Artifact gate ที่ต้องเพิ่ม:
 5. Scan Store directory และ ZIP ซ้ำ ไม่ตรวจเฉพาะ source
 6. ทดสอบ clean Chrome profile ตาม P0 manual checklist ด้านล่าง
 7. ทดสอบ Apple และ Windows/WebGPU long run ตาม baseline เดิม ห้ามสรุปคุณภาพเสียงจาก unit test
-8. Deploy `nextsona-public-site` ปัจจุบันไป `https://studio.nextfeeder.com`
+8. Deploy `nextsona-public-site` ปัจจุบันไป `https://sona.nextfeeder.com`
 9. เปิด production `/`, `/remote`, `/privacy` และเทียบข้อความกับ local source
 10. บันทึก SHA-256 ของ ZIP หลัง manual test ผ่าน ห้าม rebuild อีกก่อน upload
 11. กรอก Dashboard และ Reviewer Notes ให้ตรงกับ ZIP hash ที่ผ่าน test
@@ -345,8 +345,8 @@ Rollback rule: ถ้าการแก้ Store hardening ทำให้เส
 
 ### ทดสอบ Remote และ security
 
-- [ ] Deploy `nextsona-public-site` รุ่นปัจจุบันที่ `https://studio.nextfeeder.com`
-- [ ] ตรวจว่า `https://studio.nextfeeder.com/remote` และ `/privacy` เปิดผ่าน HTTPS ได้จากมือถือจริง
+- [ ] Deploy `nextsona-public-site` รุ่นปัจจุบันที่ `https://sona.nextfeeder.com`
+- [ ] ตรวจว่า `https://sona.nextfeeder.com/remote` และ `/privacy` เปิดผ่าน HTTPS ได้จากมือถือจริง
 - [ ] กด Remote, สแกน QR, สั่ง volume/pitch/AI/video/EQ และ reconnect หลังสลับแอปมือถือ
 - [ ] ยืนยันจาก Network panel ว่าไม่มี request ไป `api.qrserver.com`, Google Fonts หรือ itty.bitty
 - [ ] ทดสอบ URL ที่ token ผิด; Remote ต้องเชื่อมต่อไม่ได้
@@ -361,7 +361,7 @@ Rollback rule: ถ้าการแก้ Store hardening ทำให้เส
 
 ### Chrome Web Store Dashboard — ผู้พัฒนาต้องกรอกเอง
 
-- [ ] Privacy policy URL: `https://studio.nextfeeder.com/privacy`
+- [ ] Privacy policy URL: `https://sona.nextfeeder.com/privacy`
 - [ ] Single purpose: อธิบายว่า NextSona เป็นเครื่องมือปรับและประมวลผลเสียงจากแท็บที่ผู้ใช้เลือก พร้อมเครื่องมือ sync/record/remote ที่สนับสนุน workflow เดียวกัน
 - [ ] `tabCapture`: ใช้รับเสียงจากแท็บที่ผู้ใช้เลือกหลังเปิด Extension เพื่อให้ pitch, EQ, effects, AI Vocal และ recording ทำงาน
 - [ ] `offscreen`: ใช้รักษา Web Audio graph และการประมวลผลเสียงที่ผู้ใช้เปิดไว้เมื่อ popup ปิด

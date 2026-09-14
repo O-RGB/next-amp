@@ -124,7 +124,7 @@ const MODAL_HTML = `
           </div>
           <div>
             <div class="text-[10px] font-bold text-white">NEXTSONA EXTENSION</div>
-            <div class="text-[7px] text-cyan-300">NextSona - Pitch Shifter, AI Vocal &amp; Video Sync</div>
+            <div class="text-[7px] text-cyan-300">NextSona - Pitch Shifter, EQ, AI Vocal &amp; Video Sync</div>
             <div class="text-[8px] text-gray-400">Version 1.0</div>
           </div>
           <p class="text-[8px] text-gray-500 px-4">Advanced audio processing, real-time visualizer, and in-browser audio recording.</p>

@@ -2,7 +2,7 @@
 
 ## Store name
 
-NextSona - Pitch Shifter, AI Vocal & Video Sync
+NextSona - Pitch Shifter, EQ, AI Vocal & Video Sync
 
 ## Short description
 

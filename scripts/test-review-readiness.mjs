@@ -156,7 +156,7 @@ assert(!extensionProtocol.isValidRemoteHandshake({
 const require = createRequire(import.meta.url);
 const qrcode = require("qrcode-generator");
 const qr = qrcode(0, "M");
-qr.addData("https://studio.nextfeeder.com/remote#host=peer&token=abcdefghijklmnopqrstuvwxyz012345", "Byte");
+qr.addData("https://sona.nextfeeder.com/remote#host=peer&token=abcdefghijklmnopqrstuvwxyz012345", "Byte");
 qr.make();
 assert(qr.createDataURL(4, 8).startsWith("data:image/gif;base64,"), "Local QR generation failed");
 

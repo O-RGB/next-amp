@@ -15,7 +15,7 @@ the AI model, Extension package, source maps, certificates or private keys.
 
 This folder is already a static production site. It does not require a build
 step or runtime server. Deploy the contents of `nextsona-public-site/`
-directly to `https://studio.nextfeeder.com`.
+directly to `https://sona.nextfeeder.com`.
 
 The production origin is already written into the canonical tags, Open Graph
 metadata, `robots.txt` and `sitemap.xml`. Third-party service and library
@@ -39,7 +39,7 @@ link.
 When needed, a clean generated copy can still be created under `dist/`:
 
 ```sh
-PUBLIC_SITE_ORIGIN=https://studio.nextfeeder.com npm run build:public-site
+PUBLIC_SITE_ORIGIN=https://sona.nextfeeder.com npm run build:public-site
 ```
 
 The generated copy includes `build-inventory.json`; it is not required when

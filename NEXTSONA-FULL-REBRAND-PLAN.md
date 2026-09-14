@@ -79,7 +79,7 @@ license ของเจ้าของเดิม
 - [x] ยืนยันครั้งสุดท้ายว่าชื่อ public คือ `NextSona` ไม่ใช่ `Sona`
 - [ ] ตรวจเครื่องหมายการค้าอย่างเป็นทางการในประเทศเป้าหมาย โดยเน้น Class 9
   และ Class 42; การค้นเว็บที่ผ่านมาไม่ใช่ legal clearance
-- [x] ยืนยัน canonical public URL เป็น `https://studio.nextfeeder.com`
+- [x] ยืนยัน canonical public URL เป็น `https://sona.nextfeeder.com`
 - [ ] เตรียม redirect จาก URL เก่าไป URL ใหม่ก่อนแก้ QR/Store links
 - [ ] ถ้า Chrome Web Store รุ่นปัจจุบันยังอยู่ระหว่าง review ให้รอผลก่อน แล้วส่ง
   rebrand เป็น version ถัดไปใน listing เดิม
@@ -234,7 +234,7 @@ Public site ต้องยัง deploy ได้โดยวาง static file
 
 - [x] เปลี่ยนข้อความ EN/TH ทั้งคู่ ไม่แก้เพียงภาษาที่มองเห็นตอนโหลดครั้งแรก
 - [x] เปลี่ยน `<title>`, description, OG, Twitter, structured data และ image alt
-- [x] เปลี่ยน canonical URLs และ sitemap ให้ใช้ `https://studio.nextfeeder.com`
+- [x] เปลี่ยน canonical URLs และ sitemap ให้ใช้ `https://sona.nextfeeder.com`
 - [x] คงค่าเริ่มต้นภาษา EN ตามเดิม
 - [x] Privacy/Terms ต้องใช้ชื่อเต็ม `NextSona` ทุกครั้ง
 - [x] คงชื่อผู้ควบคุม/ผู้พัฒนาเป็น `NextFeeder Labs`

@@ -6,7 +6,7 @@ submission or the manual clean-profile tests.
 
 ## Privacy policy
 
-`https://studio.nextfeeder.com/privacy`
+`https://sona.nextfeeder.com/privacy`
 
 ## Single purpose
 

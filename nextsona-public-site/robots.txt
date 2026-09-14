@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /remote/
 
-Sitemap: https://studio.nextfeeder.com/sitemap.xml
+Sitemap: https://sona.nextfeeder.com/sitemap.xml

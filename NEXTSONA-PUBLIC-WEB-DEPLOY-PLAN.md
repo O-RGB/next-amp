@@ -2,13 +2,13 @@
 
 วันที่จัดทำ: 2026-09-12
 
-สถานะ: Phase 1–7 มี local implementation แล้ว — static site พร้อม deploy ตรงจาก `nextsona-public-site/` ที่ `https://studio.nextfeeder.com`; ยังไม่ deploy production และยังไม่เชื่อม URL กลับเข้า Extension
+สถานะ: Phase 1–7 มี local implementation แล้ว — static site พร้อม deploy ตรงจาก `nextsona-public-site/` ที่ `https://sona.nextfeeder.com`; ยังไม่ deploy production และยังไม่เชื่อม URL กลับเข้า Extension
 
 ## ข้อสรุปที่ยืนยันแล้ว
 
 - [x] คำว่า “SSO” ในคำขอหมายถึง SEO ไม่ใช่ระบบ Single Sign-On
 - [x] ทำและทดสอบเว็บไซต์แบบ local ก่อน
-- [x] ยืนยัน production domain: `https://studio.nextfeeder.com`
+- [x] ยืนยัน production domain: `https://sona.nextfeeder.com`
 - [x] หน้า `/` สามารถเป็น Landing page ใหม่ของ NextSona ได้
 - [x] งานออกแบบต้องเป็น production showcase ที่ดูน่าเชื่อถือ ไม่ใช่เพียงหน้าเอกสารหรือหน้าดาวน์โหลด
 - [x] ใช้ฟอนต์อ่านง่ายเป็นหลักและไม่ใช้ display font กับข้อความยาว
@@ -76,7 +76,7 @@ nextsona-public-site/
 - Remote: `/remote/`
 - Privacy Policy: `/privacy/`
 
-ไฟล์ใน `nextsona-public-site/` เป็น static production site พร้อม deploy โดยไม่ต้อง build โดย canonical URL, Open Graph URL, sitemap และ robots ถูกตั้งเป็น `https://studio.nextfeeder.com` แล้ว การ build ไปยัง `dist/` เป็นเพียงตัวเลือกสำหรับสร้างสำเนาที่มี inventory
+ไฟล์ใน `nextsona-public-site/` เป็น static production site พร้อม deploy โดยไม่ต้อง build โดย canonical URL, Open Graph URL, sitemap และ robots ถูกตั้งเป็น `https://sona.nextfeeder.com` แล้ว การ build ไปยัง `dist/` เป็นเพียงตัวเลือกสำหรับสร้างสำเนาที่มี inventory
 
 ห้ามฝัง domain ชั่วคราวของ Web player ไว้ใน source จนกว่าผู้ใช้จะยืนยัน production host
 
@@ -349,7 +349,7 @@ nextsona-public-site/
 - [x] ยืนยันให้รองรับ EN/TH และใช้ EN เป็นค่าเริ่มต้น
 - [ ] ให้ Chrome Web Store URL ถ้ามีแล้ว หรือยอมให้ใช้ placeholder ก่อน
 - [ ] เตรียมหรืออนุมัติ screenshots ที่จะใช้บน Landing page
-- [x] เลือก production domain: `https://studio.nextfeeder.com`
+- [x] เลือก production domain: `https://sona.nextfeeder.com`
 
 ## สิ่งที่ Codex จะทำเมื่อได้รับอนุญาตให้เริ่ม
 
