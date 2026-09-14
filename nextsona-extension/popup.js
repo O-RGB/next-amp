@@ -1306,10 +1306,15 @@ function sendParam(key, value, index = null) {
       index,
       tabId: currentTabId,
       isShared: isShared,
+      source: "popup",
     })
     .catch(() => {});
   if (isShared) {
-    if (key === "eq" && index !== null) {
+    if (VIDEO_ACTIVITY_KEYS.has(key)) {
+      // Video controls persist their complete state through sessionManager.
+      // Avoid writing each field again while one transform is being edited;
+      // the content script receives one complete transform below.
+    } else if (key === "eq" && index !== null) {
       currentEqValues[index] = value;
       chrome.storage.local.set({ eq: currentEqValues });
     } else {
@@ -1659,6 +1664,7 @@ function setupListeners() {
   });
   $("#video-quality")?.addEventListener("change", (e) => {
     const val = e.target.value;
+    sessionManager.setSetting({ videoQuality: val });
     sendParam("videoQuality", val);
     notifyAction("videoQuality", val, { immediate: true });
     if (currentTabId)

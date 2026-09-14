@@ -888,29 +888,36 @@ function applyParamToSession(session, key, value, index, source) {
   );
 
   if (key === "videoZoom" || key === "videoRotate") {
-    try {
-      chrome.storage.local.set({
-        videoZoom: params.videoZoom,
-        videoRotate: params.videoRotate,
-      });
-    } catch (_) {}
-    if (tId && params.isVideoMasterOn) {
+    if (source !== "popup") {
+      try {
+        chrome.storage.local.set({
+          videoZoom: params.videoZoom,
+          videoRotate: params.videoRotate,
+          videoPosX: params.videoPosX,
+          videoPosY: params.videoPosY,
+        });
+      } catch (_) {}
+    }
+    if (source !== "popup" && tId && params.isVideoMasterOn) {
       chrome.runtime.sendMessage({
         type: "BG_RELAY_TO_TAB",
         tabId: Number(tId),
         payload: {
           type: "SET_VIDEO_ZOOM",
           scale: params.videoZoom,
+          translateX: params.videoPosX,
           rotate: params.videoRotate,
-          translateY: 0,
+          translateY: params.videoPosY,
         },
       });
     }
   } else if (key === "videoDelay") {
-    try {
-      chrome.storage.local.set({ videoDelay: params.videoDelay });
-    } catch (_) {}
-    if (tId && params.isVideoMasterOn) {
+    if (source !== "popup") {
+      try {
+        chrome.storage.local.set({ videoDelay: params.videoDelay });
+      } catch (_) {}
+    }
+    if (source !== "popup" && tId && params.isVideoMasterOn) {
       chrome.runtime.sendMessage({
         type: "BG_RELAY_TO_TAB",
         tabId: Number(tId),
@@ -918,15 +925,39 @@ function applyParamToSession(session, key, value, index, source) {
       });
     }
   } else if (key === "videoQuality") {
-    try {
-      chrome.storage.local.set({ videoQuality: params.videoQuality });
-    } catch (_) {}
-    if (tId) {
+    if (source !== "popup") {
+      try {
+        chrome.storage.local.set({ videoQuality: params.videoQuality });
+      } catch (_) {}
+    }
+    if (source !== "popup" && tId) {
       chrome.runtime.sendMessage({
         type: "BG_RELAY_TO_TAB",
         tabId: Number(tId),
         payload: { type: "SET_VIDEO_QUALITY", value: params.videoQuality },
       });
+    }
+  } else if (key === "videoPosX" || key === "videoPosY") {
+    if (source !== "popup") {
+      try {
+        chrome.storage.local.set({
+          videoPosX: params.videoPosX,
+          videoPosY: params.videoPosY,
+        });
+      } catch (_) {}
+      if (tId && params.isVideoMasterOn) {
+        chrome.runtime.sendMessage({
+          type: "BG_RELAY_TO_TAB",
+          tabId: Number(tId),
+          payload: {
+            type: "SET_VIDEO_ZOOM",
+            scale: params.videoZoom,
+            translateX: params.videoPosX,
+            translateY: params.videoPosY,
+            rotate: params.videoRotate,
+          },
+        });
+      }
     }
   }
 
@@ -1091,8 +1122,10 @@ function applyParamToSession(session, key, value, index, source) {
       break;
     // Video On/Off = Reset Transform / Restore
     case "isVideoMasterOn":
-      try { chrome.storage.local.set({ isVideoMasterOn: !!value }); } catch (_) {}
-      if (tId) {
+      if (source !== "popup") {
+        try { chrome.storage.local.set({ isVideoMasterOn: !!value }); } catch (_) {}
+      }
+      if (source !== "popup" && tId) {
         const targetTab = Number(tId);
         if (value) {
           // Restore Values
@@ -1101,6 +1134,8 @@ function applyParamToSession(session, key, value, index, source) {
               videoZoom: params.videoZoom,
               videoRotate: params.videoRotate,
               videoDelay: params.videoDelay,
+              videoPosX: params.videoPosX,
+              videoPosY: params.videoPosY,
             });
           } catch (_) {}
           chrome.runtime.sendMessage({
@@ -1109,8 +1144,9 @@ function applyParamToSession(session, key, value, index, source) {
             payload: {
               type: "SET_VIDEO_ZOOM",
               scale: params.videoZoom,
+              translateX: params.videoPosX,
               rotate: params.videoRotate,
-              translateY: 0,
+              translateY: params.videoPosY,
             },
           });
           chrome.runtime.sendMessage({
@@ -1125,6 +1161,8 @@ function applyParamToSession(session, key, value, index, source) {
               videoZoom: 1,
               videoRotate: 0,
               videoDelay: 0,
+              videoPosX: 0,
+              videoPosY: 0,
             });
           } catch (_) {}
           chrome.runtime.sendMessage({
@@ -1133,6 +1171,7 @@ function applyParamToSession(session, key, value, index, source) {
             payload: {
               type: "SET_VIDEO_ZOOM",
               scale: 1,
+              translateX: 0,
               rotate: 0,
               translateY: 0,
             },
