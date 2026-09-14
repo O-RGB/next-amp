@@ -1918,7 +1918,7 @@ function updateNormalizeButton() {
       "w-1 h-1 rounded-full bg-[#00ff00] shadow-[0_0_5px_#00ff00]";
   } else {
     btn.className =
-      "win-btn w-full h-full border text-[7px] px-1 font-bold flex items-center justify-center gap-0.5 border-gray-500 text-gray-300 bg-gray-700";
+      "win-btn w-full h-full border text-[7px] px-1 font-bold flex items-center justify-center gap-0.5 border-gray-500 text-black bg-[#c0c0c0]";
     indicator.className = "w-1 h-1 rounded-full bg-gray-400";
   }
 }

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "NextSona - Pitch Shifter, AI Vocal & Video Sync",
   "description": "Adjust browser audio with pitch, EQ, AI vocal modes, recording, remote control, and video synchronization.",
-  "version": "1.0",
+  "version": "1.1.0",
   "minimum_chrome_version": "116",
   "permissions": [
     "tabCapture",

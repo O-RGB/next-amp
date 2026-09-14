@@ -138,7 +138,7 @@ license ของเจ้าของเดิม
   - `name` → `nextsona`
   - `description` → ชื่อเต็มใหม่
 - [x] regenerate `package-lock.json` จาก `package.json`; ห้ามแก้ lock file แบบสุ่ม
-- [ ] bump version ตอนทุก phase ผ่านแล้วเท่านั้น แนะนำ rebrand release เป็น `1.1.0`
+- [x] bump version เป็น `1.1.0` หลัง phase implementation ผ่านแล้ว
 - [ ] ยืนยันว่าใช้ Chrome Web Store listing เดิมเพื่อรักษา Extension ID และผู้ใช้เดิม
 
 ### B2. Popup, Welcome และหน้าภายใน

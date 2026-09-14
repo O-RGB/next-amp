@@ -1,6 +1,6 @@
 {
   "name": "nextsona",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "NextSona - Pitch Shifter, AI Vocal & Video Sync",
   "dependencies": {
     "qrcode-generator": "1.4.4"
