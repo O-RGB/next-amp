@@ -1,3 +1,9 @@
+// The notification path can ask the service worker to ensure these scripts
+// more than once. Do not create duplicate monitors/listeners when a busy page
+// misses the first PING response.
+if (!globalThis.__nextsonaVideoDelayInstalled) {
+  globalThis.__nextsonaVideoDelayInstalled = true;
+
 // Lightweight page toast for user actions and remote commands.
 // This script is already injected on media pages, so no extra content script
 // or runtime cost is needed for the notification surface.
@@ -743,3 +749,4 @@ class DelayedVideo {
 }
 
 const monitor = new Monitor();
+}

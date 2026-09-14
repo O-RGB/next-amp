@@ -1,3 +1,9 @@
+// `ensureVideoContentScripts()` can run again when a notification is shown.
+// Keep one controller per page so a slow PING can never create competing
+// transform writers for the same video element.
+if (!globalThis.__nextsonaVideoZoomInstalled) {
+  globalThis.__nextsonaVideoZoomInstalled = true;
+
 class VideoZoomer {
   constructor() {
     this.scale = 1.0;
@@ -5,6 +11,7 @@ class VideoZoomer {
     this.translateX = 0; // [NEW] Add X axis
     this.rotate = 0;
     this.observedElements = new WeakSet();
+    this.lastAppliedTransforms = new WeakMap();
 
     this.setupMessageListener();
     this.setupStorageListener();
@@ -97,6 +104,7 @@ class VideoZoomer {
 
           if (
             this.shouldApply() &&
+            currentStyle !== this.lastAppliedTransforms.get(video) &&
             !currentStyle.includes(`rotate(${this.rotate}deg)`)
           ) {
             this.updateVideoStyle(video);
@@ -146,7 +154,10 @@ class VideoZoomer {
       video.style.transform = transformValue;
       video.style.transformOrigin = "center center";
     }
+    this.lastAppliedTransforms.set(video, video.getAttribute("style") || "");
   }
 }
 
 const videoZoomer = new VideoZoomer();
+globalThis.__nextsonaVideoZoomer = videoZoomer;
+}

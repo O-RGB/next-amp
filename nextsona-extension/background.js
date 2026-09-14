@@ -306,6 +306,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         .sendMessage(msg.tabId, {
           type: "SET_VIDEO_ZOOM",
           scale: 1,
+          translateX: 0,
           translateY: 0,
           rotate: 0,
         })
