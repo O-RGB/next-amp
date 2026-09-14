@@ -3,9 +3,10 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const source = fs.readFileSync(
-  new URL('../../next-amp-extension/modules/ai-vocal/go-engine-client.js', import.meta.url),
+  new URL('../../nextsona-extension/modules/ai-vocal/go-engine-client.js', import.meta.url),
   'utf8'
-).replace('export class GoEngineClient', 'class GoEngineClient') +
+).replace('export class GoEngineClient', 'class GoEngineClient')
+  .replace(/^export const /gm, 'const ') +
   '\nthis.GoEngineClient = GoEngineClient;';
 
 const context = {

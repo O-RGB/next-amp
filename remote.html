@@ -6,11 +6,11 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
-    <title>NextStudio Remote - อัปโหลดไฟล์ไร้สาย</title>
+    <title>NextSona Remote - อัปโหลดไฟล์ไร้สาย</title>
 
     <meta
       name="description"
-      content="NextStudio Remote เครื่องมือส่งไฟล์เพลงจากมือถือเข้าคอมพิวเตอร์ผ่าน WebRTC สำหรับนักดนตรี เพื่อการฝึกซ้อมที่มีประสิทธิภาพ"
+      content="NextSona Remote เครื่องมือส่งไฟล์เพลงจากมือถือเข้าคอมพิวเตอร์ผ่าน WebRTC สำหรับนักดนตรี เพื่อการฝึกซ้อมที่มีประสิทธิภาพ"
     />
 
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -136,12 +136,12 @@
     >
       <div class="flex items-center gap-2">
         <img
-          src="https://next-amp-player.vercel.app/assets/logo/logo.png"
+          src="assets/logo/logo.png"
           alt="Logo"
           class="w-8 h-8 rounded shadow-lg"
         />
         <span class="font-display font-bold text-xl tracking-wider text-white"
-          >NEXTSTUDIO</span
+          >NEXTSONA</span
         >
       </div>
       <div class="hidden md:flex gap-6 text-sm text-gray-400 font-display">
@@ -235,7 +235,7 @@
           <div
             class="text-[8px] text-gray-500 font-mono uppercase tracking-widest"
           >
-            NextStudio Secure Remote Protocol v2.1
+            NextSona Secure Remote Protocol v2.1
           </div>
         </div>
       </div>
@@ -247,11 +247,11 @@
       <section class="space-y-12">
         <div class="text-center">
           <h2 class="text-3xl font-bold font-display text-green-400 mb-4">
-            NEXTSTUDIO REMOTE TECHNOLOGY
+            NEXTSONA REMOTE TECHNOLOGY
           </h2>
           <p class="text-gray-400 leading-relaxed">
             สัมผัสประสบการณ์การส่งไฟล์เพลงที่รวดเร็วและปลอดภัยที่สุดผ่านเทคโนโลยี
-            WebRTC แบบ Peer-to-Peer ส่งตรงจากมือถือของคุณไปยัง NextStudio Player
+            WebRTC แบบ Peer-to-Peer ส่งตรงจากมือถือของคุณไปยัง NextSona Player
             โดยไม่ต้องผ่านเซิร์ฟเวอร์กลาง
           </p>
         </div>
@@ -293,11 +293,11 @@
 
           <div class="space-y-6 text-gray-300">
             <div>
-              <h3>ทำไมนักดนตรีถึงเลือกใช้ NextStudio Remote?</h3>
+              <h3>ทำไมนักดนตรีถึงเลือกใช้ NextSona Remote?</h3>
               <p class="leading-relaxed">
                 ในสถานการณ์การซ้อมดนตรีจริง ความเร็วคือสิ่งสำคัญ การต้องหาพอร์ต
                 USB หรือส่งไฟล์ผ่านแอปพลิเคชันแชท
-                อาจทำให้คุณภาพเสียงลดลงหรือเสียเวลา NextStudio Remote
+                อาจทำให้คุณภาพเสียงลดลงหรือเสียเวลา NextSona Remote
                 ถูกออกแบบมาเพื่อขจัดปัญหานั้น เพียงสแกน เลือกไฟล์
                 และเล่นเพลงได้ทันที
               </p>
@@ -325,7 +325,7 @@
         </article>
 
         <div class="text-center text-xs text-gray-600 font-mono pb-12">
-          &copy; 2025 NEXTSTUDIO PROJECT. ALL RIGHTS RESERVED.
+          &copy; 2025 NEXTSONA PROJECT. ALL RIGHTS RESERVED.
         </div>
       </section>
     </main>
@@ -392,7 +392,8 @@
       const SYNC_INTERVAL = 20;
       const LIMIT_MAX_FILES = 10;
       const LIMIT_MAX_SIZE_MB = 100;
-      const DB_NAME = "NextStudioUltimateDB";
+      const DB_NAME = "NextSonaUltimateDB";
+      const LEGACY_DB_NAME = "NextStudioUltimateDB";
 
       const params = new URLSearchParams(window.location.search);
       const hostId = params.get("host");
@@ -483,34 +484,69 @@
         document.getElementById("lib-modal").classList.add("hidden");
       }
 
-      function loadDatabase() {
+      async function openExistingDatabase(name) {
+        if (typeof indexedDB.databases !== "function") return null;
+        const databases = await indexedDB.databases();
+        if (!databases.some((database) => database.name === name)) return null;
         return new Promise((resolve, reject) => {
-          const req = indexedDB.open(DB_NAME, 8);
-          req.onerror = () => reject("DB Error");
-          req.onsuccess = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains("library")) {
-              db.close();
-              resolve();
-              return;
-            }
-            const tx = db.transaction(["library", "playlists"], "readonly");
-            const libReq = tx.objectStore("library").getAll();
-            const plReq = tx.objectStore("playlists").getAll();
-            libReq.onsuccess = () => {
-              dbLibrary = libReq.result || [];
-            };
-            plReq.onsuccess = () => {
-              const arr = plReq.result || [];
-              dbPlaylists = {};
-              arr.forEach((p) => (dbPlaylists[p.id] = p));
-            };
-            tx.oncomplete = () => {
-              db.close();
-              resolve();
-            };
-          };
+          const request = indexedDB.open(name);
+          request.onsuccess = (event) => resolve(event.target.result);
+          request.onerror = () => reject(request.error || new Error("DB Error"));
         });
+      }
+
+      function readLibraryDatabase(db) {
+        if (!db?.objectStoreNames.contains("library")) {
+          return Promise.resolve({ library: [], playlists: [] });
+        }
+        return new Promise((resolve, reject) => {
+          const stores = ["library"];
+          if (db.objectStoreNames.contains("playlists")) stores.push("playlists");
+          const tx = db.transaction(stores, "readonly");
+          const libReq = tx.objectStore("library").getAll();
+          const plReq = stores.includes("playlists")
+            ? tx.objectStore("playlists").getAll()
+            : null;
+          tx.oncomplete = () => resolve({
+            library: libReq.result || [],
+            playlists: plReq?.result || [],
+          });
+          tx.onerror = () => reject(tx.error || new Error("DB Read Error"));
+        });
+      }
+
+      function applyLibraryData(data) {
+        dbLibrary = data.library || [];
+        dbPlaylists = {};
+        (data.playlists || []).forEach((playlist) => {
+          dbPlaylists[playlist.id] = playlist;
+        });
+      }
+
+      async function loadDatabase() {
+        const currentRequest = indexedDB.open(DB_NAME, 8);
+        const currentDb = await new Promise((resolve, reject) => {
+          currentRequest.onerror = () => reject("DB Error");
+          currentRequest.onsuccess = (event) => resolve(event.target.result);
+        });
+        let data = await readLibraryDatabase(currentDb);
+        currentDb.close();
+
+        // A rebrand update may have left recordings in the old database. Read
+        // it only when the new database is empty; the player performs the
+        // actual copy, while Remote remains read-only and never deletes data.
+        if (!data.library.length && !Object.keys(data.playlists || {}).length) {
+          const legacyDb = await openExistingDatabase(LEGACY_DB_NAME);
+          if (legacyDb) {
+            try {
+              const legacyData = await readLibraryDatabase(legacyDb);
+              if (legacyData.library.length || legacyData.playlists.length) data = legacyData;
+            } finally {
+              legacyDb.close();
+            }
+          }
+        }
+        applyLibraryData(data);
       }
 
       function renderPlaylistOptions() {

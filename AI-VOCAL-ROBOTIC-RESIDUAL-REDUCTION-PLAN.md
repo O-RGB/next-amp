@@ -60,7 +60,7 @@
 - [x] Build-time ECO mask ตรงกับ conservative full-output graph ที่
       `MAE 0 / max error 0`
 - [x] Production model hashes ปัจจุบัน:
-  - `model.json`: `8917532971a28410af9c01011c1c1cfbb6ce6e6bfbe667bb2c7d09e425fbaa07`
+  - `model.json`: `77b9dc9b7a8c3cebd98a04bcb80b6d27eed710cb433bca0f2e8d4d1eb7d3e44b`
   - `group1-shard1of1.bin`: `13cafca89123ac168bf2d45adbd916b2d67bbbdc7cfeee56ed03947f7421f135`
 - [x] Store/Web build และ model verification ผ่าน
 - [x] ไม่มี tensor leak ใน optimized/fallback model load-dispose test
@@ -74,7 +74,7 @@ commit/hash หากผลทดลองไม่ผ่าน ต้องก�
 
 ### อยู่ในขอบเขต
 
-- เครื่องมือวิเคราะห์และฝึก model ภายใน `nextstudio-model-builder/`
+- เครื่องมือวิเคราะห์และฝึก model ภายใน `nextsona-model-builder/`
 - Candidate weights ที่ยังใช้ CascadedASPPNet v4 architecture เดิม
 - การปรับเฉพาะ final output head หรือ decoder ชั้นท้ายโดยไม่เพิ่ม runtime layer
 - Offline evaluation ด้วยเพลงที่มี stems ถูกต้องตามสิทธิ์
@@ -88,7 +88,7 @@ commit/hash หากผลทดลองไม่ผ่าน ต้องก�
 - [ ] ห้ามเพิ่ม look-ahead หรือ delay chunk
 - [ ] ห้ามเพิ่มโมเดลตัวที่สอง, ensemble หรือ TTA ใน runtime
 - [ ] ห้ามเปลี่ยน FP16/F32/backend policy ระหว่างทดสอบคุณภาพ
-- [ ] ห้าม deploy candidate ทับ `next-amp-extension/model/` ก่อนผ่านทุก gate
+- [ ] ห้าม deploy candidate ทับ `nextsona-extension/model/` ก่อนผ่านทุก gate
 - [ ] ห้ามใช้เพลงจาก YouTube หรือไฟล์ไม่มีสิทธิ์เป็น training dataset
 
 FULL และ GO ไม่ใช่เป้าหมาย optimization ของแผนนี้ หาก candidate ใช้ graph/weights
@@ -118,15 +118,15 @@ offline render สะอาดแต่ realtime render มีหุ่นยน
 
 ให้เพิ่มโครงสร้างต่อไปนี้เมื่อเริ่ม implement แผน ห้ามใส่ audio dataset ลง Git:
 
-- `nextstudio-model-builder/training/`
+- `nextsona-model-builder/training/`
   - เครื่องมือเตรียม dataset และ fine-tune
-- `nextstudio-model-builder/evaluation/`
+- `nextsona-model-builder/evaluation/`
   - offline renderer, metric และ report generator
-- `nextstudio-model-builder/config/robotic-residual/`
+- `nextsona-model-builder/config/robotic-residual/`
   - config ของ baseline/candidate แต่ละตัว
-- `nextstudio-model-builder/work/robotic-residual/`
+- `nextsona-model-builder/work/robotic-residual/`
   - dataset cache, feature cache และ intermediate checkpoints; ต้องอยู่ใน `.gitignore`
-- `nextstudio-model-builder/dist/candidates/robotic-residual/`
+- `nextsona-model-builder/dist/candidates/robotic-residual/`
   - model และ report ที่ผ่าน automated gate แต่ยังไม่ใช่ production
 
 กฎสำคัญ:

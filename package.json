@@ -1,7 +1,7 @@
 {
-  "name": "nextstudio",
+  "name": "nextsona",
   "version": "1.0.0",
-  "description": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
+  "description": "NextSona - Pitch Shifter, AI Vocal & Video Sync",
   "dependencies": {
     "qrcode-generator": "1.4.4"
   },
@@ -15,13 +15,13 @@
     "test:review": "node scripts/test-review-readiness.mjs",
     "audit:copyright": "node scripts/audit-copyright-provenance.mjs",
     "verify:extension:go-dev": "node scripts/verify-extension-artifact.js --profile=go-dev",
-    "build:go": "bash nextstudio-engine-go/build.sh",
+    "build:go": "bash nextsona-engine-go/build.sh",
     "build:public-site": "node scripts/build-public-site.js",
     "build:all-internal": "npm run build:web && npm run build:extension:store && npm run build:extension:go-dev && npm run build:public-site",
-    "model:fetch": "bash nextstudio-model-builder/scripts/build.sh --fetch-only",
-    "model:build": "bash nextstudio-model-builder/scripts/build.sh",
-    "model:verify": "bash nextstudio-model-builder/scripts/verify.sh",
-    "model:deploy": "bash nextstudio-model-builder/scripts/deploy.sh",
+    "model:fetch": "bash nextsona-model-builder/scripts/build.sh --fetch-only",
+    "model:build": "bash nextsona-model-builder/scripts/build.sh",
+    "model:verify": "bash nextsona-model-builder/scripts/verify.sh",
+    "model:deploy": "bash nextsona-model-builder/scripts/deploy.sh",
     "model:build:deploy": "npm run model:build && npm run model:verify && npm run model:deploy"
   },
   "devDependencies": {

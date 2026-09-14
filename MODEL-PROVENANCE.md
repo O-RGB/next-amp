@@ -1,12 +1,12 @@
-# NextStudio AI Model Provenance
+# NextSona AI Model Provenance
 
 ## Distributed model
 
-NextStudio distributes a TensorFlow.js GraphModel consisting of:
+NextSona distributes a TensorFlow.js GraphModel consisting of:
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `model.json` | `8917532971a28410af9c01011c1c1cfbb6ce6e6bfbe667bb2c7d09e425fbaa07` |
+| `model.json` | `77b9dc9b7a8c3cebd98a04bcb80b6d27eed710cb433bca0f2e8d4d1eb7d3e44b` |
 | `group1-shard1of1.bin` | `13cafca89123ac168bf2d45adbd916b2d67bbbdc7cfeee56ed03947f7421f135` |
 
 The browser graph accepts the complete `[1, 1024, 64, 2]` context and returns
@@ -35,7 +35,7 @@ configuration and an Instrumental primary stem.
 
 ## Verification performed
 
-The checked-in `nextstudio-model-builder` downloads the official upstream
+The checked-in `nextsona-model-builder` downloads the official upstream
 `MGM_MAIN_v4.pth`, verifies both source hashes, recreates CascadedASPPNet from
 the public MIT architecture and maps the checkpoint without reading the local
 `ai remove/` project or the production model.
@@ -71,5 +71,5 @@ model directory and copied into the Store package as `MODEL-LICENSE.txt`.
 ## Build command
 
 Run `npm run model:build:deploy`. Build output is staged under
-`nextstudio-model-builder/dist/`, executable parity tests must pass before
+`nextsona-model-builder/dist/`, executable parity tests must pass before
 deployment, and the Go artifact is repacked from the verified ONNX model.

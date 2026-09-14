@@ -29,7 +29,7 @@
 
 ```bash
 git status --short
-git diff -- next-amp-extension/modules/ai-vocal/ai-vocal-manager.js
+git diff -- nextsona-extension/modules/ai-vocal/ai-vocal-manager.js
 ```
 
 ห้ามใช้ `git reset --hard`, ห้ามลบงานของผู้ใช้ และห้าม restore ไฟล์ที่ไม่อยู่ในขอบเขตกลุ่มปัจจุบัน
@@ -113,7 +113,7 @@ YouTube เปลี่ยนเพลงหรือใช้ GPU หนัก
 
 - `DEFAULT_VOCAL_PROFILE`
 - `VOCAL_PROFILES`
-- model files ใต้ `next-amp-extension/model/`
+- model files ใต้ `nextsona-extension/model/`
 - model input shape `[1, 1024, 64, 2]`
 - mask slice/index/layout
 - attenuation floor
@@ -157,14 +157,14 @@ YouTube เปลี่ยนเพลงหรือใช้ GPU หนัก
 
 ไฟล์หลัก:
 
-- `next-amp-extension/modules/ai-vocal/ai-vocal-manager.js`
-- `next-amp-extension/modules/ai-vocal/vocal-worklet.js`
-- `next-amp-extension/offscreen.js`
-- `next-amp-extension/popup.js`
+- `nextsona-extension/modules/ai-vocal/ai-vocal-manager.js`
+- `nextsona-extension/modules/ai-vocal/vocal-worklet.js`
+- `nextsona-extension/offscreen.js`
+- `nextsona-extension/popup.js`
 
 ไฟล์ใหม่ที่อนุญาตให้สร้าง:
 
-- `next-amp-extension/modules/ai-vocal/webgpu-recovery-controller.mjs`
+- `nextsona-extension/modules/ai-vocal/webgpu-recovery-controller.mjs`
 - `ai-vocal-engine/test/test_webgpu_recovery_controller.mjs`
 - `ai-vocal-engine/test/test_ai_manager_stall_recovery.mjs`
 
@@ -172,7 +172,7 @@ Build scripts bundle dependency ของ `offscreen.js` และ Web adapter �
 
 ไฟล์ที่ไม่ควรแก้ในแผนนี้:
 
-- `nextstudio-engine-go/**`
+- `nextsona-engine-go/**`
 - `ai-vocal-engine` ส่วน model/DSP ยกเว้นไฟล์ test ใหม่
 - model weights และ encrypted production model
 - build security/obfuscation เว้นแต่ build ล้มเพราะ import ใหม่จริง ๆ
@@ -727,9 +727,9 @@ S4 เป็นการทดสอบและปรับ threshold เท่
 
 หลัง `npm run build` ต้องมีอย่างน้อย:
 
-- [x] `dist/nextstudio-extension-prod/`
+- [x] `dist/nextsona-extension-prod/`
 - [x] Extension zip จาก build script
-- [x] `dist/nextstudio-web-prod/`
+- [x] `dist/nextsona-web-prod/`
 - [x] Go artifacts ที่ `npm run build` สร้างตาม workflow ปัจจุบัน
 
 ห้ามแก้ไฟล์ใน dist ด้วยมือ ให้แก้ source แล้ว build ใหม่เท่านั้น
@@ -866,4 +866,4 @@ test(ai-vocal): validate long-running webgpu recovery
 - TensorFlow.js WebGPU backend: <https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgpu/README.md>
 - ตัวอย่างต้นทุน GPU-to-CPU tensor readback ใน TensorFlow.js: <https://github.com/tensorflow/tfjs/issues/6683>
 
-อย่าคัดลอก code จาก issue โดยตรง ให้อ่านเพื่อเข้าใจว่า GPU readback เป็น synchronization point แล้วเขียน implementation ให้เข้ากับ lifecycle ของ NextStudio เท่านั้น
+อย่าคัดลอก code จาก issue โดยตรง ให้อ่านเพื่อเข้าใจว่า GPU readback เป็น synchronization point แล้วเขียน implementation ให้เข้ากับ lifecycle ของ NextSona เท่านั้น

@@ -1,8 +1,8 @@
 // [AUTO-INJECTED PRODUCTION SECURITY GUARD]
 (function () {
   const _g = typeof globalThis !== "undefined" ? globalThis : self;
-  const _assetKeyB64 = "__NEXTSTUDIO_WEB_ASSET_KEY__";
-  const _assetMagic = "NAMPWEB1";
+  const _assetKeyB64 = "__NEXTSONA_WEB_ASSET_KEY__";
+  const _assetMagic = "NSONAWB1";
   const _assetHeaderBytes = 20;
   let _assetCryptoKeyPromise = null;
 
@@ -10,7 +10,7 @@
     const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) throw new Error("Protected security asset request failed");
     const payload = new Uint8Array(await response.arrayBuffer());
-    if (_assetKeyB64.startsWith("__NEXTSTUDIO_")) return payload.buffer;
+    if (_assetKeyB64.startsWith("__NEXTSONA_")) return payload.buffer;
     if (payload.byteLength < _assetHeaderBytes) throw new Error("Protected security asset is truncated");
     const magic = new TextDecoder().decode(payload.subarray(0, _assetMagic.length));
     if (magic !== _assetMagic) throw new Error("Protected security asset header is invalid");

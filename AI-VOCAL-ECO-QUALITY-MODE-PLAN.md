@@ -171,10 +171,10 @@ const AI_POWER_MODES = Object.freeze({
 
 ไฟล์ที่คาดว่าต้องแก้:
 
-- `next-amp-extension/popup.html`
-- `next-amp-extension/popup.js`
-- `next-amp-extension/offscreen.js`
-- `next-amp-extension/modules/ai-vocal/ai-vocal-manager.js`
+- `nextsona-extension/popup.html`
+- `nextsona-extension/popup.js`
+- `nextsona-extension/offscreen.js`
+- `nextsona-extension/modules/ai-vocal/ai-vocal-manager.js`
 - test ที่เกี่ยวข้องใน `ai-vocal-engine/test/`
 
 ## กลุ่มงาน A — Preset และ backend policy

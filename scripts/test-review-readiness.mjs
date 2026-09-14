@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 import { transformSync } from "esbuild";
 
 const root = path.resolve(new URL(".", import.meta.url).pathname, "..");
-const store = path.join(root, "dist", "nextstudio-extension-store");
+const store = path.join(root, "dist", "nextsona-extension-store");
 const manifest = JSON.parse(fs.readFileSync(path.join(store, "manifest.json"), "utf8"));
 
 function fail(message) {
@@ -41,14 +41,14 @@ assert(storeCsp.includes("https://0.peerjs.com") && storeCsp.includes("wss://0.p
 
 const publicProtocolContext = { window: {}, TextEncoder };
 vm.runInNewContext(
-  fs.readFileSync(path.join(root, "nextstudio-public-site", "assets", "js", "remote-protocol.js"), "utf8"),
+  fs.readFileSync(path.join(root, "nextsona-public-site", "assets", "js", "remote-protocol.js"), "utf8"),
   publicProtocolContext
 );
-const publicProtocol = publicProtocolContext.window.NextStudioRemoteProtocol;
+const publicProtocol = publicProtocolContext.window.NextSonaRemoteProtocol;
 assert(publicProtocol?.VERSION === 1, "Public Remote protocol version is missing");
 
 const extensionProtocolSource = fs.readFileSync(
-  path.join(root, "next-amp-extension", "modules", "remote-protocol.js"),
+  path.join(root, "nextsona-extension", "modules", "remote-protocol.js"),
   "utf8"
 );
 const extensionProtocolModule = { exports: {} };
@@ -197,10 +197,10 @@ for (const legacyPath of [
   "remote/itty-bitty-url.txt",
   "remote/remote-ui-bundle.js",
 ]) {
-  assert(!fs.existsSync(path.join(root, "next-amp-extension", legacyPath)), `Dead legacy source remains: ${legacyPath}`);
+  assert(!fs.existsSync(path.join(root, "nextsona-extension", legacyPath)), `Dead legacy source remains: ${legacyPath}`);
 }
 
-const privacyHtml = fs.readFileSync(path.join(root, "nextstudio-public-site", "privacy", "index.html"), "utf8");
+const privacyHtml = fs.readFileSync(path.join(root, "nextsona-public-site", "privacy", "index.html"), "utf8");
 assert(/local usage counters/i.test(privacyHtml), "Privacy policy does not disclose local usage counters");
 assert(/indexeddb/i.test(privacyHtml), "Privacy policy does not identify IndexedDB recordings");
 assert(/vercel/i.test(privacyHtml), "Privacy policy does not identify the public-site host");
@@ -208,7 +208,7 @@ assert(/0\.peerjs\.com/i.test(privacyHtml), "Privacy policy does not identify th
 assert(/STUN|TURN/i.test(privacyHtml), "Privacy policy does not identify WebRTC connection services");
 assert(!/short-lived/i.test(privacyHtml), "Privacy policy still describes the Remote token as short-lived");
 assert(/closing the remote page alone does not end/i.test(privacyHtml), "Privacy policy Remote lifecycle is incomplete");
-const termsHtml = fs.readFileSync(path.join(root, "nextstudio-public-site", "terms", "index.html"), "utf8");
+const termsHtml = fs.readFileSync(path.join(root, "nextsona-public-site", "terms", "index.html"), "utf8");
 assert(/Terms of Use/i.test(termsHtml), "Terms of Use page is missing");
 assert(/authorized|อนุญาต/i.test(termsHtml), "Terms of Use does not set the media-rights responsibility");
 
@@ -219,7 +219,7 @@ assert(/amount of vocal reduction and separation quality can vary/i.test(listing
 assert(/does not send the audio stream/i.test(listing), "Store listing does not explain the Remote data-only boundary");
 assert(/donation links are optional, do not unlock features/i.test(listing), "Store listing is missing the optional donation disclosure");
 
-const offscreenSource = fs.readFileSync(path.join(root, "next-amp-extension", "offscreen.js"), "utf8");
+const offscreenSource = fs.readFileSync(path.join(root, "nextsona-extension", "offscreen.js"), "utf8");
 const startCaptureBlock = offscreenSource.match(
   /if \(msg\.type === "START_CAPTURE"\) \{([\s\S]*?)\n\s*\} else if \(msg\.type === "START_RECORDING"\)/
 )?.[1] || "";
@@ -229,14 +229,14 @@ assert(
   "GET_REMOTE_TOKEN no longer initializes PeerJS on demand"
 );
 
-const popupSource = fs.readFileSync(path.join(root, "next-amp-extension", "popup.js"), "utf8");
+const popupSource = fs.readFileSync(path.join(root, "nextsona-extension", "popup.js"), "utf8");
 assert(!popupSource.includes("ITTY_BITTY_HASH"), "Legacy embedded itty.bitty Remote payload remains");
 assert(/isAudioMasterOn\s*=\s*state\.isAudioMasterOn\s*!==\s*false/.test(popupSource), "Popup still forces an active session to Audio ON");
 assert(/clearCachedRemoteLink\(tabId\)/.test(offscreenSource), "Remote cache cleanup is missing from session teardown");
 assert(/const accepted = await checkFirstLaunchModal\(\);[\s\S]*?if \(accepted\) \{\s*initCapture/.test(popupSource), "Capture is not gated by first-use disclosure");
 
 const disclosureSource = fs.readFileSync(
-  path.join(root, "next-amp-extension", "modules", "audio-disclosure.js"),
+  path.join(root, "nextsona-extension", "modules", "audio-disclosure.js"),
   "utf8"
 );
 const disclosureModule = { exports: {} };
@@ -274,12 +274,12 @@ const accepted = await requireAudioDisclosure({
 assert(accepted === true && disclosureCalls.join(",") === "read,wait,save", "Consent was not persisted before capture could continue");
 
 const publicPeerJs = fs.readFileSync(
-  path.join(root, "nextstudio-public-site", "assets", "vendor", "peerjs.min.js"),
+  path.join(root, "nextsona-public-site", "assets", "vendor", "peerjs.min.js"),
   "utf8"
 );
 assert(!/sourceMappingURL=/i.test(publicPeerJs), "Public PeerJS bundle references a missing source map");
 const extensionPeerJs = fs.readFileSync(
-  path.join(root, "next-amp-extension", "assets", "js", "peerjs.min.js"),
+  path.join(root, "nextsona-extension", "assets", "js", "peerjs.min.js"),
   "utf8"
 );
 assert(publicPeerJs === extensionPeerJs, "Public and Extension PeerJS vendor copies differ");
@@ -288,7 +288,7 @@ const packageLock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.jso
 assert(packageLock.lockfileVersion === 3, "package-lock.json is not lockfileVersion 3");
 assert(packageLock.packages?.[""]?.devDependencies?.tailwindcss === "3.4.17", "Tailwind Store compiler is not exactly pinned");
 const extensionNotices = fs.readFileSync(
-  path.join(root, "next-amp-extension", "THIRD-PARTY-NOTICES.txt"),
+  path.join(root, "nextsona-extension", "THIRD-PARTY-NOTICES.txt"),
   "utf8"
 );
 for (const notice of ["TensorFlow.js 4.22.0", "PeerJS 1.5.5", "Tailwind CSS 3.4.17", "qrcode-generator 1.4.4"]) {
@@ -296,7 +296,7 @@ for (const notice of ["TensorFlow.js 4.22.0", "PeerJS 1.5.5", "Tailwind CSS 3.4.
 }
 
 const publicVercelConfig = JSON.parse(
-  fs.readFileSync(path.join(root, "nextstudio-public-site", "vercel.json"), "utf8")
+  fs.readFileSync(path.join(root, "nextsona-public-site", "vercel.json"), "utf8")
 );
 const publicCsp = publicVercelConfig.headers
   ?.flatMap((rule) => rule.headers || [])

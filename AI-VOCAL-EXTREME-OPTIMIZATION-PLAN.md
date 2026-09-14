@@ -2,7 +2,7 @@
 
 วันที่: 2026-09-07
 
-ขอบเขต: AI vocal ฝั่ง app/browser และ `nextstudio-engine-go`
+ขอบเขต: AI vocal ฝั่ง app/browser และ `nextsona-engine-go`
 
 ฐานอ้างอิงรอบนี้: `0d5ddd9` (`fix(ai-vocal): harden GO stream transitions`) ซึ่งรวม adaptive queue/DSP/dashboard batch แล้ว
 

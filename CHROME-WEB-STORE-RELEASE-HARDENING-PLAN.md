@@ -1,4 +1,4 @@
-# NextStudio Chrome Web Store Release & Security Hardening Plan
+# NextSona Chrome Web Store Release & Security Hardening Plan
 
 วันที่จัดทำ: 2026-09-12
 

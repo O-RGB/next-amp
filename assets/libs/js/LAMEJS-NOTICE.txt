@@ -8,7 +8,7 @@ The standalone Web player includes the vendored JavaScript file
 
 The upstream project identifies the code as LGPL-3.0 and asks commercial
 users to keep LAMEjs as a separate library, acknowledge its use and link to
-the LAME project. The NextStudio Web build keeps this encoder as a separate
+the LAME project. The NextSona Web build keeps this encoder as a separate
 asset and does not modify it at build time.
 
 The exact bytes shipped in this repository have SHA-256:

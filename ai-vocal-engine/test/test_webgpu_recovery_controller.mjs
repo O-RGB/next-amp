@@ -5,7 +5,7 @@ import {
   calculateWebGpuReadbackTimeout,
   clampRecoveryTimeout,
   settleWithDeadline
-} from '../../next-amp-extension/modules/ai-vocal/webgpu-recovery-controller.mjs';
+} from '../../nextsona-extension/modules/ai-vocal/webgpu-recovery-controller.mjs';
 
 assert.equal(clampRecoveryTimeout(1500, 1000, 2000), 1500);
 assert.equal(clampRecoveryTimeout(500, 1000, 2000), 1000);

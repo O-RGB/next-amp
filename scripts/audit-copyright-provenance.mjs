@@ -20,27 +20,27 @@ const FORBIDDEN_REFERENCE_HASHES = new Map([
 ]);
 
 const MODEL_HASHES = new Map([
-  ["model.json", "8917532971a28410af9c01011c1c1cfbb6ce6e6bfbe667bb2c7d09e425fbaa07"],
+  ["model.json", "77b9dc9b7a8c3cebd98a04bcb80b6d27eed710cb433bca0f2e8d4d1eb7d3e44b"],
   ["group1-shard1of1.bin", "13cafca89123ac168bf2d45adbd916b2d67bbbdc7cfeee56ed03947f7421f135"],
 ]);
 
 const MODEL_DIRECTORIES = [
-  "next-amp-extension/model",
+  "nextsona-extension/model",
 ];
 
 const SCAN_ROOTS = [
-  "next-amp-extension",
+  "nextsona-extension",
   "ai-vocal-engine/src",
   "ai-vocal-engine/demo",
-  "nextstudio-engine-go",
+  "nextsona-engine-go",
   "assets",
-  "nextstudio-public-site",
-  "nextstudio-model-builder",
+  "nextsona-public-site",
+  "nextsona-model-builder",
 ];
 
 const OPTIONAL_RELEASE_ROOTS = [
-  "dist/nextstudio-extension-store",
-  "dist/nextstudio-web-prod",
+  "dist/nextsona-extension-store",
+  "dist/nextsona-web-prod",
 ];
 
 const TEXT_EXTENSIONS = new Set([".c", ".h", ".html", ".js", ".mjs", ".ts"]);

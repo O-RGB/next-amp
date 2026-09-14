@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * NextStudio standalone Web production build.
+ * NextSona standalone Web production build.
  *
  * The source Web player stays readable/development-friendly. This pipeline
- * creates a deployable static tree in dist/nextstudio-web-prod where:
+ * creates a deployable static tree in dist/nextsona-web-prod where:
  *   - proprietary AI model/WASM files exist only as authenticated ciphertext;
  *   - application/AI/worklet code is bundled and obfuscated;
  *   - shipped asset names are mangled, so source paths are not reusable;
@@ -22,8 +22,8 @@ const esbuild = require("esbuild");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const SRC_DIR = ROOT_DIR;
-const DIST_DIR = path.join(ROOT_DIR, "dist", "nextstudio-web-prod");
-const TEMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "nextstudio-web-build-"));
+const DIST_DIR = path.join(ROOT_DIR, "dist", "nextsona-web-prod");
+const TEMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "nextsona-web-build-"));
 const OBFUSCATOR_BIN = path.join(
   ROOT_DIR,
   "node_modules",
@@ -31,20 +31,20 @@ const OBFUSCATOR_BIN = path.join(
   "javascript-obfuscator"
 );
 
-const WEB_ASSET_MAGIC = Buffer.from("NAMPWEB1", "ascii");
+const WEB_ASSET_MAGIC = Buffer.from("NSONAWB1", "ascii");
 const WEB_ASSET_HEADER_BYTES = 20;
 const WEB_ASSET_KEY = crypto.randomBytes(32);
 const WEB_ASSET_KEY_B64 = WEB_ASSET_KEY.toString("base64");
 
 const unauthorizedCopyDisabled =
-  process.env.NEXTSTUDIO_DISABLE_UNAUTHORIZED_COPY === "true";
+  process.env.NEXTSONA_DISABLE_UNAUTHORIZED_COPY === "true";
 const serviceWorkerDisabled =
-  process.env.NEXTSTUDIO_DISABLE_SERVICE_WORKER === "true";
+  process.env.NEXTSONA_DISABLE_SERVICE_WORKER === "true";
 
 function getMangledName(key, ext) {
   const hash = crypto
     .createHash("md5")
-    .update("nextstudio_web_" + key)
+    .update("nextsona_web_" + key)
     .digest("hex")
     .slice(0, 10);
   return `${hash}${ext}`;
@@ -205,23 +205,23 @@ function buildApplicationSource() {
   const guardValue = unauthorizedCopyDisabled ? "true" : "false";
   source = replaceRequired(
     source,
-    '"__NEXTSTUDIO_DISABLE_UNAUTHORIZED_COPY__"',
+    '"__NEXTSONA_DISABLE_UNAUTHORIZED_COPY__"',
     JSON.stringify(guardValue),
     "Unauthorized Copy env marker"
   );
 
   const replacements = [
     ["../mjs/SignalsmithStretch.mjs", `../mjs/${FILE_NAMES.signalsmith}`],
-    ["/next-amp-extension/assets/libs/js/tf.min.js", WEB_PATHS.tf],
-    ["/next-amp-extension/assets/libs/js/tf-backend-webgpu.min.js", WEB_PATHS.tfWebgpu],
-    ["/next-amp-extension/modules/ai-vocal/vocal-worklet.js", WEB_PATHS.vocalWorklet],
-    ["/next-amp-extension/modules/ai-vocal/stft_simd.wasm", WEB_PATHS.stftSimd],
-    ["/next-amp-extension/modules/ai-vocal/stft_scalar.wasm", WEB_PATHS.stftScalar],
-    ["/next-amp-extension/model/model.json", WEB_PATHS.model],
+    ["/nextsona-extension/assets/libs/js/tf.min.js", WEB_PATHS.tf],
+    ["/nextsona-extension/assets/libs/js/tf-backend-webgpu.min.js", WEB_PATHS.tfWebgpu],
+    ["/nextsona-extension/modules/ai-vocal/vocal-worklet.js", WEB_PATHS.vocalWorklet],
+    ["/nextsona-extension/modules/ai-vocal/stft_simd.wasm", WEB_PATHS.stftSimd],
+    ["/nextsona-extension/modules/ai-vocal/stft_scalar.wasm", WEB_PATHS.stftScalar],
+    ["/nextsona-extension/model/model.json", WEB_PATHS.model],
     // app.js is emitted under assets/libs/js/, so this import is relative to
     // that module rather than to the document URL.
-    ["../../next-amp-extension/modules/ai-vocal/ai-vocal-manager.js", `../../ai/${FILE_NAMES.aiManager}`],
-    ["assetBase: \"/next-amp-extension/\"", "assetBase: \"assets/ai/\""],
+    ["../../nextsona-extension/modules/ai-vocal/ai-vocal-manager.js", `../../ai/${FILE_NAMES.aiManager}`],
+    ["assetBase: \"/nextsona-extension/\"", "assetBase: \"assets/ai/\""],
     ["protectedAssets: false", "protectedAssets: true"]
   ];
   for (const [search, replacement] of replacements) {
@@ -238,7 +238,7 @@ function buildAIManager() {
   esbuild.buildSync({
     // Use the Web adapter as the entry point. It imports the unchanged
     // Extension manager, so both targets execute the same AI pipeline.
-    entryPoints: [path.join(SRC_DIR, "next-amp-extension", "modules", "ai-vocal", "ai-vocal-manager-web.js")],
+    entryPoints: [path.join(SRC_DIR, "nextsona-extension", "modules", "ai-vocal", "ai-vocal-manager-web.js")],
     outfile: bundledFile,
     bundle: true,
     format: "esm",
@@ -250,7 +250,7 @@ function buildAIManager() {
   let bundled = read(bundledFile, "utf8");
   bundled = replaceRequired(
     bundled,
-    '"__NEXTSTUDIO_WEB_ASSET_KEY__"',
+    '"__NEXTSONA_WEB_ASSET_KEY__"',
     JSON.stringify(WEB_ASSET_KEY_B64),
     "Web asset key placeholder"
   );
@@ -269,7 +269,7 @@ function replaceWebAssetReferences(content) {
     content = replaceAll(content, search, replacement);
   }
   // Keep the whole static output relocatable. This matters when a simple
-  // server exposes it under /dist/nextstudio-web-prod/ during testing.
+  // server exposes it under /dist/nextsona-web-prod/ during testing.
   content = content.replace(/(["'])\/assets\//g, "$1assets/");
   return content;
 }
@@ -302,10 +302,9 @@ function buildHtmlFiles() {
 
 function copyStaticWebAssets() {
   copy(path.join(SRC_DIR, "assets", "logo", "logo.png"), path.join(DIST_DIR, "assets", "logo", "logo.png"));
-  copy(path.join(SRC_DIR, "assets", "post", "image.png"), path.join(DIST_DIR, "assets", "post", "image.png"));
   copy(path.join(SRC_DIR, "assets", "THIRD-PARTY-NOTICES.txt"), path.join(DIST_DIR, "THIRD-PARTY-NOTICES.txt"));
-  copy(path.join(SRC_DIR, "next-amp-extension", "LICENSE-APACHE-2.0.txt"), path.join(DIST_DIR, "LICENSE-APACHE-2.0.txt"));
-  copy(path.join(SRC_DIR, "next-amp-extension", "model", "LICENSE"), path.join(DIST_DIR, "MODEL-LICENSE.txt"));
+  copy(path.join(SRC_DIR, "nextsona-extension", "LICENSE-APACHE-2.0.txt"), path.join(DIST_DIR, "LICENSE-APACHE-2.0.txt"));
+  copy(path.join(SRC_DIR, "nextsona-extension", "model", "LICENSE"), path.join(DIST_DIR, "MODEL-LICENSE.txt"));
   for (const fileName of ["startup.mp3", "allow-sound.mp3"]) {
     copy(path.join(SRC_DIR, "assets", "sounds", fileName), path.join(DIST_DIR, "assets", "sounds", fileName));
   }
@@ -330,13 +329,13 @@ function buildLibraries() {
   copy(path.join(SRC_DIR, "assets", "libs", "js", "tailwindcss.js"), path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.tailwind));
   copy(path.join(SRC_DIR, "assets", "libs", "js", "lame.min.js"), path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.lame));
   copy(path.join(SRC_DIR, "assets", "libs", "js", "LAMEJS-NOTICE.txt"), path.join(DIST_DIR, "assets", "libs", "js", "LAMEJS-NOTICE.txt"));
-  copy(path.join(SRC_DIR, "next-amp-extension", "assets", "libs", "js", "tf.min.js"), path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.tf));
-  copy(path.join(SRC_DIR, "next-amp-extension", "assets", "libs", "js", "tf-backend-webgpu.min.js"), path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.tfWebgpu));
+  copy(path.join(SRC_DIR, "nextsona-extension", "assets", "libs", "js", "tf.min.js"), path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.tf));
+  copy(path.join(SRC_DIR, "nextsona-extension", "assets", "libs", "js", "tf-backend-webgpu.min.js"), path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.tfWebgpu));
   copy(path.join(SRC_DIR, "assets", "libs", "worker", "mp3-worker.js"), path.join(DIST_DIR, "assets", "libs", "worker", FILE_NAMES.mp3Worker));
 }
 
 function buildProtectedAIAssets() {
-  const sourceRoot = path.join(SRC_DIR, "next-amp-extension");
+  const sourceRoot = path.join(SRC_DIR, "nextsona-extension");
   writeProtectedAsset(
     path.join(DIST_DIR, "assets", "ai", FILE_NAMES.stftSimd),
     read(path.join(sourceRoot, "modules", "ai-vocal", "stft_simd.wasm"))
@@ -356,7 +355,7 @@ function buildApplicationCode() {
   const appSource = buildApplicationSource();
   obfuscate(appSource, path.join(DIST_DIR, "assets", "libs", "js", FILE_NAMES.app));
 
-  const workletSource = path.join(SRC_DIR, "next-amp-extension", "modules", "ai-vocal", "vocal-worklet.js");
+  const workletSource = path.join(SRC_DIR, "nextsona-extension", "modules", "ai-vocal", "vocal-worklet.js");
   obfuscate(workletSource, path.join(DIST_DIR, "assets", "ai", FILE_NAMES.vocalWorklet), {
     controlFlow: false,
     deadCode: false
@@ -372,7 +371,7 @@ function verifyOutput() {
     "stft_simd.wasm",
     "stft_scalar.wasm",
     "assets/libs/js/app.js",
-    "next-amp-extension/modules/ai-vocal/ai-vocal-manager.js"
+    "nextsona-extension/modules/ai-vocal/ai-vocal-manager.js"
   ];
   for (const relative of forbidden) {
     if (fs.existsSync(path.join(DIST_DIR, relative))) {
@@ -409,7 +408,7 @@ function verifyOutput() {
 
 function main() {
   console.log("====================================================");
-  console.log("NEXTSTUDIO STANDALONE WEB PRODUCTION BUILD");
+  console.log("NEXTSONA STANDALONE WEB PRODUCTION BUILD");
   console.log("====================================================");
   console.log(`Unauthorized Copy guard: ${unauthorizedCopyDisabled ? "DISABLED (env)" : "ENABLED"}`);
   console.log(`Service Worker: ${serviceWorkerDisabled ? "DISABLED (env)" : "ENABLED"}`);

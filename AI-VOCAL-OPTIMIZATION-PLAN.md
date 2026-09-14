@@ -50,11 +50,11 @@ A ทำแล้วใน app และ build ผ่าน ส่วน B/C aut
 
 จุดตรวจโค้ด:
 
-- [manager: normalization, model execution, alignment, OLA](next-amp-extension/modules/ai-vocal/ai-vocal-manager.js)
-- [worklet: stream boundary, queue, underrun](next-amp-extension/modules/ai-vocal/vocal-worklet.js)
+- [manager: normalization, model execution, alignment, OLA](nextsona-extension/modules/ai-vocal/ai-vocal-manager.js)
+- [worklet: stream boundary, queue, underrun](nextsona-extension/modules/ai-vocal/vocal-worklet.js)
 - [DSP: STFT, window, magnitude floor, spectrum ring](ai-vocal-engine/src/dsp/stft_core.c)
-- [sample-rate selection](next-amp-extension/offscreen.js)
-- [model graph](next-amp-extension/model/model.json)
+- [sample-rate selection](nextsona-extension/offscreen.js)
+- [model graph](nextsona-extension/model/model.json)
 
 ## A — ลดงานภายในโมเดลโดยรักษาการคำนวณเดิม
 

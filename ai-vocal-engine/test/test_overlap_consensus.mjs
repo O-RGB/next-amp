@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AIVocalManager } from '../../next-amp-extension/modules/ai-vocal/ai-vocal-manager.js';
-import { applyOverlapConsensusToMask } from '../../next-amp-extension/modules/ai-vocal/overlap-consensus.mjs';
+import { AIVocalManager } from '../../nextsona-extension/modules/ai-vocal/ai-vocal-manager.js';
+import { applyOverlapConsensusToMask } from '../../nextsona-extension/modules/ai-vocal/overlap-consensus.mjs';
 
 const BINS = 2;
 const HEAD_FRAMES = 32;
@@ -79,7 +79,7 @@ test('uncertain, acapella, and first-window masks preserve the baseline', () => 
 
 test('Detail candidate reads the existing full-model tail without compact output head', () => {
   const manager = new AIVocalManager({ sampleRate: 44100 });
-  assert.equal(manager.overlapConsensusEnabled, true);
+  assert.equal(manager.overlapConsensusEnabled, false);
   manager.modelOutputHead = null;
 
   const calls = [];

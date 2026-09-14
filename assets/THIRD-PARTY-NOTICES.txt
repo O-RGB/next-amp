@@ -1,4 +1,4 @@
-NextStudio Web — Third-Party Notices
+NextSona Web — Third-Party Notices
 ====================================
 
 The standalone Web player includes the following locally bundled components.
@@ -19,4 +19,4 @@ The complete Apache License 2.0 text for TensorFlow.js is shipped as
 LICENSE-APACHE-2.0.txt. The LAMEjs-specific notice and the exact vendored
 bundle fingerprint are shipped as assets/libs/js/LAMEJS-NOTICE.txt.
 
-NextStudio's own source and UI are not granted under the licenses above.
+NextSona's own source and UI are not granted under the licenses above.

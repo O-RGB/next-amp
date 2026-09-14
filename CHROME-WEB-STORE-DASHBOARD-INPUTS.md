@@ -1,4 +1,4 @@
-# NextStudio Chrome Web Store Dashboard Inputs
+# NextSona Chrome Web Store Dashboard Inputs
 
 Copy the values below into the Chrome Web Store Dashboard for the Store ZIP.
 This file is an input sheet; it does not replace the required dashboard
@@ -10,7 +10,7 @@ submission or the manual clean-profile tests.
 
 ## Single purpose
 
-NextStudio is a browser audio practice tool for the media tab selected by the
+NextSona is a browser audio practice tool for the media tab selected by the
 user. It provides pitch, effects, optional AI vocal modes, recording, video
 synchronization and data-only Remote control for that same audio practice
 workflow.
@@ -46,12 +46,12 @@ policies. The privacy policy identifies these services.
 ## Reviewer notes
 
 ```text
-NextStudio has one user-facing purpose: real-time audio practice and media
+NextSona has one user-facing purpose: real-time audio practice and media
 synchronization for a tab selected by the user.
 
 To test:
 1. Open a tab containing playing audio.
-2. Click the NextStudio toolbar action.
+2. Click the NextSona toolbar action.
 3. Read the one-time audio disclosure and click Continue.
 4. Use Pitch/EQ/Reverb, or enable AI Vocal and select Karaoke/Acapella.
 5. Video controls are injected only into the active tab after the toolbar
@@ -67,8 +67,8 @@ remote code. Optional donations do not unlock features.
 
 ## Final submission checks
 
-- Upload only `dist/nextstudio-extension-store.zip`.
-- Do not upload `dist/nextstudio-extension-go-dev.zip`.
+- Upload only `dist/nextsona-extension-store.zip`.
+- Do not upload `dist/nextsona-extension-go-dev.zip`.
 - Use the exact listing text in `CHROME-WEB-STORE-DESCRIPTION.md`.
 - Use screenshots taken from the same Store build, without Go/native or hidden
   development controls.

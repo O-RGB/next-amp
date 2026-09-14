@@ -8,18 +8,18 @@ cert.pem
 key.pem
 
 # Go native engine: local build outputs
-nextstudio-engine-go/nextstudio-engine
-nextstudio-engine-go/nextstudio-engine.exe
-nextstudio-engine-go/nextstudio-engine-go
+nextsona-engine-go/nextsona-engine
+nextsona-engine-go/nextsona-engine.exe
+nextsona-engine-go/nextsona-engine-go
 
 # Go native engine: large local packaging inputs
-# The compressed/encrypted files under nextstudio-engine-go/assets/ are kept
+# The compressed/encrypted files under nextsona-engine-go/assets/ are kept
 # because they are required by go:embed at runtime/build time.
-nextstudio-engine-go/*.onnx
-nextstudio-engine-go/*.dylib
-nextstudio-engine-go/*.dll
+nextsona-engine-go/*.onnx
+nextsona-engine-go/*.dylib
+nextsona-engine-go/*.dll
 
 # Local session metadata
-nextstudio-engine-go/:memory:.ses
+nextsona-engine-go/:memory:.ses
 # ONNX Runtime telemetry scratch file (ORT 1.30+)
 :memory:.ses

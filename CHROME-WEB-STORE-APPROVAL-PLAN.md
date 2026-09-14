@@ -1,4 +1,4 @@
-# NextStudio Chrome Web Store Approval Plan
+# NextSona Chrome Web Store Approval Plan
 
 วันที่จัดทำ: 2026-09-12
 
@@ -75,7 +75,7 @@ Remote session URL จะมีรูปแบบ:
 - [ ] Bundle PeerJS และ UI dependency เข้า Remote deployment; ไม่โหลดจาก unpkg/jsDelivr
 - [ ] Bundle fonts/icons เอง หรือใช้ system fonts เพื่อลด third-party request
 - [ ] Deploy หน้า Remote บน production HTTPS domain ที่ผู้พัฒนาควบคุม
-- [ ] แสดงชื่อ NextStudio, privacy link และสถานะ connection ให้ชัดเจน
+- [ ] แสดงชื่อ NextSona, privacy link และสถานะ connection ให้ชัดเจน
 - [ ] อ่าน `host` และ `token` จาก URL fragment เท่านั้น
 - [ ] ลบ fragment ออกจาก address bar ด้วย `history.replaceState` หลังอ่านสำเร็จ
 - [ ] ไม่เก็บ token ใน localStorage, analytics หรือ error reporting

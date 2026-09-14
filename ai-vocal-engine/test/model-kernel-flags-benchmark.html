@@ -2,15 +2,15 @@
 <meta charset="utf-8">
 <title>RUNNING</title>
 <pre id="result">Running...</pre>
-<script src="../../next-amp-extension/assets/libs/js/tf.min.js"></script>
+<script src="../../nextsona-extension/assets/libs/js/tf.min.js"></script>
 <script type="module">
-import { optimizeVocalModelArtifacts } from '../../next-amp-extension/modules/ai-vocal/model-optimizer.mjs';
+import { optimizeVocalModelArtifacts } from '../../nextsona-extension/modules/ai-vocal/model-optimizer.mjs';
 
 const params = new URLSearchParams(location.search);
 const candidate = params.get('candidate') || 'baseline';
 const rounds = Math.max(8, Number(params.get('rounds')) || 24);
 const result = document.querySelector('#result');
-const MODEL_URL = '../../next-amp-extension/model/model.json';
+const MODEL_URL = '../../nextsona-extension/model/model.json';
 
 const candidates = {
   baseline: {},
@@ -104,7 +104,7 @@ async function run() {
       output.timing.minMs, output.timing.maxMs,
       encodeURIComponent(renderer || 'unknown')
     ].join('|');
-    if (parent !== window) parent.postMessage({ type: 'NEXTSTUDIO_KERNEL_BENCH', output }, location.origin);
+    if (parent !== window) parent.postMessage({ type: 'NEXTSONA_KERNEL_BENCH', output }, location.origin);
   } finally {
     input.dispose();
     model.dispose();
@@ -116,7 +116,7 @@ run().catch(error => {
   document.title = `ERROR|${candidate}|${encodeURIComponent(error?.message || String(error))}`;
   if (parent !== window) {
     parent.postMessage({
-      type: 'NEXTSTUDIO_KERNEL_BENCH',
+      type: 'NEXTSONA_KERNEL_BENCH',
       output: { candidate, error: error?.stack || String(error) }
     }, location.origin);
   }

@@ -1,6 +1,6 @@
-# NextStudio AI Vocal Engine
+# NextSona AI Vocal Engine
 
-Ultra-lightweight, high-performance real-time AI Vocal Remover and Stem Separation engine for NextStudio.
+Ultra-lightweight, high-performance real-time AI Vocal Remover and Stem Separation engine for NextSona.
 
 ## Directory Structure
 
@@ -32,5 +32,5 @@ Run the automated build script:
 This will:
 1. Compile `stft_core.c` with Emscripten (`-O3 -msimd128 -flto`).
 2. Generate `stft_simd.wasm` (14 KB) and `stft_scalar.wasm` (13 KB).
-3. Automatically synchronize build artifacts directly into `next-amp-extension/modules/ai-vocal/`.
+3. Automatically synchronize build artifacts directly into `nextsona-extension/modules/ai-vocal/`.
 4. Run automated unit tests verifying SNR reconstruction (> 130 dB) and speed benchmarks (> 70x real-time).

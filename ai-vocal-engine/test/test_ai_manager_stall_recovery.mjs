@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { AIVocalManager } from '../../next-amp-extension/modules/ai-vocal/ai-vocal-manager.js';
+import { AIVocalManager } from '../../nextsona-extension/modules/ai-vocal/ai-vocal-manager.js';
 
 const oldTf = globalThis.tf;
 let backendRemoves = 0;

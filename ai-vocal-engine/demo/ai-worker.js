@@ -1,5 +1,5 @@
 /**
- * NextStudio AI Vocal Engine - Hyper-Optimized Web Worker
+ * NextSona AI Vocal Engine - Hyper-Optimized Web Worker
  * 
  * 4 Major Optimizations:
  * 1. 100% Zero-Copy C/WASM Ring Buffer (stft_apply_mask_delayed - zero JS allocations)
@@ -93,13 +93,13 @@ async function init() {
       tf.env().set("PROD", true);
     }
 
-    model = await tf.loadGraphModel("../../next-amp-extension/model/model.json");
+    model = await tf.loadGraphModel("../../nextsona-extension/model/model.json");
     resetState();
 
-    console.log(`[NextStudio AI] Initialized with backend: ${activeBackend.toUpperCase()}`);
+    console.log(`[NextSona AI] Initialized with backend: ${activeBackend.toUpperCase()}`);
     self.postMessage({ type: "READY", backend: activeBackend });
   } catch (err) {
-    console.error("[NextStudio Worker] Init error:", err);
+    console.error("[NextSona Worker] Init error:", err);
     self.postMessage({ type: "ERROR", error: err.message || err.toString() });
   }
 }
@@ -233,7 +233,7 @@ async function processChunk(chunkIndex, rawL, rawR, mode, strength = 1.0, genera
       [outL.buffer, outR.buffer]
     );
   } catch (err) {
-    console.error("[NextStudio Worker] processChunk error:", err);
+    console.error("[NextSona Worker] processChunk error:", err);
     self.postMessage({
       type: "CHUNK_PROCESSED",
       chunkIndex,
