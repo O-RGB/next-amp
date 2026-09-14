@@ -1,4 +1,4 @@
-# NextStudio Chrome Web Store Release & Security Hardening Plan
+# NextSona Chrome Web Store Release & Security Hardening Plan
 
 วันที่จัดทำ: 2026-09-12
 
@@ -236,4 +236,3 @@ Chrome อนุญาตให้ Extension เปิดเว็บไซต�
 2. Phase 3 และ Phase 4 เพื่อให้ permission/privacy ผ่าน review
 3. Phase 5 และ Phase 6 เพื่อปิด security และ supply-chain risks
 4. Phase 7 แล้วจบด้วย Phase 8 เพื่อตรวจ artifact ตัวจริงก่อน upload
-

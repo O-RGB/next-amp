@@ -1,20 +1,20 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>NextStudio model equivalence and timing</title>
+<title>NextSona model equivalence and timing</title>
 <p>Local diagnostic: compares unchanged weights and output masks. Timings are not power measurements. Run one backend at a time with this page visible.</p>
 <button id="webgpu">Test WebGPU</button>
 <button id="webgl">Test WebGL</button>
 <pre id="result">Choose a backend. Keep this page visible for timing.</pre>
-<script src="../../next-amp-extension/assets/libs/js/tf.min.js"></script>
-<script src="../../next-amp-extension/assets/libs/js/tf-backend-webgpu.min.js"></script>
+<script src="../../nextsona-extension/assets/libs/js/tf.min.js"></script>
+<script src="../../nextsona-extension/assets/libs/js/tf-backend-webgpu.min.js"></script>
 <script type="module">
-import { optimizeVocalModelArtifacts } from '../../next-amp-extension/modules/ai-vocal/model-optimizer.mjs';
+import { optimizeVocalModelArtifacts } from '../../nextsona-extension/modules/ai-vocal/model-optimizer.mjs';
 import { compareStreamingModels, measureFrameIndexedContinuity } from './stream-model-equivalence.mjs';
 
 const display = document.querySelector('#result');
 const pause = () => new Promise(resolve => setTimeout(resolve, 0));
-const MODEL_JSON_URL = '../../next-amp-extension/model/model.json';
-const MODEL_BIN_URL = '../../next-amp-extension/model/group1-shard1of1.bin';
+const MODEL_JSON_URL = '../../nextsona-extension/model/model.json';
+const MODEL_BIN_URL = '../../nextsona-extension/model/group1-shard1of1.bin';
 
 async function sha256(url) {
   const response = await fetch(url, { cache: 'no-store' });

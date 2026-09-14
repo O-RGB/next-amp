@@ -4,7 +4,7 @@ export async function compareStreamingModels(tf, models, numFrames = 15) {
   const chunkSamples = numFrames * 512;
   const historySamples = 1536;
   const sliceBase = numFrames === 15 ? 49 : 48;
-  const bytes = await (await fetch('../../next-amp-extension/modules/ai-vocal/stft_simd.wasm')).arrayBuffer();
+  const bytes = await (await fetch('../../nextsona-extension/modules/ai-vocal/stft_simd.wasm')).arrayBuffer();
   const states = await Promise.all(models.map(async () => {
     const { instance } = await WebAssembly.instantiate(bytes, { env: {} });
     const exp = instance.exports;

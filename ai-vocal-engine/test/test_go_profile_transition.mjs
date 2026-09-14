@@ -3,9 +3,11 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const source = fs.readFileSync(
-  new URL('../../next-amp-extension/modules/ai-vocal/ai-vocal-manager.js', import.meta.url),
+  new URL('../../nextsona-extension/modules/ai-vocal/ai-vocal-manager.js', import.meta.url),
   'utf8'
 )
+  .replace('import { GO_ENGINE_ENABLED } from "./build-feature-flags.js";\n', 'const GO_ENGINE_ENABLED = true;\n')
+  .replace('import {\n  EngineClient,\n  ENGINE_TYPE,\n  ENGINE_DISPLAY_NAME,\n  ENGINE_API,\n} from "./engine-client-runtime.js";\n', 'const EngineClient = GoEngineClient;\nconst ENGINE_TYPE = "go_native";\nconst ENGINE_DISPLAY_NAME = "Go Native Core";\nconst ENGINE_API = "DIRECTML";\n')
   .replace('import { GoEngineClient } from "./go-engine-client.js";\n', '')
   .replace('import { createVocalModelLoader } from "./model-optimizer.mjs";\n', '')
   .replace('import { createProtectedModelSource, loadProtectedAsset } from "./web-protected-assets.mjs";\n', '')
@@ -13,7 +15,8 @@ const source = fs.readFileSync(
   .replace('import {\n  calculateWebGpuReadbackTimeout,\n  settleWithDeadline,\n  WebGpuReadbackTimeoutError\n} from "./webgpu-recovery-controller.mjs";\n', 'const calculateWebGpuReadbackTimeout = () => 1000;\nconst settleWithDeadline = () => Promise.resolve({ status: "fulfilled", value: null });\nclass WebGpuReadbackTimeoutError extends Error {}\n')
   .replace('import { webGpuRecoveryCoordinator } from "./webgpu-recovery-controller.mjs";\n', 'const webGpuRecoveryCoordinator = { register: () => () => {}, request: () => Promise.resolve([]), releaseBackendIfUnused: () => false };\n')
   .replace('import {\n  DEFAULT_AI_POWER_MODE,\n  getAiPowerModeConfig,\n  normalizeAiPowerMode,\n  shouldPreferWebGlForPowerMode\n} from "./ai-power-mode.mjs";\n', 'const DEFAULT_AI_POWER_MODE = "eco";\nconst normalizeAiPowerMode = value => value === "quality" ? "quality" : "eco";\nconst getAiPowerModeConfig = value => normalizeAiPowerMode(value) === "eco" ? ({ processingProfile: "balanced", backendPolicy: "auto_webgpu_first", webglF16: false, webgpuDeferredSubmitBatchSize: 15, attenuationFloor: false, asymmetricSmoothing: false, transientGate: false, overlapConsensus: false, adaptiveQueue: false }) : ({ processingProfile: "ai_remove", backendPolicy: "auto_webgpu_first", webglF16: true, webgpuDeferredSubmitBatchSize: 0, attenuationFloor: false, asymmetricSmoothing: true, transientGate: true, overlapConsensus: false, adaptiveQueue: true });\nconst shouldPreferWebGlForPowerMode = () => false;\n')
-  .replace('export class AIVocalManager', 'const applyOverlapConsensusToMask = () => false;\n\nclass AIVocalManager') +
+  .replace('export class AIVocalManager', 'const applyOverlapConsensusToMask = () => false;\n\nclass AIVocalManager')
+  .replace(/^export const /gm, 'const ') +
   '\nthis.AIVocalManager = AIVocalManager;';
 
 class StubGoEngineClient {

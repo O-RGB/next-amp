@@ -3,9 +3,9 @@
  * precompiled CSS generated from this file. */
 module.exports = {
   content: [
-    "./next-amp-extension/popup.html",
-    "./next-amp-extension/popup.js",
-    "./next-amp-extension/modules/**/*.js",
+    "./nextsona-extension/popup.html",
+    "./nextsona-extension/popup.js",
+    "./nextsona-extension/modules/**/*.js",
   ],
   theme: {
     extend: {

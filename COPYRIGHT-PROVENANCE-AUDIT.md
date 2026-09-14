@@ -1,4 +1,4 @@
-# NextStudio Copyright and Provenance Audit
+# NextSona Copyright and Provenance Audit
 
 > Internal release checklist. This is an engineering provenance audit, not a
 > legal opinion. Copyright and contract questions depend on jurisdiction.
@@ -55,7 +55,7 @@ Commit `ac5cbc94d0ddbc7831c97c40de7e5a8877da105c` added an STFT WASM with
 SHA-256
 `90e0e972dc82bab2b1ddbeb1e04c33ce1e6b1b4522662137b1164d6aed6a37e2`,
 which is identical to `ai remove/stft.wasm`. Commit `e34e1678` removed that
-binary and replaced it with NextStudio's C-based scalar/SIMD implementation,
+binary and replaced it with NextSona's C-based scalar/SIMD implementation,
 but the old object remains reachable in Git history.
 
 - [x] The copied historical WASM is absent from the current Store source and
@@ -79,10 +79,15 @@ fully cleared:
 
 - [ ] Confirm in writing that NextFeeder Labs created or owns every logo,
   banner, screenshot and promotional image in `assets/`,
-  `next-amp-extension/assets/` and `nextstudio-public-site/assets/images/`.
-- [ ] Preserve the exact license/source/version for `assets/libs/js/lame.min.js`
+  `nextsona-extension/assets/` and `nextsona-public-site/assets/images/`.
+- [x] Added a Web-build LAMEjs notice with the vendored bundle hash, upstream
+  source URL and the LGPL usage conditions; the Chrome Store package does not
+  include the MP3 encoder.
+- [ ] Confirm the exact upstream lamejs revision of the legacy Web bundle before
+  making a legal claim about its precise version; replace it with a verified
+  upstream artifact if that provenance cannot be established.
   in the separately shipped web app.
-- [ ] Decide whether the NextStudio source is proprietary or open source and
+- [ ] Decide whether the NextSona source is proprietary or open source and
   add a root-level copyright/license notice that reflects that decision.
 - [ ] Keep a release evidence archive: source commit, Store ZIP hash,
   third-party notices, upstream URLs, upstream files and their hashes.

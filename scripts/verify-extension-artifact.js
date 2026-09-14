@@ -23,8 +23,8 @@ if (!['store', 'go-dev'].includes(profile)) {
 }
 
 const outputName = profile === "store"
-  ? "nextstudio-extension-store"
-  : "nextstudio-extension-go-dev";
+  ? "nextsona-extension-store"
+  : "nextsona-extension-go-dev";
 const distDir = path.join(ROOT_DIR, "dist", outputName);
 const zipPath = path.join(ROOT_DIR, "dist", `${outputName}.zip`);
 
@@ -71,7 +71,7 @@ const forbiddenStoreTokens = [
   "goengineclient",
   "go native core",
   "activate go engine",
-  "nextstudio-engine",
+  "nextsona-engine",
   "nativemessaging",
   "api.qrserver.com",
   "fonts.googleapis.com",
@@ -83,15 +83,18 @@ const forbiddenStoreTokens = [
   "mount_ui",
   "remote_ui",
   "security-core-protected",
-  "nampweb1",
+  "nsonawb1",
 ];
 
 function checkStoreFileName(relativePath) {
   const lower = relativePath.toLowerCase();
+  if (/(^|\/)(?:\.ds_store|thumbs\.db)$/.test(lower)) {
+    fail(`OS metadata file in extension artifact: ${relativePath}`);
+  }
   if (/\.(exe|dylib|dll|wasm\.js)$/.test(lower)) {
     fail(`native/raw binary-looking file in Store ZIP: ${relativePath}`);
   }
-  if (/(^|\/)(go|native|nextstudio-engine)(\/|\.|$)/.test(lower)) {
+  if (/(^|\/)(go|native|nextsona-engine)(\/|\.|$)/.test(lower)) {
     fail(`Go/native artifact name in Store ZIP: ${relativePath}`);
   }
 }
@@ -158,6 +161,7 @@ if (profile === "store") {
   for (const requiredFile of [
     "THIRD-PARTY-NOTICES.txt",
     "MODEL-LICENSE.txt",
+    "LICENSE-APACHE-2.0.txt",
     "model/model.json",
     "model/group1-shard1of1.bin",
     "stft_simd.wasm",
@@ -166,22 +170,22 @@ if (profile === "store") {
     if (!fs.existsSync(path.join(distDir, requiredFile))) fail(`required Store file is missing: ${requiredFile}`);
   }
   requireByteIdentical(
-    path.join(ROOT_DIR, "next-amp-extension", "model", "model.json"),
+    path.join(ROOT_DIR, "nextsona-extension", "model", "model.json"),
     path.join(distDir, "model", "model.json"),
     "Store model JSON"
   );
   requireByteIdentical(
-    path.join(ROOT_DIR, "next-amp-extension", "model", "group1-shard1of1.bin"),
+    path.join(ROOT_DIR, "nextsona-extension", "model", "group1-shard1of1.bin"),
     path.join(distDir, "model", "group1-shard1of1.bin"),
     "Store model weights"
   );
   requireByteIdentical(
-    path.join(ROOT_DIR, "next-amp-extension", "modules", "ai-vocal", "stft_simd.wasm"),
+    path.join(ROOT_DIR, "nextsona-extension", "modules", "ai-vocal", "stft_simd.wasm"),
     path.join(distDir, "stft_simd.wasm"),
     "Store SIMD STFT WASM"
   );
   requireByteIdentical(
-    path.join(ROOT_DIR, "next-amp-extension", "modules", "ai-vocal", "stft_scalar.wasm"),
+    path.join(ROOT_DIR, "nextsona-extension", "modules", "ai-vocal", "stft_scalar.wasm"),
     path.join(distDir, "stft_scalar.wasm"),
     "Store scalar STFT WASM"
   );

@@ -1,5 +1,6 @@
-const CACHE_VERSION = "v2026-01-17-1813";
-const CACHE_NAME = `nextstudio-${CACHE_VERSION}`;
+const CACHE_VERSION = "v2026-09-14-sona1";
+const CACHE_NAME = `nextsona-${CACHE_VERSION}`;
+const LEGACY_CACHE_PREFIX = "nextstudio-";
 
 const ASSETS_TO_CACHE = [
   "./",
@@ -31,7 +32,7 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
+          if (key !== CACHE_NAME && (key.startsWith("nextsona-") || key.startsWith(LEGACY_CACHE_PREFIX))) {
             return caches.delete(key);
           }
         })

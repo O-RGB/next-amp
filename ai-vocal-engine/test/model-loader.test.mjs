@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs';
-import { createVocalModelLoader } from '../../next-amp-extension/modules/ai-vocal/model-optimizer.mjs';
+import { createVocalModelLoader } from '../../nextsona-extension/modules/ai-vocal/model-optimizer.mjs';
 
-const base = new URL('../../next-amp-extension/model/', import.meta.url);
+const base = new URL('../../nextsona-extension/model/', import.meta.url);
 const json = JSON.parse(fs.readFileSync(new URL('model.json', base)));
 const bytes = fs.readFileSync(new URL('group1-shard1of1.bin', base));
 const artifacts = {
@@ -11,7 +11,7 @@ const artifacts = {
   weightSpecs: json.weightsManifest[0].weights,
   weightData: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
 };
-const metadata = artifacts.userDefinedMetadata?.nextstudioModelOptimization;
+const metadata = artifacts.userDefinedMetadata?.nextsonaModelOptimization;
 const source = { load: async () => artifacts };
 
 test('browser IO loads the prebuilt graph and can select its embedded compatibility topology', async () => {

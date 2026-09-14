@@ -1,7 +1,7 @@
 {
-  "name": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
-  "short_name": "NextStudio",
-  "description": "NextStudio - Pitch Shifter, AI Vocal & Video Sync",
+  "name": "NextSona - Pitch Shifter, AI Vocal & Video Sync",
+  "short_name": "NextSona",
+  "description": "NextSona - Pitch Shifter, AI Vocal & Video Sync",
   "start_url": "index.html",
   "display": "standalone",
   "background_color": "#000000",
@@ -9,7 +9,7 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "https://next-amp-player.vercel.app/assets/logo/logo.png",
+      "src": "assets/logo/logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

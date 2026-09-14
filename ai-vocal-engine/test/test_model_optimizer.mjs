@@ -1,21 +1,21 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-import { optimizeVocalModelArtifacts } from '../../nextstudio-model-builder/src/optimize_tfjs_graph.mjs';
+import { optimizeVocalModelArtifacts } from '../../nextsona-model-builder/src/optimize_tfjs_graph.mjs';
 
 const require = createRequire(import.meta.url);
-const tf = require('../../next-amp-extension/assets/libs/js/tf.min.js');
-const modelDir = new URL('../../next-amp-extension/model/', import.meta.url);
+const tf = require('../../nextsona-extension/assets/libs/js/tf.min.js');
+const modelDir = new URL('../../nextsona-extension/model/', import.meta.url);
 const runtimeJson = JSON.parse(fs.readFileSync(new URL('model.json', modelDir)));
-const buildMetadata = runtimeJson.userDefinedMetadata?.nextstudioModelOptimization;
+const buildMetadata = runtimeJson.userDefinedMetadata?.nextsonaModelOptimization;
 assert.ok(buildMetadata?.fallback?.modelTopology, 'runtime model is missing its compatibility topology');
 const runtimeWeightSpecs = runtimeJson.weightsManifest.flatMap(group => group.weights);
-const sourceWeightSpecs = runtimeWeightSpecs.filter(spec => !spec.name.startsWith('NextStudio/'));
+const sourceWeightSpecs = runtimeWeightSpecs.filter(spec => !spec.name.startsWith('NextSona/'));
 const sourceWeightNames = new Set(sourceWeightSpecs.map(spec => spec.name));
 const sourceTopology = {
   ...buildMetadata.fallback.modelTopology,
   node: buildMetadata.fallback.modelTopology.node.filter(node =>
-    !node.name.startsWith('NextStudio/') || sourceWeightNames.has(node.name)
+    !node.name.startsWith('NextSona/') || sourceWeightNames.has(node.name)
   )
 };
 const json = {

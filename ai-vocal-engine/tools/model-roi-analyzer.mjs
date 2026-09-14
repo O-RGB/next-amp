@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { optimizeVocalModelArtifacts } from '../../nextstudio-model-builder/src/optimize_tfjs_graph.mjs';
+import { optimizeVocalModelArtifacts } from '../../nextsona-model-builder/src/optimize_tfjs_graph.mjs';
 
 const TIME_AXIS = 2; // NHWC model layout: [batch, frequency, time, channels]
 const INPUT_SHAPE = [1, 1024, 64, 2];
@@ -117,10 +117,10 @@ function sliceDimension(inputSize, begin, end, stride, beginMasked, endMasked, s
 }
 
 function modelArtifacts(optimized = true) {
-  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../next-amp-extension/model');
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../nextsona-extension/model');
   const json = JSON.parse(fs.readFileSync(path.join(root, 'model.json'), 'utf8'));
   const bytes = fs.readFileSync(path.join(root, 'group1-shard1of1.bin'));
-  const fallback = json.userDefinedMetadata?.nextstudioModelOptimization?.fallback;
+  const fallback = json.userDefinedMetadata?.nextsonaModelOptimization?.fallback;
   const original = {
     ...json,
     modelTopology: fallback?.modelTopology || json.modelTopology,

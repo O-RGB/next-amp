@@ -1,4 +1,4 @@
-/* NEXTSTUDIO PLAYER - OPTIMIZED VERSION
+/* NEXTSONA PLAYER - OPTIMIZED VERSION
    Performance tuned for Mobile & Background Playback
    Date: 2025-12-27
 */
@@ -6,12 +6,12 @@
 import SignalsmithStretch from "../mjs/SignalsmithStretch.mjs";
 
 (function () {
-  // The Web build replaces this marker from NEXTSTUDIO_DISABLE_UNAUTHORIZED_COPY.
+  // The Web build replaces this marker from NEXTSONA_DISABLE_UNAUTHORIZED_COPY.
   // Source/dev execution keeps the guard enabled by default.
   const unauthorizedCopyGuardEnabled =
-    "__NEXTSTUDIO_DISABLE_UNAUTHORIZED_COPY__" !== "true";
+    "__NEXTSONA_DISABLE_UNAUTHORIZED_COPY__" !== "true";
   const allowedDomains = [
-    "next-amp-player.vercel.app",
+    "studio.nextfeeder.com",
     "localhost",
     "127.0.0.1",
   ];
@@ -65,10 +65,30 @@ document.addEventListener("contextmenu", (event) => event.preventDefault());
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
-const STORAGE_KEY = "nextstudio_settings_v9_stable";
+const STORAGE_KEY = "nextsona_settings_v9_stable";
+// Keep the previous key readable for one compatibility generation so a
+// rebrand update cannot silently reset the player's settings.
+const LEGACY_STORAGE_KEY = "nextstudio_settings_v9_stable";
 
-const savedSettingsRaw = localStorage.getItem(STORAGE_KEY);
-let savedSettings = savedSettingsRaw ? JSON.parse(savedSettingsRaw) : {};
+function readSavedSettings() {
+  for (const key of [STORAGE_KEY, LEGACY_STORAGE_KEY]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      if (key === LEGACY_STORAGE_KEY) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      }
+      return parsed;
+    } catch (_) {
+      // Ignore malformed/stale data and continue with the next key.
+    }
+  }
+  return {};
+}
+
+let savedSettings = readSavedSettings();
 
 const audioOptions = {
   latencyHint: "playback",
@@ -121,12 +141,12 @@ let aiVocalModulePromise = null;
 let aiVocalOpening = false;
 
 const AI_WEB_ASSETS = Object.freeze({
-  assetBase: "/next-amp-extension/",
-  worklet: "/next-amp-extension/modules/ai-vocal/vocal-worklet.js",
-  stftSimd: "/next-amp-extension/modules/ai-vocal/stft_simd.wasm",
-  stftScalar: "/next-amp-extension/modules/ai-vocal/stft_scalar.wasm",
-  model: "/next-amp-extension/model/model.json",
-  webgpuBackend: "/next-amp-extension/assets/libs/js/tf-backend-webgpu.min.js"
+  assetBase: "/nextsona-extension/",
+  worklet: "/nextsona-extension/modules/ai-vocal/vocal-worklet.js",
+  stftSimd: "/nextsona-extension/modules/ai-vocal/stft_simd.wasm",
+  stftScalar: "/nextsona-extension/modules/ai-vocal/stft_scalar.wasm",
+  model: "/nextsona-extension/model/model.json",
+  webgpuBackend: "/nextsona-extension/assets/libs/js/tf-backend-webgpu.min.js"
 });
 
 function updateAIVocalUI(status = "OFF • NOT LOADED") {
@@ -163,7 +183,7 @@ function loadAIVocalScript() {
   aiVocalScriptPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
     script.async = true;
-    script.src = "/next-amp-extension/assets/libs/js/tf.min.js";
+    script.src = "/nextsona-extension/assets/libs/js/tf.min.js";
     script.onload = () => resolve();
     script.onerror = () => {
       aiVocalScriptPromise = null;
@@ -180,7 +200,7 @@ async function createAIVocalManager() {
     // The dynamic import is intentional: even the AI manager code is not
     // fetched until the user explicitly opens AI Vocal.
     aiVocalModulePromise = import(
-      "../../next-amp-extension/modules/ai-vocal/ai-vocal-manager.js"
+      "../../nextsona-extension/modules/ai-vocal/ai-vocal-manager.js"
     );
   }
   const { AIVocalManager } = await aiVocalModulePromise;
@@ -245,7 +265,7 @@ async function openAIVocal() {
     updateAIVocalUI("READY • ORIGINAL");
     return true;
   } catch (error) {
-    console.error("[NextStudio AI] Web player init failed:", error);
+    console.error("[NextSona AI] Web player init failed:", error);
     updateAIVocalUI("ERROR • AI OFF");
     try { aiVocalManager?.destroy(); } catch (_) {}
     aiVocalManager = null;
@@ -282,7 +302,7 @@ async function closeAIVocal() {
     aiVocalManager.unloadEngine();
     aiVocalManager.destroy();
   } catch (error) {
-    console.warn("[NextStudio AI] Web player unload failed:", error);
+    console.warn("[NextSona AI] Web player unload failed:", error);
   }
   aiVocalManager = null;
   aiVocalNode = null;
@@ -1043,10 +1063,10 @@ function updateMediaSession(trackName) {
   if ("mediaSession" in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: trackName,
-      artist: "NextStudio Player",
+      artist: "NextSona Player",
       artwork: [
         {
-          src: "https://next-amp-player.vercel.app/assets/logo/logo.png",
+          src: "assets/logo/logo.png",
           sizes: "512x512",
           type: "image/png",
         },
@@ -1105,8 +1125,75 @@ let LIBRARY = [],
   currentTrackIndex = -1,
   selectedIndices = new Set(),
   lastSelectedIndex = -1;
-const DB_NAME = "NextStudioUltimateDB",
-  dbReq = indexedDB.open(DB_NAME, 8);
+const DB_NAME = "NextSonaUltimateDB";
+const LEGACY_DB_NAME = "NextStudioUltimateDB";
+const dbReq = indexedDB.open(DB_NAME, 8);
+let activeDb = null;
+
+function getActiveDb() {
+  return activeDb || dbReq.result;
+}
+
+async function openExistingDatabase(name) {
+  if (typeof indexedDB.databases !== "function") return null;
+  const databases = await indexedDB.databases();
+  if (!databases.some((database) => database.name === name)) return null;
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(name);
+    request.onsuccess = (event) => resolve(event.target.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB open failed"));
+  });
+}
+
+function readStore(db, storeName) {
+  if (!db?.objectStoreNames.contains(storeName)) return Promise.resolve([]);
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, "readonly");
+    const request = transaction.objectStore(storeName).getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error || new Error("IndexedDB read failed"));
+  });
+}
+
+function copyStores(db, stores) {
+  const storeNames = Object.keys(stores).filter((name) =>
+    db.objectStoreNames.contains(name) && stores[name].length
+  );
+  if (!storeNames.length) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeNames, "readwrite");
+    for (const storeName of storeNames) {
+      const store = transaction.objectStore(storeName);
+      for (const record of stores[storeName]) store.put(record);
+    }
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB migration failed"));
+    transaction.onabort = () => reject(transaction.error || new Error("IndexedDB migration aborted"));
+  });
+}
+
+async function migrateLegacyLibrary(targetDb) {
+  const legacyDb = await openExistingDatabase(LEGACY_DB_NAME);
+  if (!legacyDb) return false;
+  try {
+    const [legacyLibrary, legacyPlaylists] = await Promise.all([
+      readStore(legacyDb, "library"),
+      readStore(legacyDb, "playlists"),
+    ]);
+    const [currentLibrary, currentPlaylists] = await Promise.all([
+      readStore(targetDb, "library"),
+      readStore(targetDb, "playlists"),
+    ]);
+    const stores = {};
+    if (!currentLibrary.length && legacyLibrary.length) stores.library = legacyLibrary;
+    if (!currentPlaylists.length && legacyPlaylists.length) stores.playlists = legacyPlaylists;
+    await copyStores(targetDb, stores);
+    return Object.keys(stores).length > 0;
+  } finally {
+    legacyDb.close();
+  }
+}
+
 dbReq.onupgradeneeded = (e) => {
   const db = e.target.result;
   if (!db.objectStoreNames.contains("library"))
@@ -1115,6 +1202,22 @@ dbReq.onupgradeneeded = (e) => {
     db.createObjectStore("playlists", { keyPath: "id" });
 };
 dbReq.onsuccess = async (e) => {
+  activeDb = e.target.result;
+  try {
+    await migrateLegacyLibrary(activeDb);
+  } catch (error) {
+    // Never replace a user's library with an empty one after a failed copy.
+    console.warn("NextSona: legacy library migration failed; using the legacy database", error);
+    try {
+      const legacyDb = await openExistingDatabase(LEGACY_DB_NAME);
+      if (legacyDb) {
+        activeDb.close();
+        activeDb = legacyDb;
+      }
+    } catch (fallbackError) {
+      console.warn("NextSona: legacy library fallback unavailable", fallbackError);
+    }
+  }
   await loadLibraryFromDB();
   await loadPlaylistsFromDB();
   loadSettings();
@@ -1125,23 +1228,23 @@ dbReq.onsuccess = async (e) => {
   attachTooltips();
 };
 async function saveTrackToLib(track) {
-  const db = dbReq.result;
+  const db = getActiveDb();
   const tx = db.transaction("library", "readwrite");
   tx.objectStore("library").put(track);
 }
 async function deleteTrackFromLib(id) {
-  const db = dbReq.result;
+  const db = getActiveDb();
   const tx = db.transaction("library", "readwrite");
   tx.objectStore("library").delete(id);
 }
 async function savePlaylistsToDB(plObj) {
-  const db = dbReq.result;
+  const db = getActiveDb();
   const tx = db.transaction("playlists", "readwrite");
   tx.objectStore("playlists").put(plObj);
 }
 async function loadLibraryFromDB() {
   return new Promise((resolve) => {
-    const db = dbReq.result;
+    const db = getActiveDb();
     const tx = db.transaction("library", "readonly");
     const req = tx.objectStore("library").getAll();
     req.onsuccess = () => {
@@ -1152,7 +1255,7 @@ async function loadLibraryFromDB() {
 }
 async function loadPlaylistsFromDB() {
   return new Promise((resolve) => {
-    const db = dbReq.result;
+    const db = getActiveDb();
     const tx = db.transaction("playlists", "readonly");
     const req = tx.objectStore("playlists").getAll();
     req.onsuccess = () => {
@@ -1670,7 +1773,7 @@ window.handleDeletePlaylist = () => {
     `Delete playlist "${playlists[currentPlaylistId].name}"?`,
     () => {
       delete playlists[currentPlaylistId];
-      const db = dbReq.result;
+      const db = getActiveDb();
       const tx = db.transaction("playlists", "readwrite");
       tx.objectStore("playlists").delete(currentPlaylistId);
       switchPlaylist("main");

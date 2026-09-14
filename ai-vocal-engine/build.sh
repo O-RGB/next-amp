@@ -2,16 +2,16 @@
 set -e
 
 # ==============================================================================
-# NEXTSTUDIO AI VOCAL ENGINE: AUTOMATED BUILD PIPELINE
+# NEXTSONA AI VOCAL ENGINE: AUTOMATED BUILD PIPELINE
 # Compiles high-performance C DSP into WASM SIMD128 and copies to extension.
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_DIR="${SCRIPT_DIR}/dist"
-EXT_MODULES_DIR="${SCRIPT_DIR}/../next-amp-extension/modules/ai-vocal"
+EXT_MODULES_DIR="${SCRIPT_DIR}/../nextsona-extension/modules/ai-vocal"
 
 echo "============================================================"
-echo "⚡ BUILDING NEXTSTUDIO AI VOCAL ENGINE (WASM SIMD128 DSP) ⚡"
+echo "⚡ BUILDING NEXTSONA AI VOCAL ENGINE (WASM SIMD128 DSP) ⚡"
 echo "============================================================"
 
 # Check if emcc is installed
@@ -46,8 +46,8 @@ emcc -O3 -flto --no-entry \
     -o "${DIST_DIR}/stft_scalar.wasm" \
     "${SCRIPT_DIR}/src/dsp/stft_core.c"
 
-# 3. Copy artifacts directly into next-amp-extension/modules/ai-vocal
-echo "3. Synchronizing artifacts to NextStudio Extension modules..."
+# 3. Copy artifacts directly into nextsona-extension/modules/ai-vocal
+echo "3. Synchronizing artifacts to NextSona Extension modules..."
 cp -v "${DIST_DIR}/stft_simd.wasm" "${EXT_MODULES_DIR}/"
 cp -v "${DIST_DIR}/stft_scalar.wasm" "${EXT_MODULES_DIR}/"
 cp -v "${DIST_DIR}/stft_simd.wasm" "${SCRIPT_DIR}/demo/"

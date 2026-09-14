@@ -1,0 +1,22 @@
+NextSona Web — Third-Party Notices
+====================================
+
+The standalone Web player includes the following locally bundled components.
+Each component remains subject to its own license.
+
+- TensorFlow.js 4.22.0 — Copyright Google LLC — Apache License 2.0
+  https://github.com/tensorflow/tfjs
+- PeerJS 1.5.5 — Copyright PeerJS contributors — MIT License
+  https://github.com/peers/peerjs
+- Signalsmith Stretch — Copyright Geraint Luff — MIT License
+  https://github.com/Signalsmith-Audio/signalsmith-stretch
+- Tailwind CSS — Copyright Tailwind Labs, Inc. — MIT License
+  https://github.com/tailwindlabs/tailwindcss
+- lamejs — Copyright Alex Zhukov and contributors — LGPL-3.0
+  https://github.com/zhuker/lamejs
+
+The complete Apache License 2.0 text for TensorFlow.js is shipped as
+LICENSE-APACHE-2.0.txt. The LAMEjs-specific notice and the exact vendored
+bundle fingerprint are shipped as assets/libs/js/LAMEJS-NOTICE.txt.
+
+NextSona's own source and UI are not granted under the licenses above.

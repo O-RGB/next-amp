@@ -4,15 +4,15 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const source = path.join(root, "nextstudio-public-site");
-const output = path.join(root, "dist", "nextstudio-public-site");
+const source = path.join(root, "nextsona-public-site");
+const output = path.join(root, "dist", "nextsona-public-site");
 const publicOrigin = (process.env.PUBLIC_SITE_ORIGIN || "http://localhost:5500").replace(/\/$/, "");
 const allowedFiles = [
   "index.html", "404.html", "robots.txt", "sitemap.xml", "site.webmanifest", "vercel.json", "README.md", "THIRD-PARTY-NOTICES.txt",
-  "remote/index.html", "privacy/index.html",
+  "remote/index.html", "privacy/index.html", "terms/index.html",
   "assets/css/site.css", "assets/css/remote.css", "assets/js/site.js", "assets/js/remote.js", "assets/js/remote-protocol.js", "assets/vendor/peerjs.min.js",
-  "assets/images/logo.png", "assets/images/og-image.png", "assets/images/extension-preview.png", "assets/images/showcase-reference.png",
-  "assets/images/screenshots/extension-overview.png", "assets/images/screenshots/extension-detail.png", "assets/images/screenshots/remote-preview.png", "assets/images/screenshots/video-preview.png"
+  "assets/images/logo.png", "assets/images/og-image.png", "assets/images/nextsona-showcase.png",
+  "assets/images/screenshots/extension-detail.png", "assets/images/screenshots/remote-preview.png", "assets/images/screenshots/video-preview.png"
 ];
 
 function fail(message) {
@@ -47,7 +47,7 @@ function walk(directory) {
   return files;
 }
 
-if (!fs.existsSync(source)) { fail("nextstudio-public-site/ does not exist"); process.exit(); }
+if (!fs.existsSync(source)) { fail("nextsona-public-site/ does not exist"); process.exit(); }
 if (!validateOrigin(publicOrigin)) { fail("PUBLIC_SITE_ORIGIN must be an absolute http(s) URL"); process.exit(); }
 
 fs.rmSync(output, { recursive: true, force: true });

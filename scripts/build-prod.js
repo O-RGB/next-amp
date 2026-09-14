@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * NextStudio Extension - Production Build Pipeline
+ * NextSona Extension - Production Build Pipeline
  *
  * Features:
  * 1. 100% File Name Mangling / Content Hashing (Every file except .html and manifest.json)
@@ -21,7 +21,7 @@ const path = require('path');
 const esbuild = require('esbuild');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
-const ORIGINAL_SRC_DIR = path.join(ROOT_DIR, 'next-amp-extension');
+const ORIGINAL_SRC_DIR = path.join(ROOT_DIR, 'nextsona-extension');
 let SRC_DIR = ORIGINAL_SRC_DIR;
 const profileArg = process.argv.find((arg) => arg.startsWith('--profile='));
 const BUILD_PROFILE = (profileArg ? profileArg.split('=')[1] : 'store').trim().toLowerCase();
@@ -33,26 +33,26 @@ if (!['store', 'go-dev'].includes(BUILD_PROFILE)) {
 const GO_ENGINE_ENABLED = BUILD_PROFILE === 'go-dev';
 const STORE_REVIEW_BUILD = BUILD_PROFILE === 'store';
 const OUTPUT_NAME = BUILD_PROFILE === 'store'
-  ? 'nextstudio-extension-store'
-  : 'nextstudio-extension-go-dev';
+  ? 'nextsona-extension-store'
+  : 'nextsona-extension-go-dev';
 const DIST_DIR = path.join(ROOT_DIR, 'dist', OUTPUT_NAME);
 const TEMP_DIR = path.join(ROOT_DIR, 'dist', 'temp');
 const ZIP_FILE = path.join(ROOT_DIR, 'dist', `${OUTPUT_NAME}.zip`);
-const WEB_ASSET_KEY_PLACEHOLDER = '__NEXTSTUDIO_WEB_ASSET_KEY__';
-const WEB_ASSET_MAGIC = Buffer.from('NAMPWEB1', 'ascii');
+const WEB_ASSET_KEY_PLACEHOLDER = '__NEXTSONA_WEB_ASSET_KEY__';
+const WEB_ASSET_MAGIC = Buffer.from('NSONAWB1', 'ascii');
 const WEB_ASSET_HEADER_BYTES = 20;
 const webAssetKey = crypto.randomBytes(32);
 const webAssetKeyB64 = webAssetKey.toString('base64');
 
 console.log('====================================================');
-console.log(`NEXTSTUDIO EXTENSION BUILD [${BUILD_PROFILE.toUpperCase()}]`);
+console.log(`NEXTSONA EXTENSION BUILD [${BUILD_PROFILE.toUpperCase()}]`);
 console.log('====================================================');
 
 // Internal builds keep deterministic hashed names. Store builds deliberately
 // use readable names so reviewers can map manifest entries to their purpose.
 function getMangledName(key, ext = '.js', storeName = key) {
   if (STORE_REVIEW_BUILD) return `${storeName}${ext}`;
-  const hash = crypto.createHash('md5').update('nextstudio_' + key).digest('hex').slice(0, 10);
+  const hash = crypto.createHash('md5').update('nextsona_' + key).digest('hex').slice(0, 10);
   return `${hash}${ext}`;
 }
 
@@ -152,7 +152,7 @@ function createProtectedModelPayload(modelJson, weightData) {
 if (GO_ENGINE_ENABLED) {
   console.log('\n[0/9] Building native GO engine binaries...');
   run(
-    'bash "' + path.join(ROOT_DIR, 'nextstudio-engine-go', 'build.sh') + '"',
+    'bash "' + path.join(ROOT_DIR, 'nextsona-engine-go', 'build.sh') + '"',
     'Building macOS + Windows GO engine binaries'
   );
 } else {
@@ -244,7 +244,7 @@ bundles.forEach((b) => {
       format: b.format,
       target: 'chrome110',
       outfile: tempFile,
-      define: { __NEXTSTUDIO_GO_ENGINE_ENABLED__: GO_ENGINE_ENABLED ? 'true' : 'false' },
+      define: { __NEXTSONA_GO_ENGINE_ENABLED__: GO_ENGINE_ENABLED ? 'true' : 'false' },
       minifySyntax: true,
       treeShaking: true,
       logLevel: 'silent'
@@ -263,6 +263,17 @@ function replaceInFile(filePath, search, replacement) {
   let content = fs.readFileSync(filePath, 'utf8');
   content = content.split(search).join(replacement);
   fs.writeFileSync(filePath, content, 'utf8');
+}
+
+function removePackagingMetadata(directory) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      removePackagingMetadata(fullPath);
+    } else if (entry.name === '.DS_Store' || entry.name === 'Thumbs.db') {
+      fs.unlinkSync(fullPath);
+    }
+  }
 }
 
 // Rewrite in popup bundle
@@ -387,7 +398,7 @@ try {
       target: 'chrome110',
       minifySyntax: true,
       define: {
-        __NEXTSTUDIO_GO_ENGINE_TYPE__: JSON.stringify(GO_ENGINE_ENABLED ? 'go_native' : 'webgl')
+        __NEXTSONA_GO_ENGINE_TYPE__: JSON.stringify(GO_ENGINE_ENABLED ? 'go_native' : 'webgl')
       }
     }
   ).code;
@@ -545,7 +556,7 @@ function minifyHtml(html) {
 function stripProfileSections(html) {
   if (GO_ENGINE_ENABLED) return html;
   return html.replace(
-    /\s*<!--\s*NEXTSTUDIO_GO_ENGINE_BEGIN\s*-->[\s\S]*?<!--\s*NEXTSTUDIO_GO_ENGINE_END\s*-->/gi,
+    /\s*<!--\s*NEXTSONA_GO_ENGINE_BEGIN\s*-->[\s\S]*?<!--\s*NEXTSONA_GO_ENGINE_END\s*-->/gi,
     ''
   );
 }
@@ -663,18 +674,23 @@ if (STORE_REVIEW_BUILD) {
     path.join(ORIGINAL_SRC_DIR, 'model', 'LICENSE'),
     path.join(DIST_DIR, 'MODEL-LICENSE.txt')
   );
+  fs.copyFileSync(
+    path.join(ORIGINAL_SRC_DIR, 'LICENSE-APACHE-2.0.txt'),
+    path.join(DIST_DIR, 'LICENSE-APACHE-2.0.txt')
+  );
 }
 
 if (GO_ENGINE_ENABLED) {
   fs.writeFileSync(
     path.join(DIST_DIR, 'INTERNAL-GO-DEV-BUILD.txt'),
-    'Internal NextStudio Go development build. Do not upload this artifact to the Chrome Web Store.\n',
+    'Internal NextSona Go development build. Do not upload this artifact to the Chrome Web Store.\n',
     'utf8'
   );
 }
 
 // Cleanup Temp Dir
 fs.rmSync(TEMP_DIR, { recursive: true, force: true });
+removePackagingMetadata(DIST_DIR);
 
 // 8. Verify all generated JS files for syntax errors
 console.log('\n[8/9] Validating syntax of all JS files in production build...');
@@ -694,7 +710,7 @@ run(
 );
 
 console.log('\n====================================================');
-console.log(`✅ NEXTSTUDIO ${BUILD_PROFILE.toUpperCase()} BUILD SUCCESSFUL!`);
+console.log(`✅ NEXTSONA ${BUILD_PROFILE.toUpperCase()} BUILD SUCCESSFUL!`);
 console.log(`📁 Distribution folder: dist/${OUTPUT_NAME}/`);
 console.log(`📦 ZIP:                 dist/${OUTPUT_NAME}.zip`);
 console.log('====================================================');

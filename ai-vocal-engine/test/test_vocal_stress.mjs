@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const source = fs.readFileSync(new URL('../../next-amp-extension/modules/ai-vocal/vocal-worklet.js', import.meta.url), 'utf8');
+const source = fs.readFileSync(new URL('../../nextsona-extension/modules/ai-vocal/vocal-worklet.js', import.meta.url), 'utf8');
 let Processor;
 
 class MockAudioWorkletProcessor {

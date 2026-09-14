@@ -7,7 +7,7 @@ import {
   getAiPowerModeConfig,
   normalizeAiPowerMode,
   shouldPreferWebGlForPowerMode
-} from "../../next-amp-extension/modules/ai-vocal/ai-power-mode.mjs";
+} from "../../nextsona-extension/modules/ai-vocal/ai-power-mode.mjs";
 
 assert.equal(DEFAULT_AI_POWER_MODE, AI_POWER_MODE_ECO);
 assert.equal(normalizeAiPowerMode(AI_POWER_MODE_ECO), AI_POWER_MODE_ECO);

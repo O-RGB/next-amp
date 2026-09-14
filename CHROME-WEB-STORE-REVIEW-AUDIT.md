@@ -1,7 +1,7 @@
-# NextStudio — Chrome Web Store Reviewer Audit
+# NextSona — Chrome Web Store Reviewer Audit
 
-วันที่ตรวจ: 13 กันยายน 2026  
-ขอบเขต: Chrome Web Store build (`dist/nextstudio-extension-store.zip`) และข้อมูลสาธารณะที่เกี่ยวข้อง  
+วันที่ตรวจ: 13 กันยายน 2026
+ขอบเขต: Chrome Web Store build (`dist/nextsona-extension-store.zip`) และข้อมูลสาธารณะที่เกี่ยวข้อง
 สถานะ: **ยังไม่ควรส่ง Review จนกว่า P0 checklist ด้านล่างจะครบ**
 
 > ไม่มีใครรับประกันผลการ Review ได้ 100% เพราะ Google เป็นผู้ตัดสินขั้นสุดท้าย แต่รายการนี้แยก policy blocker, ความเสี่ยง และงาน Dashboard เพื่อไม่ให้ส่งงานทั้งที่ยังรู้อยู่แล้วว่ามีจุดผิด
@@ -37,7 +37,7 @@
 - `scripts/build-prod.js`
 - `scripts/verify-extension-artifact.js`
 - `scripts/test-review-readiness.mjs`
-- `dist/nextstudio-extension-store/`
+- `dist/nextsona-extension-store/`
 
 ขั้นตอน:
 
@@ -60,7 +60,7 @@ Baseline ก่อน cleanup/P1 hardening: `07883050ad73ac1aaa29ac6b37796e244d0
 
 ### P0-B — เอาการขอไมโครโฟนออกจากหน้า OUT
 
-ปัญหา: `next-amp-extension/player.js` ใน `initAudioDevices()` เรียก `navigator.mediaDevices.getUserMedia({ audio: true })` ตอนเปิดหน้า OUT แม้ NextStudio ต้องใช้เสียงจากแท็บ ไม่ใช่ไมโครโฟน และ MediaStream ที่ได้มาไม่ได้หยุด track อย่างชัดเจน
+ปัญหา: `nextsona-extension/player.js` ใน `initAudioDevices()` เรียก `navigator.mediaDevices.getUserMedia({ audio: true })` ตอนเปิดหน้า OUT แม้ NextSona ต้องใช้เสียงจากแท็บ ไม่ใช่ไมโครโฟน และ MediaStream ที่ได้มาไม่ได้หยุด track อย่างชัดเจน
 
 พฤติกรรมที่ต้องการ:
 
@@ -71,17 +71,17 @@ Baseline ก่อน cleanup/P1 hardening: `07883050ad73ac1aaa29ac6b37796e244d0
 
 ขั้นตอน:
 
-- [x] เปิด `next-amp-extension/player.js`
+- [x] เปิด `nextsona-extension/player.js`
 - [x] ใน `initAudioDevices()` ลบเฉพาะคำสั่ง `navigator.mediaDevices.getUserMedia({ audio: true })`
 - [x] คง `navigator.mediaDevices.enumerateDevices()` และ logic สร้าง `<option>` ไว้
 - [x] ทำ fallback เมื่อ `enumerateDevices()` fail หรือไม่มี label โดยยังเหลือ `SYSTEM DEFAULT`
-- [x] อย่าแก้ `getUserMedia()` ใน `next-amp-extension/offscreen.js`; จุดนั้นใช้ `streamId` จาก `tabCapture` และจำเป็นต่อ core audio
+- [x] อย่าแก้ `getUserMedia()` ใน `nextsona-extension/offscreen.js`; จุดนั้นใช้ `streamId` จาก `tabCapture` และจำเป็นต่อ core audio
 - [x] เพิ่ม artifact test ให้ fail ถ้า packaged `player.js` มี `getUserMedia(`
 
 ทดสอบอัตโนมัติ:
 
-- [x] Build Store ใหม่ แล้วตรวจ `dist/nextstudio-extension-store/player.js`
-- [x] `rg -n "getUserMedia" next-amp-extension/player.js dist/nextstudio-extension-store/player.js` ต้องไม่พบผลลัพธ์
+- [x] Build Store ใหม่ แล้วตรวจ `dist/nextsona-extension-store/player.js`
+- [x] `rg -n "getUserMedia" nextsona-extension/player.js dist/nextsona-extension-store/player.js` ต้องไม่พบผลลัพธ์
 
 ทดสอบจริง:
 
@@ -93,7 +93,7 @@ Baseline ก่อน cleanup/P1 hardening: `07883050ad73ac1aaa29ac6b37796e244d0
 
 ### P0-C — เปิด PeerJS เฉพาะเมื่อผู้ใช้กด Remote
 
-ปัญหา: `next-amp-extension/offscreen.js` เรียก `initHostPeer()` ใน handler ของ `START_CAPTURE` ทำให้เปิด signaling connection ทันทีเมื่อผู้ใช้เปิด Audio แม้ไม่เคยกด Remote
+ปัญหา: `nextsona-extension/offscreen.js` เรียก `initHostPeer()` ใน handler ของ `START_CAPTURE` ทำให้เปิด signaling connection ทันทีเมื่อผู้ใช้เปิด Audio แม้ไม่เคยกด Remote
 
 พฤติกรรมที่ต้องการ:
 
@@ -105,7 +105,7 @@ Baseline ก่อน cleanup/P1 hardening: `07883050ad73ac1aaa29ac6b37796e244d0
 
 ขั้นตอน:
 
-- [x] เปิด `next-amp-extension/offscreen.js`
+- [x] เปิด `nextsona-extension/offscreen.js`
 - [x] ลบเฉพาะ `initHostPeer().catch(() => {});` ออกจาก branch `msg.type === "START_CAPTURE"`
 - [x] คง `waitForHostPeerId()` ใน branch `GET_REMOTE_TOKEN`; ฟังก์ชันนี้ต้องเป็นจุดเริ่ม PeerJS เมื่อ popup ขอ Remote token
 - [x] ตรวจ source ว่ากด Remote ตอน offscreen เพิ่งเริ่มยังใช้ retry/timeout path เดิมได้ และไม่มี promise เก่าถูกเก็บค้าง
@@ -146,7 +146,7 @@ Baseline ก่อน cleanup/P1 hardening: `07883050ad73ac1aaa29ac6b37796e244d0
 - [x] ใน cleanup ของ `stopAudio(tabId)` ให้ปิด `remoteConns`, delete session และทำให้ token เดิมใช้ต่อไม่ได้
 - [x] เพิ่ม helper เพื่อลบ entry ของ tab ออกจาก `REMOTE_LINK_CACHE_KEY` ใน `chrome.storage.session` เมื่อ session จบ
 - [x] ห้ามล้าง cache เพียงเพราะ popup ถูกปิด เพราะ popup ปิด/reopen เป็น behavior ที่ต้องรองรับ
-- [x] แก้ `nextstudio-public-site/privacy/index.html` ทั้ง EN/TH: เอาคำว่า `short-lived` และข้อความที่บอกว่าปิด Remote connection แล้ว token ถูกทิ้งออก เปลี่ยนเป็นคำอธิบาย session-scoped ตามนิยามด้านบน
+- [x] แก้ `nextsona-public-site/privacy/index.html` ทั้ง EN/TH: เอาคำว่า `short-lived` และข้อความที่บอกว่าปิด Remote connection แล้ว token ถูกทิ้งออก เปลี่ยนเป็นคำอธิบาย session-scoped ตามนิยามด้านบน
 - [x] ไม่เขียนว่ามี TTL เพราะโค้ดใช้ session-scoped lifecycle จริง
 
 ทดสอบ:
@@ -160,7 +160,7 @@ Baseline ก่อน cleanup/P1 hardening: `07883050ad73ac1aaa29ac6b37796e244d0
 
 ### P0-E — ลบ inline JavaScript และกำหนด Chrome ขั้นต่ำ
 
-ปัญหา 1: `next-amp-extension/player.html` มี `onmouseover`/`onmouseout` ซึ่งถูก Manifest V3 CSP บล็อก
+ปัญหา 1: `nextsona-extension/player.html` มี `onmouseover`/`onmouseout` ซึ่งถูก Manifest V3 CSP บล็อก
 
 ขั้นตอนแก้ CSP:
 
@@ -174,7 +174,7 @@ Baseline ก่อน cleanup/P1 hardening: `07883050ad73ac1aaa29ac6b37796e244d0
 
 ขั้นตอนแก้ compatibility:
 
-- [x] เพิ่ม `"minimum_chrome_version": "116"` ใน `next-amp-extension/manifest.json`
+- [x] เพิ่ม `"minimum_chrome_version": "116"` ใน `nextsona-extension/manifest.json`
 - [x] ตรวจว่า build script คง field นี้ไว้ใน Store manifest
 - [x] เพิ่ม assertion ใน `scripts/test-review-readiness.mjs` และ artifact verifier ว่า Store manifest มี minimum version อย่างน้อย 116
 - [x] ไม่สร้าง fallback ที่เปิด offscreen document ซ้ำโดยไม่ตรวจ context เพราะอาจทำให้ audio graph/model ซ้อนกัน
@@ -183,7 +183,7 @@ Baseline ก่อน cleanup/P1 hardening: `07883050ad73ac1aaa29ac6b37796e244d0
 
 ### P0-F — แก้ Audio OFF state เมื่อ Remote ปิดเสียงแล้วเปิด popup ใหม่
 
-ปัญหา: ใน `next-amp-extension/popup.js` หลัง `GET_STATE` ถ้า `state.isAudioActive` เป็น true โค้ดเรียก `loadAudioState(state)` แล้วบังคับ `isAudioMasterOn = true` แม้ Remote อาจตั้ง `state.isAudioMasterOn = false` และ AudioContext ถูก suspend อยู่
+ปัญหา: ใน `nextsona-extension/popup.js` หลัง `GET_STATE` ถ้า `state.isAudioActive` เป็น true โค้ดเรียก `loadAudioState(state)` แล้วบังคับ `isAudioMasterOn = true` แม้ Remote อาจตั้ง `state.isAudioMasterOn = false` และ AudioContext ถูก suspend อยู่
 
 พฤติกรรมที่ต้องการ:
 
@@ -211,11 +211,11 @@ Baseline ก่อน cleanup/P1 hardening: `07883050ad73ac1aaa29ac6b37796e244d0
 
 ไฟล์:
 
-- `nextstudio-public-site/privacy/index.html`
-- `nextstudio-public-site/index.html`
-- `nextstudio-public-site/assets/js/site.js`
+- `nextsona-public-site/privacy/index.html`
+- `nextsona-public-site/index.html`
+- `nextsona-public-site/assets/js/site.js`
 - `CHROME-WEB-STORE-DESCRIPTION.md`
-- `next-amp-extension/welcome.html`
+- `nextsona-extension/welcome.html`
 - `CHROME-WEB-STORE-REVIEW-AUDIT.md`
 
 ขั้นตอน:
@@ -278,7 +278,7 @@ Artifact gate ที่ต้องเพิ่ม:
 5. Scan Store directory และ ZIP ซ้ำ ไม่ตรวจเฉพาะ source
 6. ทดสอบ clean Chrome profile ตาม P0 manual checklist ด้านล่าง
 7. ทดสอบ Apple และ Windows/WebGPU long run ตาม baseline เดิม ห้ามสรุปคุณภาพเสียงจาก unit test
-8. Deploy `nextstudio-public-site` ปัจจุบันไป `https://studio.nextfeeder.com`
+8. Deploy `nextsona-public-site` ปัจจุบันไป `https://studio.nextfeeder.com`
 9. เปิด production `/`, `/remote`, `/privacy` และเทียบข้อความกับ local source
 10. บันทึก SHA-256 ของ ZIP หลัง manual test ผ่าน ห้าม rebuild อีกก่อน upload
 11. กรอก Dashboard และ Reviewer Notes ให้ตรงกับ ZIP hash ที่ผ่าน test
@@ -307,6 +307,7 @@ Rollback rule: ถ้าการแก้ Store hardening ทำให้เส
 - [x] ลด donation UX: ไม่มี donation modal ทันทีหลังติดตั้งและไม่มีปุ่ม donation บน Video header; เหลือ About และ usage-based prompt
 - [x] แก้ source ของ Store description, welcome page, public site และ privacy copy ไม่ให้โฆษณา Go, ECO/FULL หรือ speed control ที่ไม่มีใน Store UI ปัจจุบัน; production deploy ยังรอทำใน P0 manual
 - [x] เพิ่ม `THIRD-PARTY-NOTICES.txt` และ `MODEL-LICENSE.txt` ใน Store ZIP
+- [x] เพิ่ม full Apache License 2.0 text ใน Store ZIP สำหรับ TensorFlow.js
 - [x] เพิ่ม artifact gate ให้ reject permission เกิน, broad host permission, static content scripts, external QR/font host, encrypted `.dat`, legacy Remote UI, security core และไฟล์ license ที่หาย
 - [x] `npm run build:extension:store` สำเร็จ
 - [x] Store profile ไม่ package runtime Tailwind compiler/config; utility CSS ถูก compile เป็น static `styles.css` ระหว่าง build
@@ -318,15 +319,15 @@ Rollback rule: ถ้าการแก้ Store hardening ทำให้เส
 - [x] `cert.pem`/`key.pem` ถูก ignore และหยุด track ใน Git index โดยไฟล์ local ยังใช้กับ dev server ได้
 - [x] เพิ่ม version/fingerprint ของ vendored assets ใน third-party notices และเอา dangling PeerJS source-map reference ออก
 - [x] Go-dev profile build และ artifact gate ผ่านหลังลบ legacy source
-- [x] Artifact gate ผ่าน: 28 ZIP entries
-- [x] Store ZIP ปัจจุบัน: `dist/nextstudio-extension-store.zip`
-- [x] SHA-256 ปัจจุบัน: `23a40e096429090d531cfaf98b3089ca6395ff1f9e220f2af63cc019d2fd1354`
+- [x] Artifact gate ผ่าน: 29 ZIP entries
+- [x] Store ZIP ปัจจุบัน: `dist/nextsona-extension-store.zip`
+- [x] SHA-256 ปัจจุบัน: `a2f2747f518675733228a3f85915f7190e8c6b006384f55e83a1940b1b0d6eae`
 
 ## P0 — ต้องทำก่อนส่ง Review
 
 ### ทดสอบ Extension แบบ clean install
 
-- [ ] เปิด Chrome profile ใหม่ ลบ extension รุ่นเก่า แล้ว Load unpacked จาก `dist/nextstudio-extension-store`
+- [ ] เปิด Chrome profile ใหม่ ลบ extension รุ่นเก่า แล้ว Load unpacked จาก `dist/nextsona-extension-store`
 - [ ] ตรวจว่า welcome page เปิดเพียงครั้งเดียวและข้อความตรงกับฟีเจอร์จริง
 - [ ] เปิด popup ครั้งแรกและยืนยันว่า disclosure แสดงก่อนเริ่ม tab capture
 - [ ] กด `KEEP AUDIO OFF` แล้วตรวจว่าไม่มีเสียงถูก capture และเปิด popup ใหม่ยังคง Audio OFF
@@ -344,7 +345,7 @@ Rollback rule: ถ้าการแก้ Store hardening ทำให้เส
 
 ### ทดสอบ Remote และ security
 
-- [ ] Deploy `nextstudio-public-site` รุ่นปัจจุบันที่ `https://studio.nextfeeder.com`
+- [ ] Deploy `nextsona-public-site` รุ่นปัจจุบันที่ `https://studio.nextfeeder.com`
 - [ ] ตรวจว่า `https://studio.nextfeeder.com/remote` และ `/privacy` เปิดผ่าน HTTPS ได้จากมือถือจริง
 - [ ] กด Remote, สแกน QR, สั่ง volume/pitch/AI/video/EQ และ reconnect หลังสลับแอปมือถือ
 - [ ] ยืนยันจาก Network panel ว่าไม่มี request ไป `api.qrserver.com`, Google Fonts หรือ itty.bitty
@@ -361,7 +362,7 @@ Rollback rule: ถ้าการแก้ Store hardening ทำให้เส
 ### Chrome Web Store Dashboard — ผู้พัฒนาต้องกรอกเอง
 
 - [ ] Privacy policy URL: `https://studio.nextfeeder.com/privacy`
-- [ ] Single purpose: อธิบายว่า NextStudio เป็นเครื่องมือปรับและประมวลผลเสียงจากแท็บที่ผู้ใช้เลือก พร้อมเครื่องมือ sync/record/remote ที่สนับสนุน workflow เดียวกัน
+- [ ] Single purpose: อธิบายว่า NextSona เป็นเครื่องมือปรับและประมวลผลเสียงจากแท็บที่ผู้ใช้เลือก พร้อมเครื่องมือ sync/record/remote ที่สนับสนุน workflow เดียวกัน
 - [ ] `tabCapture`: ใช้รับเสียงจากแท็บที่ผู้ใช้เลือกหลังเปิด Extension เพื่อให้ pitch, EQ, effects, AI Vocal และ recording ทำงาน
 - [ ] `offscreen`: ใช้รักษา Web Audio graph และการประมวลผลเสียงที่ผู้ใช้เปิดไว้เมื่อ popup ปิด
 - [ ] `activeTab`: ใช้เข้าถึงเฉพาะแท็บที่ผู้ใช้กด Extension ในขณะนั้น
@@ -371,7 +372,7 @@ Rollback rule: ถ้าการแก้ Store hardening ทำให้เส
 - [ ] ระบุว่า audio/model processing ทำในเครื่อง, ไม่มีการขายข้อมูล, ไม่มี personalized ads และข้อมูล Chrome API ใช้เพื่อฟีเจอร์ที่ผู้ใช้ร้องขอเท่านั้น
 - [ ] เปิดเผยว่า Remote ใช้ PeerJS-compatible signaling และอาจมี IP/timing metadata ตามขั้นตอน WebRTC
 - [ ] ตรวจชื่อ developer, support email และ privacy contact ให้ตรงกับ `NextFeeder Labs` / `nextfeeder.ts@gmail.com`
-- [ ] อัปโหลด ZIP จาก Store profile เท่านั้น ห้ามใช้ `nextstudio-extension-go-dev.zip`
+- [ ] อัปโหลด ZIP จาก Store profile เท่านั้น ห้ามใช้ `nextsona-extension-go-dev.zip`
 
 ### Listing และ Reviewer notes
 
@@ -395,18 +396,22 @@ Rollback rule: ถ้าการแก้ Store hardening ทำให้เส
 - [x] จำกัด PeerJS CSP จาก wildcard เป็น signaling host ที่ library ใช้จริง (`0.peerjs.com`) ทั้ง Extension และ public site
 - [x] เอา `cert.pem` และ `key.pem` ออกจาก current Git index/การแจกจ่ายและเพิ่ม `.gitignore`; local files ไม่ถูกลบ
 - [x] บันทึก license, version ที่พิสูจน์ได้ และ SHA-256 fingerprint ของ vendored asset ที่ไม่มี version metadata ใน `THIRD-PARTY-NOTICES.txt`
+- [x] เพิ่ม `assets/libs/js/LAMEJS-NOTICE.txt` ให้ Web build และตรวจว่า LAME ไม่ถูก package ใน Store ZIP
 - [ ] ถ้า repository เคย public หรือ private key เคยถูกแจก ให้ rotate certificate/key และพิจารณา purge ไฟล์จาก Git history; การหยุด track ใน commit ใหม่ไม่ลบสำเนาในประวัติ
 
 หมายเหตุ dependency: npm ของ working tree เดิมเคยติด internal Arborist error เพราะ `node_modules` มี state ปะปน จึงสร้าง lockfileจาก directory ว่าง แล้วพิสูจน์ด้วย `npm ci`, `npm ls`, Store build และ npm audit จาก dependency tree สะอาดแทน ห้ามลบ `package-lock.json` หรือใช้ `npm install` แบบไม่ตรวจ diff ก่อน release
 
 ## Reviewer notes ตัวอย่าง
 
+รายละเอียดที่ copy ไปกรอกใน Chrome Web Store Dashboard อยู่ใน
+`CHROME-WEB-STORE-DASHBOARD-INPUTS.md`
+
 ```text
-NextStudio has one user-facing purpose: real-time audio practice and media synchronization for the tab selected by the user.
+NextSona has one user-facing purpose: real-time audio practice and media synchronization for the tab selected by the user.
 
 To test:
 1. Open a tab containing playing audio.
-2. Click the NextStudio toolbar action.
+2. Click the NextSona toolbar action.
 3. Read the one-time local audio disclosure and click Continue.
 4. Use Pitch/EQ/Reverb, or enable AI Vocal and select Karaoke/Acapella.
 5. Video controls are injected only into the active tab after the toolbar action is clicked.
