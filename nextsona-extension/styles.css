@@ -108,6 +108,20 @@ body {
   padding: 0 4px;
 }
 
+.donate-video-btn {
+  min-width: 92px;
+  height: 14px !important;
+  gap: 3px;
+  padding: 0 4px !important;
+  border-color: #b48608 !important;
+  background: linear-gradient(to bottom, #ffd966, #f1c232) !important;
+  color: #4a2810 !important;
+  font-size: 7px !important;
+  letter-spacing: 0;
+}
+.donate-video-btn:hover { background: linear-gradient(to bottom, #ffe599, #ffd966) !important; }
+.donate-video-btn i { font-size: 8px; }
+
 #btn-open-player,
 #btn-remote-connect,
 #btn-rec-top,

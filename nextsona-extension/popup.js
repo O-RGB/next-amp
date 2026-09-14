@@ -1700,6 +1700,8 @@ function setupListeners() {
   };
   const donateAboutBtn = $("#btn-donate-about");
   if (donateAboutBtn) donateAboutBtn.addEventListener("click", openCoffeeDonation);
+  const donateVideoBtn = $("#btn-donate-video");
+  if (donateVideoBtn) donateVideoBtn.addEventListener("click", openCoffeeDonation);
   const privacyAboutBtn = $("#btn-privacy-about");
   if (privacyAboutBtn) {
     privacyAboutBtn.addEventListener("click", () => {

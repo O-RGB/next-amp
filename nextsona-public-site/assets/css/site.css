@@ -44,6 +44,8 @@ button { font: inherit; }
 .button-quiet { border-color: rgba(216,245,204,.17); color: #dce9e2; background: rgba(255,255,255,.035); }
 .button-quiet:hover, .button-outline:hover { border-color: var(--green); color: var(--green); }
 .button-outline { border-color: rgba(216,245,204,.3); color: var(--paper); }
+.button-support { border-color: rgba(255,184,107,.46); color: #ffd28f; background: rgba(112,76,28,.28); }
+.button-support:hover { border-color: var(--orange); color: #ffe5ba; background: rgba(132,89,32,.42); }
 .section-pad { padding: 120px 0; }
 .hero { position: relative; overflow: hidden; padding-top: 108px; padding-bottom: 104px; }
 .hero::before { position: absolute; content: ""; width: 720px; height: 720px; right: -210px; top: -260px; border-radius: 50%; background: radial-gradient(circle, rgba(93, 181, 130, .18), transparent 68%); pointer-events: none; }
