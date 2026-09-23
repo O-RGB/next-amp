@@ -20,6 +20,45 @@ const sessions = new Map();
 const captureEpochs = new Map();
 const db = new DBManager();
 const rtcServer = new RTCServer();
+// The Web Audio DynamicsCompressor algorithm has a fixed 6ms lookahead.
+// DYN routes through two serial compressor nodes, so account for both.
+const DYNAMICS_CHAIN_LATENCY_MS = 12;
+
+function getSessionOutputLatency(aiVocal, session = null) {
+  if (!aiVocal) return null;
+  // Use the manager's live processing state rather than session params.
+  // Session params can lag behind (e.g. default isVocalOn:false before the
+  // popup sends the saved toggle) which caused the first-open estimate to
+  // exclude AI and show only ~10ms of AudioContext latency.
+  const includeAi = aiVocal.currentMode !== "bypass";
+  const pitchLatencySeconds = session && !session.isPitchBypassed
+    ? session.pitchProc?.getLatencySeconds?.() || 0
+    : 0;
+  const dynamicsLatencyMs = session?.params?.normalize
+    ? DYNAMICS_CHAIN_LATENCY_MS
+    : 0;
+  return aiVocal.getOutputLatencyEstimate({
+    includeAi,
+    pitchLatencySeconds,
+    dynamicsLatencyMs
+  });
+}
+
+function broadcastAiVocalStatus(tabId, status, aiVocal, session = null) {
+  if (!aiVocal) return;
+  const targetSession = session || (tabId ? sessions.get(tabId) : null);
+  chrome.runtime.sendMessage({
+    type: "AI_VOCAL_STATUS",
+    tabId,
+    status,
+    engine: aiVocal.engineType,
+    device: aiVocal.getHardwareDevice(),
+    hardwareDevice: aiVocal.getHardwareDevice(),
+    hardwareDeviceRaw: aiVocal.getHardwareDeviceRaw(),
+    api: aiVocal.getHardwareApi(),
+    outputLatency: getSessionOutputLatency(aiVocal, targetSession)
+  }).catch(() => {});
+}
 
 function isVideoActivityActive(params) {
   if (!params || params.isVideoMasterOn === false) return false;
@@ -400,6 +439,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         : session.params.eq;
       const isRec =
         session.mediaRecorder && session.mediaRecorder.state === "recording";
+      const diagSnapshot = session.aiVocal ? session.aiVocal.getDiagnostics() : null;
+      // Attach the session-aware output latency so the popup shows the
+      // same end-to-end estimate on first open as after parameter changes.
+      if (diagSnapshot && session.aiVocal) {
+        diagSnapshot.outputLatency = getSessionOutputLatency(session.aiVocal, session);
+      }
       sendResponse({
         ...session.params,
         eqGains: currentEq,
@@ -409,7 +454,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         mode: session.mode,
         currentSampleRate: session.audioCtx ? session.audioCtx.sampleRate : null,
         vocalStatus: session.aiVocal ? session.aiVocal.getStatus() : "ORIGINAL",
-        aiVocalDiagnostics: session.aiVocal ? session.aiVocal.getDiagnostics() : null,
+        aiVocalDiagnostics: diagSnapshot,
       });
     } else {
       sendResponse({
@@ -554,20 +599,12 @@ async function startAudio(
 
     // NextSona AI Vocal Separator (UVR-MDX-Net WebGL)
     aiVocal = new AIVocalManager(audioCtx);
+    let activeSession = null;
     const selectedPowerMode = normalizeAiPowerMode(initialPowerMode);
     await aiVocal.setPowerMode(selectedPowerMode);
     if (!isCurrentCapture()) throw new Error("Capture start cancelled");
     aiVocal.onStatusChange = (status) => {
-      chrome.runtime.sendMessage({
-        type: "AI_VOCAL_STATUS",
-        tabId: tabId,
-        status: status,
-        engine: aiVocal.engineType,
-        device: aiVocal.getHardwareDevice(),
-        hardwareDevice: aiVocal.getHardwareDevice(),
-        hardwareDeviceRaw: aiVocal.getHardwareDeviceRaw(),
-        api: aiVocal.getHardwareApi()
-      }).catch(() => {});
+      broadcastAiVocalStatus(tabId, status, aiVocal, activeSession);
     };
     const aiVocalNode = await aiVocal.init();
     if (!isCurrentCapture()) throw new Error("Capture start cancelled");
@@ -638,6 +675,7 @@ async function startAudio(
       donationUsageClosed: false,
       donationUsageTimer: null,
     };
+    activeSession = newSession;
 
     if (!isCurrentCapture()) throw new Error("Capture start cancelled");
 
@@ -650,6 +688,7 @@ async function startAudio(
     );
 
     applyAllParams(newSession);
+    broadcastAiVocalStatus(tabId, aiVocal.getStatus(), aiVocal, newSession);
     notifyActionActivity(
       tabId,
       newSession.params.isAudioMasterOn !== false,
@@ -1184,6 +1223,20 @@ function applyParamToSession(session, key, value, index, source) {
         }
       }
       break;
+  }
+
+  // Refresh only when a setting changes serial audio latency. EQ and reverb
+  // retain a zero-latency dry path and need no telemetry message.
+  if (
+    (key === "pitch" || key === "normalize" || key === "isVocalOn" || key === "vocalMode") &&
+    session.aiVocal && tId
+  ) {
+    broadcastAiVocalStatus(
+      Number(tId),
+      session.aiVocal.getStatus(),
+      session.aiVocal,
+      session
+    );
   }
 
   // --- BROADCAST ---

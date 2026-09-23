@@ -136,13 +136,26 @@ const MODAL_HTML = `
             <p class="text-[7.5px] text-gray-400 leading-tight">
               Support ongoing development and future feature updates.
             </p>
-            <button
-              id="btn-donate-about"
-              class="win-btn h-5 px-2 text-[8px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer mt-0.5"
-            >
-              <i class="ph-bold ph-coffee text-[9px]"></i>
-              <span>BUY ME A COFFEE</span>
-            </button>
+            <div class="flex gap-1.5 w-full justify-center mt-1">
+              <button
+                id="btn-donate-gank"
+                type="button"
+                class="win-btn h-5 px-2 text-[7.5px] font-bold text-white bg-gradient-to-b from-[#e056fd] to-[#be2edd] hover:from-[#eb4d4b] hover:to-[#e056fd] active:scale-95 flex items-center justify-center gap-1 border border-[#686de0] shadow cursor-pointer"
+                title="Support via Gank (PromptPay / Local Wallets)"
+              >
+                <i class="ph-bold ph-heart text-[8px]"></i>
+                <span>GANK</span>
+              </button>
+              <button
+                id="btn-donate-coffee"
+                type="button"
+                class="win-btn h-5 px-2 text-[7.5px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer"
+                title="Support via Buy Me a Coffee (Cards / International)"
+              >
+                <i class="ph-bold ph-coffee text-[8px]"></i>
+                <span>BUY ME A COFFEE</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -252,10 +265,25 @@ export class SettingsModal {
     );
 
     // Donate / Support
-    const donateAboutBtn = $("#btn-donate-about");
-    if (donateAboutBtn) {
-      donateAboutBtn.onclick = () => {
+    const donateGankBtn = $("#btn-donate-gank");
+    if (donateGankBtn) {
+      donateGankBtn.onclick = (e) => {
+        if (e) e.stopPropagation();
         chrome.tabs.create({ url: "https://ganknow.com/nextfeederlabs/tip" });
+      };
+    }
+    const donateCoffeeBtn = $("#btn-donate-coffee");
+    if (donateCoffeeBtn) {
+      donateCoffeeBtn.onclick = (e) => {
+        if (e) e.stopPropagation();
+        chrome.tabs.create({ url: "https://buymeacoffee.com/nextfeederlabs" });
+      };
+    }
+    const privacyAboutBtn = $("#btn-privacy-about");
+    if (privacyAboutBtn) {
+      privacyAboutBtn.onclick = (e) => {
+        if (e) e.stopPropagation();
+        chrome.tabs.create({ url: "https://studio.nextfeeder.com/privacy" });
       };
     }
 

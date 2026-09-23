@@ -36,7 +36,57 @@ const PRESETS = {
   voice: [-2, -1, 0, 2, 4, 4, 3, 1, 0, 0],
 };
 const AI_WARNING_MAX_AGE_MS = 10 * 60 * 1000;
-const DONATION_URL = "https://ganknow.com/nextfeederlabs/tip";
+const AI_STARTUP_STALL_TIMEOUT_MS = 5000;
+const GANK_URL = "https://ganknow.com/nextfeederlabs/tip";
+const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/nextfeederlabs";
+
+const GANK_LOCAL_PAYMENT_TIMEZONES = new Set([
+  // Thailand (PromptPay, TrueMoney)
+  "Asia/Bangkok",
+  // Vietnam (MoMo, VNPay, ZaloPay)
+  "Asia/Ho_Chi_Minh",
+  "Asia/Saigon",
+  // Indonesia (QRIS, GoPay, OVO, DANA)
+  "Asia/Jakarta",
+  "Asia/Pontianak",
+  "Asia/Makassar",
+  "Asia/Jayapura",
+  // Philippines (GCash, Maya, GrabPay)
+  "Asia/Manila",
+  // Malaysia (DuitNow, Touch 'n Go, FPX)
+  "Asia/Kuala_Lumpur",
+  "Asia/Kuching",
+  // Singapore (PayNow, GrabPay)
+  "Asia/Singapore",
+  // Taiwan (JKOPay, LINE Pay, Taiwan Pay)
+  "Asia/Taipei",
+]);
+
+const GANK_LOCAL_PAYMENT_LANGUAGES = [
+  "th",  // Thai
+  "vi",  // Vietnamese
+  "id",  // Indonesian
+  "fil", // Filipino
+  "tl",  // Tagalog
+  "ms",  // Malay
+];
+
+function getDonationUrl() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz && GANK_LOCAL_PAYMENT_TIMEZONES.has(tz)) return GANK_URL;
+
+    const lang = (navigator.language || "").toLowerCase();
+    if (
+      GANK_LOCAL_PAYMENT_LANGUAGES.some((l) => lang.startsWith(l)) ||
+      lang.includes("-tw")
+    ) {
+      return GANK_URL;
+    }
+  } catch (_) {}
+  return BUY_ME_A_COFFEE_URL;
+}
+
 const DONATION_MIN_USAGE_MS = 30 * 60 * 1000;
 const DONATION_MIN_SESSIONS = 3;
 const DONATION_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
@@ -61,7 +111,9 @@ let currentVocalProfile = "ai_remove";
 let currentVocalDevice = "";
 let currentVocalDeviceRaw = "";
 let currentVocalApi = "WEBGL";
+let currentVocalGpuProfile = null;
 let currentVocalStatus = "ORIGINAL";
+let currentVocalOutputLatency = null;
 
 let isNormalizeOn = false;
 let currentEqValues = [...PRESETS.flat];
@@ -292,7 +344,7 @@ async function maybeShowUsageDonateModal(audioState) {
   const openDonation = () => {
     updatePromptState({ dismissedForever: true });
     close();
-    chrome.tabs.create({ url: DONATION_URL });
+    chrome.tabs.create({ url: getDonationUrl() });
   };
   const later = () => {
     updatePromptState({ snoozeUntil: now + DONATION_COOLDOWN_MS });
@@ -311,6 +363,10 @@ async function maybeShowUsageDonateModal(audioState) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // Keep the speaker-output label visible from the moment the popup opens.
+  // The value is replaced when the audio pipeline reports a measured estimate.
+  updateVocalOutputLatencyUI();
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) currentTabId = tab.id;
 
@@ -922,12 +978,13 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (currentTabId && msg.tabId === currentTabId)
       drawVisualizer(msg.data, msg.mode);
   } else if (msg.type === "AI_VOCAL_STATUS") {
-    updateVocalRuntimeStatus(msg.status);
+    updateVocalRuntimeStatus(msg.status, msg.outputLatency);
     updateVocalRuntimeUI(
       msg.engine,
       msg.hardwareDevice || msg.device,
       msg.api,
-      msg.hardwareDeviceRaw || msg.device
+      msg.hardwareDeviceRaw || msg.device,
+      msg.gpuProfile
     );
   } else if (msg.type === "RECORDING_SAVED") {
     handleRecordingSaved();
@@ -935,7 +992,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (msg.active === false || msg.reason === "recovered") {
       hideAiSlowModal();
     } else if (isCurrentAiWarning(msg)) {
-      showAiSlowModal(msg.liveP95Ms || msg.benchmarkMs, msg.deviceLabel);
+      showAiSlowModal(msg.liveP95Ms || msg.benchmarkMs, msg.deviceLabel, msg);
     }
   }
 });
@@ -944,7 +1001,7 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.aiHardwareWarning && changes.aiHardwareWarning.newValue) {
     const val = changes.aiHardwareWarning.newValue;
     if (isCurrentAiWarning(val)) {
-      showAiSlowModal(val.liveP95Ms || val.benchmarkMs, val.deviceLabel);
+      showAiSlowModal(val.liveP95Ms || val.benchmarkMs, val.deviceLabel, val);
     } else if (val?.active === false || val?.reason === "recovered") {
       hideAiSlowModal();
     }
@@ -962,13 +1019,56 @@ function hideAiSlowModal() {
   $("#ai-slow-overlay")?.classList.remove("active");
 }
 
-function showAiSlowModal(benchmarkMs, deviceLabel) {
+function showAiSlowModal(benchmarkMs, deviceLabel, warning = {}) {
   const overlay = $("#ai-slow-overlay");
   if (!overlay) return;
   const txtDevice = $("#txt-ai-slow-device");
   const txtMs = $("#txt-ai-slow-ms");
+  const title = $("#txt-ai-warning-title");
+  const source = $("#txt-ai-warning-source");
+  const copy = $("#txt-ai-warning-copy");
+  const api = $("#txt-ai-slow-api");
+  const selectionRow = $("#ai-gpu-selection-row");
+  const selection = $("#txt-ai-gpu-selection");
+  const reason = String(warning.reason || "startup-benchmark");
+  const profile = warning.gpuProfile || {};
+  const recommendation = String(profile.recommendation || "").trim();
+
   if (txtDevice) txtDevice.textContent = deviceLabel || "GPU";
-  if (txtMs) txtMs.textContent = `${benchmarkMs}ms / chunk`;
+  if (txtMs) txtMs.textContent = Number.isFinite(Number(benchmarkMs))
+    ? `${Math.round(Number(benchmarkMs))}ms / chunk`
+    : "No completed chunk";
+  if (api) api.textContent = reason === "startup-stall"
+    ? "No output"
+    : `${String(warning.backend || "GPU").toUpperCase()} / 185ms`;
+  if (title) {
+    title.textContent = reason === "startup-stall"
+      ? "AI PROCESSING STALLED"
+      : reason === "gpu-selection"
+        ? "GPU SELECTION CHECK"
+        : "SLOW GPU DETECTED";
+  }
+  if (source) {
+    source.textContent = reason === "startup-stall"
+      ? "NO PROCESSED AUDIO RECEIVED"
+      : reason === "gpu-selection"
+        ? "INTEGRATED / DISCRETE GPU HINT"
+        : "HARDWARE BENCHMARK";
+  }
+  if (copy) {
+    copy.textContent = reason === "startup-stall"
+      ? `NextSona received audio from the tab but did not receive a processed AI chunk for ${Math.round(AI_STARTUP_STALL_TIMEOUT_MS / 1000)} seconds. The GPU, browser graphics setting, or current tab may be unable to keep up.${recommendation ? ` ${recommendation}` : " Try keeping the original audio or restarting Chrome."}`
+      : reason === "gpu-selection" && recommendation
+        ? recommendation
+        : `Your GPU takes longer than real-time audio playback (${Math.round(Number(benchmarkMs) || 185)}ms vs 185ms). AI vocal separation may stutter or remain silent.`;
+  }
+  if (selectionRow && selection) {
+    selectionRow.classList.toggle("hidden", !recommendation);
+    selection.classList.toggle("text-amber-300", !!recommendation);
+    selection.classList.toggle("text-emerald-300", !recommendation);
+    selection.textContent = recommendation ? "Use High performance" : "No hint detected";
+    selection.title = [profile.lowPower, profile.highPerformance].filter(Boolean).join(" | ");
+  }
   overlay.classList.add("active");
 }
 
@@ -1087,24 +1187,70 @@ function selectAiPowerMode(mode) {
   notifyAction("aiPowerMode", nextMode, { immediate: true });
 }
 
-function updateVocalRuntimeStatus(status) {
+function renderVocalRuntimeStatus() {
   const runtimeText = $("#txt-vocal-runtime");
+  if (!runtimeText) return;
+
+  const status = currentVocalStatus || "ORIGINAL";
+  // Preserve the complete AI status label. Only remove a stale output-latency
+  // token from older messages; the final output value belongs in VISUALIZER.
+  const visibleStatus = status
+    .replace(/\s*•\s*OUT\s+~\d+ms\s*/i, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  runtimeText.textContent = visibleStatus;
+  runtimeText.title = `AI Vocal operation: ${status}`;
+}
+
+function updateVocalOutputLatencyUI(outputLatency = currentVocalOutputLatency) {
+  const outputText = $("#txt-vocal-output-latency");
+  if (!outputText) return;
+
+  const outputMs = Number(outputLatency?.totalMs);
+  if (!Number.isFinite(outputMs) || outputMs <= 0) {
+    outputText.textContent = "OUT --ms";
+    outputText.title = "Speaker output latency will appear after the audio pipeline reports a measurement.";
+    outputText.classList.remove("text-cyan-300");
+    outputText.classList.add("text-gray-500");
+    return;
+  }
+
+  const aiMs = Number(outputLatency?.aiMs) || 0;
+  const contextMs = Number(outputLatency?.audioContextMs) || 0;
+  const pitchMs = Number(outputLatency?.pitchMs) || 0;
+  const dynamicsMs = Number(outputLatency?.dynamicsMs) || 0;
+  outputText.textContent = `OUT ~${Math.round(outputMs)}ms`;
+  outputText.title =
+    `Estimated final speaker output latency: ${Math.round(outputMs)}ms ` +
+    `(AI ${Math.round(aiMs)}ms, audio device ${Math.round(contextMs)}ms, ` +
+    `pitch ${Math.round(pitchMs)}ms, DYN ${Math.round(dynamicsMs)}ms).`;
+  outputText.classList.remove("text-gray-500");
+  outputText.classList.add("text-cyan-300");
+}
+
+function updateVocalRuntimeStatus(status, outputLatency) {
   if (status !== undefined && status !== null && String(status).trim()) {
     currentVocalStatus = String(status).trim();
   }
-  if (runtimeText) {
-    runtimeText.textContent = currentVocalStatus || "ORIGINAL";
-    runtimeText.title = `AI Vocal operation: ${currentVocalStatus || "ORIGINAL"}`;
+  if (outputLatency && Number.isFinite(Number(outputLatency.totalMs))) {
+    currentVocalOutputLatency = outputLatency;
   }
+  renderVocalRuntimeStatus();
+  updateVocalOutputLatencyUI();
 }
 
-function updateVocalRuntimeUI(engine = aiEngineType, device, api, rawDevice) {
+function updateVocalRuntimeUI(engine = aiEngineType, device, api, rawDevice, gpuProfile) {
   const runtimeText = $("#txt-vocal-runtime");
   const runtimeDot = $("#vocal-runtime-dot");
   const deviceText = $("#txt-vocal-device");
   const apiText = $("#txt-vocal-api");
   const runtimePanel = $("#vocal-runtime-status");
   const normalizedEngine = GO_ENGINE_ENABLED && engine === ENGINE_TYPE ? ENGINE_TYPE : "webgl";
+
+  if (gpuProfile && typeof gpuProfile === "object") {
+    currentVocalGpuProfile = gpuProfile;
+  }
 
   if (device !== undefined && device !== null && String(device).trim()) {
     currentVocalDevice = String(device).trim();
@@ -1128,20 +1274,28 @@ function updateVocalRuntimeUI(engine = aiEngineType, device, api, rawDevice) {
 
   const deviceLabel = currentVocalDevice || (normalizedEngine === ENGINE_TYPE ? ENGINE_DISPLAY_NAME : "Detecting GPU...");
   const visibleDevice = deviceLabel.replace(/\s*\(DirectML\s+Device\s+#\d+\)\s*$/i, "").trim();
+  const visibleDeviceLabel = currentVocalGpuProfile?.activeLooksIntegrated
+    ? `iGPU / ${visibleDevice}`
+    : visibleDevice;
   const apiLabel = currentVocalApi || (normalizedEngine === ENGINE_TYPE ? ENGINE_API : "WEBGL");
   const fullHardware = currentVocalDeviceRaw || deviceLabel;
   const isCpu = /cpu|swiftshader|software|loopback/i.test(deviceLabel);
   const isOffline = /offline|unavailable|lost|error/i.test(deviceLabel);
   if (runtimeText) {
-    runtimeText.textContent = currentVocalStatus || "ORIGINAL";
-    runtimeText.title = `AI Vocal operation: ${currentVocalStatus || "ORIGINAL"}`;
+    renderVocalRuntimeStatus();
   }
+  updateVocalOutputLatencyUI();
   if (runtimeDot) {
     runtimeDot.className = `ph-fill ph-circle text-[4px] ${isOffline ? "text-red-500" : (isCpu ? "text-amber-400" : "text-emerald-400")}`;
   }
   if (deviceText) {
-    deviceText.textContent = `HW: ${visibleDevice}`;
-    deviceText.title = `Hardware Device: ${fullHardware}`;
+    deviceText.textContent = `HW: ${visibleDeviceLabel}`;
+    deviceText.title = [
+      `Hardware Device: ${fullHardware}`,
+      currentVocalGpuProfile?.recommendation || "",
+      currentVocalGpuProfile?.lowPower ? `Low-power candidate: ${currentVocalGpuProfile.lowPower}` : "",
+      currentVocalGpuProfile?.highPerformance ? `High-performance candidate: ${currentVocalGpuProfile.highPerformance}` : "",
+    ].filter(Boolean).join("\n");
   }
   if (apiText) {
     apiText.textContent = `API: ${apiLabel}`;
@@ -1489,6 +1643,16 @@ function setupListeners() {
     notifyAction("normalize", isNormalizeOn, { immediate: true });
   });
 
+  const dynInfoOverlay = $("#dyn-info-overlay");
+  const openDynInfo = () => dynInfoOverlay?.classList.add("active");
+  const closeDynInfo = () => dynInfoOverlay?.classList.remove("active");
+  $("#btn-dyn-info")?.addEventListener("click", openDynInfo);
+  $("#btn-close-dyn-info")?.addEventListener("click", closeDynInfo);
+  $("#btn-confirm-dyn-info")?.addEventListener("click", closeDynInfo);
+  dynInfoOverlay?.addEventListener("click", (e) => {
+    if (e.target === dynInfoOverlay) closeDynInfo();
+  });
+
   // --- AI VOCAL SEPARATOR CONTROLS ---
   $("#btn-toggle-vocal")?.addEventListener("click", () => {
     isVocalOn = !isVocalOn;
@@ -1507,7 +1671,7 @@ function setupListeners() {
     chrome.storage.local.get("aiHardwareWarning").then((res) => {
       if (isCurrentAiWarning(res?.aiHardwareWarning)) {
         const warning = res.aiHardwareWarning;
-        showAiSlowModal(warning.liveP95Ms || warning.benchmarkMs, warning.deviceLabel);
+        showAiSlowModal(warning.liveP95Ms || warning.benchmarkMs, warning.deviceLabel, warning);
       }
     }).catch(() => {});
     sendParam("vocalMode", "karaoke");
@@ -1518,7 +1682,7 @@ function setupListeners() {
     chrome.storage.local.get("aiHardwareWarning").then((res) => {
       if (isCurrentAiWarning(res?.aiHardwareWarning)) {
         const warning = res.aiHardwareWarning;
-        showAiSlowModal(warning.liveP95Ms || warning.benchmarkMs, warning.deviceLabel);
+        showAiSlowModal(warning.liveP95Ms || warning.benchmarkMs, warning.deviceLabel, warning);
       }
     }).catch(() => {});
     sendParam("vocalMode", "acapella");
@@ -1739,18 +1903,10 @@ function setupListeners() {
   $("#btn-rec-top").onclick = toggleRecording;
 
   const openCoffeeDonation = () => {
-    chrome.tabs.create({ url: DONATION_URL });
+    chrome.tabs.create({ url: getDonationUrl() });
   };
-  const donateAboutBtn = $("#btn-donate-about");
-  if (donateAboutBtn) donateAboutBtn.addEventListener("click", openCoffeeDonation);
   const donateVideoBtn = $("#btn-donate-video");
   if (donateVideoBtn) donateVideoBtn.addEventListener("click", openCoffeeDonation);
-  const privacyAboutBtn = $("#btn-privacy-about");
-  if (privacyAboutBtn) {
-    privacyAboutBtn.addEventListener("click", () => {
-      chrome.tabs.create({ url: "https://studio.nextfeeder.com/privacy" });
-    });
-  }
 }
 
 function updateEqToggleButton() {
@@ -1962,7 +2118,7 @@ function updateNormalizeButton() {
   } else {
     btn.className =
       "win-btn w-full h-full border text-[7px] px-1 font-bold flex items-center justify-center gap-0.5 border-gray-500 text-black bg-[#c0c0c0]";
-    indicator.className = "w-1 h-1 rounded-full bg-gray-400";
+    indicator.className = "w-1 h-1 rounded-full bg-[#222]";
   }
 }
 
@@ -2114,12 +2270,16 @@ function loadAudioState(state) {
       state.aiVocalDiagnostics.engine || aiEngineType,
       state.aiVocalDiagnostics.hardwareDevice || state.aiVocalDiagnostics.backend || "",
       state.aiVocalDiagnostics.api,
-      state.aiVocalDiagnostics.hardwareDeviceRaw || state.aiVocalDiagnostics.backend || ""
+      state.aiVocalDiagnostics.hardwareDeviceRaw || state.aiVocalDiagnostics.backend || "",
+      state.aiVocalDiagnostics.gpuProfile
     );
   } else {
     updateVocalRuntimeUI(aiEngineType);
   }
-  updateVocalRuntimeStatus(state.vocalStatus || currentVocalStatus);
+  updateVocalRuntimeStatus(
+    state.vocalStatus || currentVocalStatus,
+    state.aiVocalDiagnostics?.outputLatency
+  );
 
   if (state.eq && state.eq.length > 0) {
     currentEqValues = state.eq;

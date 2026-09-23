@@ -16,7 +16,11 @@ export const AI_POWER_MODES = Object.freeze({
     profile: "balanced",
     processingProfile: "balanced",
     backendPolicy: "auto_webgpu_first",
-    webglF16: false,
+    // Restore the WebGL F16 path that already passed the Apple + Windows
+    // blind listening gate. It lowers intermediate-texture bandwidth without
+    // changing the model, its 64-frame context, cadence, or output masking.
+    // WebGPU ignores this flag and keeps its existing float32 path.
+    webglF16: true,
     webglPackNormalization: false,
     webglPackDepthwiseConv: false,
     webgpuDeferredSubmitBatchSize: 15,

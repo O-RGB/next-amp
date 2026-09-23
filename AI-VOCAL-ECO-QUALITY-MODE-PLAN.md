@@ -52,7 +52,7 @@ const AI_POWER_MODES = Object.freeze({
     profile: "balanced",
     processingProfile: "balanced",
     backendPolicy: "auto_webgpu_first",
-    webglF16: false,
+    webglF16: true,
     webglPackNormalization: false,
     webglPackDepthwiseConv: false,
     webgpuDeferredSubmitBatchSize: 15,
@@ -88,7 +88,7 @@ const AI_POWER_MODES = Object.freeze({
 - ปิด smoothing/transient แบบ `main`; FULL เท่านั้นที่คงสองตัวนี้จากรอบทดสอบคุณภาพล่าสุด
 - ปิด adaptive queue ใน ECO และใช้ pending target คงที่ 2 แบบ `main`
 - คืน WebGPU deferred-submit เป็นค่า default 15 แบบ backend เดิม; FULL คงค่า 0 ที่ทดสอบล่าสุด
-- ECO ใช้ WebGPU-first/F32 ชุดเดียวกัน
+- ECO ใช้ WebGPU-first/F32; เมื่อ fallback หรือเลือก WebGL ให้ใช้ F16 ที่ผ่าน blind A/B แล้ว
 
 ค่าเก่า `medium` จะถูก normalize เป็น `eco` เพื่อรองรับ setting เดิม โดยไม่มี medium state ใหม่
 หากต้องการลดภาระกว่านี้ต้องทำ candidate ใหม่และผ่าน listening/long-run gate แยกต่างหาก
@@ -99,7 +99,7 @@ const AI_POWER_MODES = Object.freeze({
 
 - ใช้ model และ context 64 frames เดิม
 - ใช้ balanced 15-frame / 7,680 samples ผ่าน runtime config กลาง
-- ใช้ WebGPU-first/F32
+- ใช้ WebGPU-first/F32 และ WebGL F16 เมื่ออยู่บน WebGL backend
 - ชื่อ eco เก่าที่ค้างอยู่ใน session จะ resolve เป็น balanced โดยไม่สร้าง profile ใหม่
 - ปิด smoothing และ transient gate ให้ตรงกับ `main`
 - ใช้ browser pending target คงที่ 2; ไม่เปิด adaptive queue ของ FULL
@@ -125,8 +125,8 @@ const AI_POWER_MODES = Object.freeze({
 ## ลำดับ fallback ของ ECO
 
 1. WebGPU F32
-2. WebGL 2 F32 ถ้า WebGPU ใช้ไม่ได้
-3. WebGL 1 F32 ถ้า WebGL 2 ใช้ไม่ได้
+2. WebGL 2 F16 ถ้า WebGPU ใช้ไม่ได้
+3. WebGL 1 F16 ถ้า WebGL 2 ใช้ไม่ได้
 4. CPU เป็นทางเลือกสุดท้ายตาม behavior เดิม
 
 ห้าม fallback เพราะ latency สูงเพียง sample เดียว และห้ามสลับ backend ไปมาระหว่างเพลงจนเกิด oscillation
@@ -188,7 +188,7 @@ const AI_POWER_MODES = Object.freeze({
 - [x] ค่า legacy MEDIUM ถูกยุบเข้า ECO โดยไม่สร้าง cadence/profile ใหม่ และไม่แตะ FULL
 - [x] เพิ่มสถานะ precision จริง `F16` หรือ `F32`
 - [x] ยืนยันว่า QUALITY ยังเข้าทาง WebGPU-first เหมือนเดิม
-- [x] ยืนยันว่า ECO ใช้ WebGPU-first/F32
+- [x] ยืนยันว่า ECO ใช้ WebGPU-first/F32 และ WebGL F16 ที่ผ่าน blind A/B
 - [x] เพิ่ม fallback เมื่อ WebGPU/WebGL initialization หรือ warmup ใช้ไม่ได้
 - [x] ห้ามแตะ GO path
 

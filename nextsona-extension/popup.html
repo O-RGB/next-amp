@@ -173,10 +173,10 @@
             <i class="ph-bold ph-gauge"></i>
           </div>
           <div class="flex flex-col gap-0.5">
-            <span class="text-[10px] font-bold text-yellow-300 font-pixel uppercase tracking-wide">
+            <span id="txt-ai-warning-title" class="text-[10px] font-bold text-yellow-300 font-pixel uppercase tracking-wide">
               Slow GPU Detected
             </span>
-            <span class="text-[7.5px] text-gray-400 font-pixel">
+            <span id="txt-ai-warning-source" class="text-[7.5px] text-gray-400 font-pixel">
               HARDWARE BENCHMARK
             </span>
           </div>
@@ -186,17 +186,21 @@
               <span class="text-gray-400">Device:</span>
               <span id="txt-ai-slow-device" class="text-white font-bold truncate max-w-[150px]">Detecting...</span>
             </div>
+            <div id="ai-gpu-selection-row" class="hidden justify-between items-center border-b border-gray-800 py-0.5">
+              <span class="text-gray-400">GPU selection:</span>
+              <span id="txt-ai-gpu-selection" class="text-amber-300 font-bold text-right max-w-[160px]">Check system settings</span>
+            </div>
             <div class="flex justify-between items-center border-b border-gray-800 py-0.5">
-              <span class="text-gray-400">Measured Latency:</span>
+              <span class="text-gray-400">Measured Processing:</span>
               <span id="txt-ai-slow-ms" class="text-red-400 font-bold">564ms / chunk</span>
             </div>
             <div class="flex justify-between items-center pt-0.5">
               <span class="text-gray-400">Real-time Quota:</span>
-              <span class="text-green-400 font-bold">185ms (Max)</span>
+              <span id="txt-ai-slow-api" class="text-green-400 font-bold">185ms (Max)</span>
             </div>
           </div>
 
-          <p class="text-gray-300 text-[8px] font-pixel leading-relaxed text-left">
+          <p id="txt-ai-warning-copy" class="text-gray-300 text-[8px] font-pixel leading-relaxed text-left">
             Your GPU takes longer than real-time audio playback (185ms). Running AI vocal separation will cause audio stuttering or dropouts.
           </p>
 
@@ -506,7 +510,7 @@
                 <div class="text-[10px] font-bold text-white">
                   NEXTSONA EXTENSION
                 </div>
-                <div class="text-[8px] text-gray-400">Version 1.1.0</div>
+                <div class="text-[8px] text-gray-400">Version 1.1.1</div>
               </div>
               <p class="text-[8px] text-gray-500 px-4">
                 Advanced audio processing & real-time visualizer.
@@ -519,13 +523,26 @@
                 <p class="text-[7.5px] text-gray-400 leading-tight">
                   Support ongoing development and future feature updates.
                 </p>
-                <button
-                  id="btn-donate-about"
-                  class="win-btn h-5 px-2 text-[8px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer mt-0.5"
-                >
-                  <i class="ph-bold ph-coffee text-[9px]"></i>
-                  <span>BUY ME A COFFEE</span>
-                </button>
+                <div class="flex gap-1.5 w-full justify-center mt-1">
+                  <button
+                    id="btn-donate-gank"
+                    type="button"
+                    class="win-btn h-5 px-2 text-[7.5px] font-bold text-white bg-gradient-to-b from-[#e056fd] to-[#be2edd] hover:from-[#eb4d4b] hover:to-[#e056fd] active:scale-95 flex items-center justify-center gap-1 border border-[#686de0] shadow cursor-pointer"
+                    title="Support via Gank (PromptPay / Local Wallets)"
+                  >
+                    <i class="ph-bold ph-heart text-[8px]"></i>
+                    <span>GANK</span>
+                  </button>
+                  <button
+                    id="btn-donate-coffee"
+                    type="button"
+                    class="win-btn h-5 px-2 text-[7.5px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer"
+                    title="Support via Buy Me a Coffee (Cards / International)"
+                  >
+                    <i class="ph-bold ph-coffee text-[8px]"></i>
+                    <span>BUY ME A COFFEE</span>
+                  </button>
+                </div>
                 <button id="btn-privacy-about" class="win-btn h-5 px-2 text-[8px] text-gray-300 bg-gray-800 hover:bg-gray-700 cursor-pointer mt-0.5">
                   <span>PRIVACY POLICY</span>
                 </button>
@@ -596,9 +613,15 @@
           >
             <canvas id="visualizer" class=""></canvas>
             <div
-              class="absolute top-0.5 left-1 text-[8px] text-[#00ff00] opacity-50"
+              class="absolute top-0.5 left-1 flex items-center gap-1 opacity-70 z-10"
             >
-              VISUALIZER
+              <span class="text-[8px] text-[#00ff00]">VIS</span>
+              <span
+                id="txt-vocal-output-latency"
+                class="relative top-[1px] font-pixel text-[7px] text-cyan-300 font-bold whitespace-nowrap"
+                title="Estimated speaker output latency"
+                >OUT --ms</span
+              >
             </div>
             <div
               id="rec-indicator"
@@ -627,7 +650,7 @@
               <div
                 class="flex justify-between text-[7px] font-pixel theme-text-main font-bold -mb-1"
               >
-                <div class="flex gap-1 z-50">
+                <div class="flex items-center gap-1 z-50">
                   <span class="flex items-center gap-0.5"><i class="ph-bold ph-speaker-high text-[8px]"></i>VOL</span><button
                     id="btn-normalize"
                     class="win-btn w-full h-full border text-[7px] text-black font-bold flex items-center justify-center gap-0.5 px-1"
@@ -635,8 +658,17 @@
                     <span>DYN</span>
                     <div
                       id="norm-indicator"
-                      class="w-1 h-1 rounded-full bg-gray-500"
+                      class="w-1 h-1 rounded-full bg-[#222]"
                     ></div>
+                  </button>
+                  <button
+                    id="btn-dyn-info"
+                    type="button"
+                    class="w-3 h-3 p-0 rounded-full bg-[#3a3a3a] hover:bg-[#505050] text-gray-300 hover:text-white flex items-center justify-center border border-gray-600 transition-colors cursor-pointer flex-shrink-0 leading-none"
+                    aria-label="About Dynamics (DYN)"
+                    title="About DYN"
+                  >
+                    <i class="ph-bold ph-question text-[7px] leading-none relative top-[0.5px]"></i>
                   </button>
                 </div>
                 <span id="txt-vol">100%</span>
@@ -768,7 +800,7 @@
             <button id="btn-vocal-acapella" class="win-btn h-4 px-1.5 text-[7px] font-bold text-black flex items-center justify-center gap-0.5" title="Isolate Vocals (Acapella)"><i class="ph-bold ph-music-notes-simple text-[8px]"></i><span>SOLO</span></button>
           </div>
           <div id="vocal-runtime-status" class="flex min-w-0 max-w-[230px] flex-col items-end justify-center gap-0.5 leading-none text-right overflow-hidden" title="Active AI hardware">
-            <span class="flex-none text-[7px] font-pixel font-bold text-emerald-400 whitespace-nowrap">
+            <span class="flex-none text-[6.5px] font-pixel font-bold text-emerald-400 whitespace-nowrap">
               <i id="vocal-runtime-dot" class="ph-fill ph-circle text-[4px]"></i>
               <span id="txt-vocal-runtime" title="AI Vocal operation">ORIGINAL</span>
             </span>
@@ -805,6 +837,39 @@
             Use the available audio controls to fine-tune the result.
           </p>
           <button id="btn-confirm-ai-vocal-info" class="win-btn h-7 w-full bg-emerald-900 text-emerald-100 border-emerald-400 hover:bg-emerald-800 font-bold font-pixel text-[8.5px]">
+            GOT IT
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dynamics (DYN) information modal -->
+    <div id="dyn-info-overlay" class="z-[175000]" role="dialog" aria-modal="true" aria-labelledby="dyn-info-title">
+      <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">
+        <div class="theme-bar justify-between mb-2">
+          <span class="flex items-center gap-1 font-bold">
+            <i class="ph-bold ph-speaker-high text-cyan-300"></i>
+            <span id="dyn-info-title">ABOUT DYNAMICS (DYN)</span>
+          </span>
+          <button id="btn-close-dyn-info" class="win-btn text-red-900 font-bold bg-[#e0e0e0]" aria-label="Close">X</button>
+        </div>
+        <div class="bg-[#222] p-3 flex flex-col gap-2.5 items-center text-center">
+          <div class="w-10 h-10 rounded-full border border-cyan-500/60 bg-cyan-500/10 flex items-center justify-center text-cyan-300 text-xl">
+            <i class="ph-bold ph-waveform"></i>
+          </div>
+          <span class="text-[10px] font-bold text-cyan-300 font-pixel uppercase tracking-wide">
+            DYNAMIC RANGE LEVELER
+          </span>
+          <p class="text-gray-300 text-[8.5px] font-pixel leading-relaxed text-left">
+            <strong>DYN (Dynamics)</strong> automatically balances audio levels in real time: it boosts quiet sounds (such as soft whispers and dialogue) so they are easy to hear, while taming sudden loud peaks (such as explosions and gunshots) to protect your ears.
+          </p>
+          <div class="w-full bg-[#181818] border border-gray-700 p-2 rounded flex items-start gap-2 text-left">
+            <span class="text-xs">🎬</span>
+            <span class="text-gray-300 text-[8px] font-pixel leading-snug">
+              <strong>Perfect for movies & series:</strong> Hear every conversation clearly without having to constantly turn the volume up for dialogue and down for action scenes.
+            </span>
+          </div>
+          <button id="btn-confirm-dyn-info" class="win-btn h-7 w-full bg-cyan-900 text-cyan-100 border-cyan-400 hover:bg-cyan-800 font-bold font-pixel text-[8.5px]">
             GOT IT
           </button>
         </div>

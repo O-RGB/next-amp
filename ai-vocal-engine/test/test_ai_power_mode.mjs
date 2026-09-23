@@ -26,7 +26,9 @@ for (const mode of [AI_POWER_MODE_ECO, AI_POWER_MODE_QUALITY]) {
   const config = getAiPowerModeConfig(mode);
   assert.equal(config.profile, mode === "quality" ? "ai_remove" : "balanced");
   assert.equal(config.processingProfile, mode === "quality" ? "ai_remove" : "balanced");
-  assert.equal(config.webglF16, mode === "quality");
+  // WebGL F16 already passed blind listening in both ECO and QUALITY. WebGPU
+  // remains float32 because this setting is provider-specific.
+  assert.equal(config.webglF16, true);
   assert.equal(config.webglPackNormalization, mode === "quality");
   assert.equal(config.webglPackDepthwiseConv, mode === "quality");
   assert.equal(config.webgpuDeferredSubmitBatchSize, mode === "quality" ? 0 : 15);

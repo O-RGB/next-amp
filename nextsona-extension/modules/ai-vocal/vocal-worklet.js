@@ -48,6 +48,11 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.chunkSize = DEFAULT_BROWSER_CHUNK_SIZE;
     this.readyThreshold = READY_QUEUE_THRESHOLD;
     this.maxQueueThreshold = MAX_QUEUE_THRESHOLD;
+    this.startupHoldSamples = 0;
+    this.startupHoldRemaining = 0;
+    this.fastOutputGate = false;
+    this.fastOutputFallbackThreshold = READY_QUEUE_THRESHOLD;
+    this.fastOutputFallbackSent = false;
 
     // Input accumulator
     this.inAccumL = new Float32Array(MAX_CHUNK_SIZE);
@@ -157,6 +162,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
             ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
           this.maxQueueThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
             ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
+          this.resetOutputGate();
           this.releaseCurrentChunk();
           this.clearOutputQueue();
           this.currChunkL = null;
@@ -203,6 +209,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
         this.maxQueueThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
           ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
+        this.resetOutputGate();
       } else if (data.type === "SET_PROFILE") {
         const nextProfile = data.profile === "eco" || data.profile === "balanced"
           ? "balanced"
@@ -223,6 +230,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
             ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
           this.maxQueueThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
             ? GO_MAX_QUEUE_THRESHOLD : MAX_QUEUE_THRESHOLD;
+          this.resetOutputGate();
           this.releaseCurrentChunk();
           this.clearOutputQueue();
           this.currChunkL = null;
@@ -268,6 +276,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         this.chunkPeak = 0.0;
         this.silentChunks = 0;
         this.inSilenceBoundary = false;
+        this.startupHoldRemaining = this.startupHoldSamples;
       } else if (data.type === "SET_QUEUE_TARGET") {
         const targetEngine = data.engineType === NATIVE_ENGINE_TYPE || data.engineType === "webgl"
           ? data.engineType : null;
@@ -287,6 +296,18 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
           this.readyThreshold + 1,
           Math.min(maxMax, Math.floor(max))
         );
+        const requestedHold = Number(data.startupHoldSamples);
+        this.startupHoldSamples = targetEngine === "webgl" && Number.isFinite(requestedHold)
+          ? Math.max(0, Math.min(this.chunkSize, Math.floor(requestedHold)))
+          : 0;
+        this.startupHoldRemaining = this.isAiReady ? 0 : this.startupHoldSamples;
+        const requestedFallback = Number(data.fallbackReadyThreshold);
+        this.fastOutputFallbackThreshold = Number.isFinite(requestedFallback)
+          ? Math.max(READY_QUEUE_THRESHOLD, Math.min(maxReady, Math.floor(requestedFallback)))
+          : READY_QUEUE_THRESHOLD;
+        this.fastOutputGate = targetEngine === "webgl" &&
+          data.fastOutputGate === true && this.readyThreshold === 1;
+        this.fastOutputFallbackSent = false;
       } else if (data.type === "SET_DIAGNOSTICS") {
         this.diagnosticsEnabled = data.enabled === true;
       } else if (data.type === "RETURN_INPUT_BUFFERS") {
@@ -319,6 +340,33 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     // switch cannot produce a mixed-size packet.
     this.inAccumPos = 0;
     this.chunkPeak = 0.0;
+  }
+
+  resetOutputGate() {
+    this.startupHoldSamples = 0;
+    this.startupHoldRemaining = 0;
+    this.fastOutputGate = false;
+    this.fastOutputFallbackThreshold = READY_QUEUE_THRESHOLD;
+    this.fastOutputFallbackSent = false;
+  }
+
+  fallbackFastOutputGate() {
+    if (!this.fastOutputGate) return;
+    this.fastOutputGate = false;
+    this.readyThreshold = this.fastOutputFallbackThreshold;
+    this.startupHoldSamples = 0;
+    this.startupHoldRemaining = 0;
+    this.isAiReady = false;
+    this.releaseCurrentChunk();
+    this.concealGain = 0.0;
+    if (!this.fastOutputFallbackSent) {
+      this.fastOutputFallbackSent = true;
+      this.port.postMessage({
+        type: "FAST_OUTPUT_FALLBACK",
+        readyThreshold: this.readyThreshold,
+        underrunBlocks: this.diagnostics.underrunBlocks
+      });
+    }
   }
 
   clearOutputQueue() {
@@ -445,6 +493,7 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     this.isAiReady = false;
     this.readyThreshold = NATIVE_ENGINE_ENABLED && this.engineType === NATIVE_ENGINE_TYPE
       ? GO_READY_QUEUE_THRESHOLD : READY_QUEUE_THRESHOLD;
+    this.resetOutputGate();
     this.releaseCurrentChunk();
     this.clearOutputQueue();
     this.concealGain = 1.0;
@@ -572,8 +621,20 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
     // 2. Check if AI queue has reached threshold to start playing
     if (!this.isAiReady) {
       if (this.targetMode !== "bypass" && this.outQueueSize >= this.readyThreshold) {
-        this.isAiReady = true;
+        if (this.startupHoldRemaining > 0) {
+          this.startupHoldRemaining = Math.max(0, this.startupHoldRemaining - len);
+        } else {
+          this.isAiReady = true;
+        }
       }
+    }
+
+    // A fast one-chunk gate is only retained while it proves stable. On the
+    // first real underrun, mute and re-prime with the original two-chunk gate;
+    // never substitute the raw vocal-bearing input.
+    const hasCurrentOutput = this.currChunkL && this.currChunkPos < this.currChunkL.length;
+    if (this.isAiReady && this.fastOutputGate && !hasCurrentOutput && this.outQueueSize === 0) {
+      this.fallbackFastOutputGate();
     }
 
     // Target gains:
@@ -598,6 +659,9 @@ class AIVocalWorkletProcessor extends AudioWorkletProcessor {
         generation: this.streamGeneration,
         isAiReady: this.isAiReady,
         readyThreshold: this.readyThreshold,
+        startupHoldSamples: this.startupHoldSamples,
+        startupHoldRemaining: this.startupHoldRemaining,
+        fastOutputGate: this.fastOutputGate,
         underrunBlocks: this.diagnostics.underrunBlocks,
         aiGain: this.aiGain,
         bufferedSec: bufferedSec,

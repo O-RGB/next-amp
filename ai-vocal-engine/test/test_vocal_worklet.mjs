@@ -144,6 +144,37 @@ assert.ok(processor.diagnostics.underrunBlocks > 0);
 assert.equal(processor.readyThreshold, readyThresholdBeforeUnderrun,
   'a transient underrun must not permanently lower the adaptive queue target');
 
+// Fast WebGPU output starts after one processed chunk plus a sample-accurate
+// hold. If it cannot sustain playback, it must mute and restore the proven
+// two-chunk gate without ever exposing raw input.
+const fastProcessor = new Processor();
+fastProcessor.port.onmessage({ data: {
+  type: 'SET_MODE', mode: 'karaoke', engineType: 'webgl', generation: 50,
+  profile: 'balanced', browserChunkSize: 7680
+} });
+fastProcessor.port.onmessage({ data: {
+  type: 'SET_QUEUE_TARGET',
+  engineType: 'webgl',
+  readyThreshold: 1,
+  maxQueueThreshold: 2,
+  startupHoldSamples: 2560,
+  fallbackReadyThreshold: 2,
+  fastOutputGate: true
+} });
+fastProcessor.port.onmessage({ data: processed(1, 0.05, 50, 7680) });
+processBlocks(fastProcessor, 20);
+assert.equal(fastProcessor.isAiReady, false, 'fast gate must honor its fractional startup hold');
+processBlocks(fastProcessor, 1);
+assert.equal(fastProcessor.isAiReady, true, 'fast gate must start immediately after the hold');
+processBlocks(fastProcessor, 60);
+const fastUnderrunOutput = processBlocks(fastProcessor, 2, 0.9);
+assert.equal(fastProcessor.readyThreshold, 2, 'fast underrun must restore the stable gate');
+assert.equal(fastProcessor.isAiReady, false, 'fast underrun must re-prime before playback resumes');
+assert.equal(messagesOfType(fastProcessor, 'FAST_OUTPUT_FALLBACK').length, 1,
+  'fast underrun must notify the manager exactly once');
+const fastUnderrunPeak = Math.max(...fastUnderrunOutput.flatMap(ch => Array.from(ch[0])));
+assert.ok(fastUnderrunPeak < 1e-4, `fast fallback leaked raw audio: peak ${fastUnderrunPeak}`);
+
 // Switching to GO changes only the wire cadence and clears a partial browser packet.
 processor.port.onmessage({ data: { type: 'SET_ENGINE', engineType: 'go_native' } });
 processor.port.onmessage({ data: {

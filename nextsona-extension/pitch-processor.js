@@ -5,6 +5,7 @@ export class PitchProcessor {
     this.audioCtx = audioCtx;
     this.stretch = null;
     this.isLoaded = false;
+    this.latencySeconds = 0;
   }
 
   async init() {
@@ -36,6 +37,16 @@ export class PitchProcessor {
         this.stretch.setUpdateInterval(999);
       }
 
+      // Signalsmith exposes its fixed algorithmic input + output latency.
+      // Read it once so UI telemetry can include pitch without polling the
+      // AudioWorklet or adding work to the render path.
+      if (typeof this.stretch.latency === "function") {
+        const latency = Number(await this.stretch.latency());
+        if (Number.isFinite(latency) && latency >= 0) {
+          this.latencySeconds = latency;
+        }
+      }
+
       this.isLoaded = true;
       return this.stretch;
     } catch (err) {
@@ -51,5 +62,9 @@ export class PitchProcessor {
 
   getNode() {
     return this.stretch;
+  }
+
+  getLatencySeconds() {
+    return this.latencySeconds;
   }
 }

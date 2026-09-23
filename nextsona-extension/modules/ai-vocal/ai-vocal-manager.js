@@ -26,6 +26,10 @@ import {
   normalizeAiPowerMode,
   shouldPreferWebGlForPowerMode
 } from "./ai-power-mode.mjs";
+import {
+  estimateOutputLatency,
+  selectFastWebGpuOutputTarget
+} from "./output-latency-estimator.mjs";
 
 const _ = 1024;     // 1024 frequency bins
 const TAIL = 1536;  // 1,536 samples overlap tail (3 hops of 512)
@@ -57,6 +61,10 @@ const CANDIDATE_WEBGL_F16 = true;
 // pending-work cushion from measured processing time and Worklet underruns.
 // GO keeps its existing queue controller and is never routed through this.
 const ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE = true;
+// Reduce audible output delay only on ECO WebGPU providers with measured
+// deadline margin. This changes the output safety gate, never model input,
+// inference cadence, masks, DSP, or generated audio samples.
+const ENABLE_FAST_WEBGPU_OUTPUT_CANDIDATE = true;
 const VOCAL_PROFILES = Object.freeze({
   // ECO is the single shared low-power browser cadence.
   balanced: Object.freeze({
@@ -394,6 +402,10 @@ export class AIVocalManager {
     this.browserLatencySamplePos = 0;
     this.browserQueueStableSince = 0;
     this.browserLastUnderrunBlocks = null;
+    this.fastWebGpuOutputState = "inactive";
+    this.browserOutputReadyThreshold = DEFAULT_BROWSER_PENDING_LIMIT;
+    this.browserOutputHoldSamples = 0;
+    this.browserOutputFallbackThreshold = DEFAULT_BROWSER_PENDING_LIMIT;
     this.queueNeedsResync = false;
     this.resyncChunkIndex = null;
     this.streamGeneration = 0;
@@ -444,6 +456,7 @@ export class AIVocalManager {
       streamResets: 0,
       processErrors: 0,
       maxPendingQueue: 0,
+      fastOutputFallbacks: 0,
       webGpuReadbackStarted: 0,
       webGpuReadbackCompleted: 0,
       webGpuReadbackRejected: 0,
@@ -653,6 +666,79 @@ export class AIVocalManager {
   isAdaptiveBrowserQueueEnabled() {
     return ENABLE_ADAPTIVE_BROWSER_QUEUE_CANDIDATE &&
       this.getPowerModeConfig().adaptiveQueue === true;
+  }
+
+  isFastWebGpuOutputActive() {
+    return this.fastWebGpuOutputState === "active";
+  }
+
+  configureFastWebGpuOutput(benchmarkMs) {
+    const processing = this.getProcessingConfig();
+    const target = selectFastWebGpuOutputTarget({
+      backendType: this.backendType,
+      powerMode: this.aiPowerMode,
+      benchmarkMs,
+      chunkSamples: processing.chunkSamples,
+      sampleRate: this.audioCtx?.sampleRate || 44100
+    });
+
+    if (!ENABLE_FAST_WEBGPU_OUTPUT_CANDIDATE || !target.enabled ||
+        GO_ENGINE_ENABLED && this.engineType !== "webgl") {
+      this.fastWebGpuOutputState = "inactive";
+      this.browserOutputReadyThreshold = DEFAULT_BROWSER_PENDING_LIMIT;
+      this.browserOutputHoldSamples = 0;
+      this.browserOutputFallbackThreshold = DEFAULT_BROWSER_PENDING_LIMIT;
+      return false;
+    }
+
+    this.fastWebGpuOutputState = "active";
+    this.browserOutputReadyThreshold = target.readyThreshold;
+    this.browserOutputHoldSamples = target.startupHoldSamples;
+    this.browserOutputFallbackThreshold = target.fallbackReadyThreshold;
+    console.log(
+      `[NextSona AI] Fast output gate: 1 chunk + ${target.startupHoldMs.toFixed(1)}ms hold`
+    );
+    this.sendBrowserQueueTarget();
+    return true;
+  }
+
+  fallbackFastWebGpuOutput() {
+    if (!this.isFastWebGpuOutputActive()) return;
+    this.fastWebGpuOutputState = "fallback";
+    this.browserOutputReadyThreshold = DEFAULT_BROWSER_PENDING_LIMIT;
+    this.browserOutputHoldSamples = 0;
+    this.browserOutputFallbackThreshold = DEFAULT_BROWSER_PENDING_LIMIT;
+    this.diagnostics.fastOutputFallbacks++;
+    console.warn("[NextSona AI] Fast output gate underrun; restored stable 2-chunk buffer");
+    this.sendBrowserQueueTarget();
+  }
+
+  getOutputLatencyEstimate({
+    includeAi = true,
+    pitchLatencySeconds = 0,
+    dynamicsLatencyMs = 0
+  } = {}) {
+    const processing = this.getProcessingConfig();
+    const workletStatus = this.diagnostics.lastWorkletStatus;
+    const readyThreshold = Number.isFinite(workletStatus?.readyThreshold)
+      ? workletStatus.readyThreshold
+      : this.browserOutputReadyThreshold;
+    const startupHoldSamples = Number.isFinite(workletStatus?.startupHoldSamples)
+      ? workletStatus.startupHoldSamples
+      : this.browserOutputHoldSamples;
+    return estimateOutputLatency({
+      chunkSamples: processing.chunkSamples,
+      sampleRate: this.audioCtx?.sampleRate || 44100,
+      delayChunks: includeAi ? processing.delayChunks : 0,
+      readyThreshold,
+      processingMs: includeAi ? this.lastInferMs || this.benchmarkMs : 0,
+      startupHoldSamples: includeAi ? startupHoldSamples : 0,
+      includeAi,
+      audioContextBaseLatencySeconds: this.audioCtx?.baseLatency,
+      audioContextOutputLatencySeconds: this.audioCtx?.outputLatency,
+      pitchLatencySeconds,
+      dynamicsLatencyMs
+    });
   }
 
   applyBackendPowerModeConfig() {
@@ -934,6 +1020,10 @@ export class AIVocalManager {
     this.browserLatencySamplePos = 0;
     this.browserQueueStableSince = 0;
     this.browserLastUnderrunBlocks = null;
+    this.fastWebGpuOutputState = "inactive";
+    this.browserOutputReadyThreshold = DEFAULT_BROWSER_PENDING_LIMIT;
+    this.browserOutputHoldSamples = 0;
+    this.browserOutputFallbackThreshold = DEFAULT_BROWSER_PENDING_LIMIT;
   }
 
   getSortedBrowserLatencyCount() {
@@ -956,11 +1046,15 @@ export class AIVocalManager {
   }
 
   sendBrowserQueueTarget() {
-    if (!this.isAdaptiveBrowserQueueEnabled() ||
+    const hasFastOutputOverride = this.fastWebGpuOutputState !== "inactive";
+    if ((!this.isAdaptiveBrowserQueueEnabled() && !hasFastOutputOverride) ||
         GO_ENGINE_ENABLED && this.engineType !== "webgl" || !this.workletNode) return;
+    const requestedReadyThreshold = this.isFastWebGpuOutputActive()
+      ? this.browserOutputReadyThreshold
+      : this.browserQueueTarget;
     const readyThreshold = Math.max(
       MIN_BROWSER_QUEUE_TARGET,
-      Math.min(MAX_BROWSER_QUEUE_TARGET, Math.floor(this.browserQueueTarget))
+      Math.min(MAX_BROWSER_QUEUE_TARGET, Math.floor(requestedReadyThreshold))
     );
     // Keep one extra output chunk as a small recovery margin while the
     // manager's pending-work limit remains the actual latency control.
@@ -969,7 +1063,11 @@ export class AIVocalManager {
       type: "SET_QUEUE_TARGET",
       engineType: "webgl",
       readyThreshold,
-      maxQueueThreshold
+      maxQueueThreshold,
+      startupHoldSamples: this.isFastWebGpuOutputActive()
+        ? this.browserOutputHoldSamples : 0,
+      fallbackReadyThreshold: this.browserOutputFallbackThreshold,
+      fastOutputGate: this.isFastWebGpuOutputActive()
     });
   }
 
@@ -1368,10 +1466,15 @@ export class AIVocalManager {
             inputFrame: data.inputFrame,
             playbackFrame: data.playbackFrame,
             underrunBlocks: data.underrunBlocks,
+            readyThreshold: data.readyThreshold,
+            startupHoldSamples: data.startupHoldSamples,
+            fastOutputGate: data.fastOutputGate === true,
             diagnostics: data.diagnostics || null
           };
           this.observeBrowserUnderrun(data.underrunBlocks);
           this.handleWorkletStatus(data);
+        } else if (data.type === "FAST_OUTPUT_FALLBACK") {
+          this.fallbackFastWebGpuOutput();
         } else if (data.type === "RETURN_OUTPUT_BUFFERS") {
           this.recycleOutputBuffers(data.outL, data.outR);
         } else if (data.type === "STREAM_RESET") {
@@ -1390,6 +1493,7 @@ export class AIVocalManager {
           } else {
             this.resetState();
           }
+          this.sendBrowserQueueTarget();
         }
       };
 
@@ -2128,6 +2232,11 @@ export class AIVocalManager {
         return;
       }
 
+      // Configure the lower-delay output gate only after measuring this live
+      // provider and confirming that this engine load is still current. A
+      // slow/unsupported GPU keeps the proven two-chunk buffer.
+      this.configureFastWebGpuOutput(benchmarkMs);
+
       console.log(`[NextSona AI] Engine ready with hardware: ${this.backendName}`);
       this.lastError = null;
       this.isReady = true;
@@ -2198,6 +2307,9 @@ export class AIVocalManager {
       return;
     }
     const backend = this.backendName || "GPU";
+    // Keep the original AI status label. The final speaker-output estimate is
+    // rendered separately in the visualizer, so this label remains focused on
+    // the vocal mode, backend, and model processing time.
     const msStr = this.lastInferMs ? ` (${backend} ${this.lastInferMs}ms)` : ` [${backend}]`;
     if (!data.isAiReady) {
       const targetSec = ((data.readyThreshold || 5) * (data.chunkSize || this.getProcessingConfig().chunkSamples) / 44100).toFixed(1);
@@ -2834,6 +2946,13 @@ export class AIVocalManager {
         stableForMs: this.browserQueueStableSince > 0
           ? Math.max(0, Math.round(now - this.browserQueueStableSince)) : 0,
         underrunBlocks: this.diagnostics.lastWorkletStatus?.underrunBlocks ?? null
+      },
+      outputLatency: this.getOutputLatencyEstimate({ includeAi: this.currentMode !== "bypass" }),
+      fastOutput: {
+        state: this.fastWebGpuOutputState,
+        readyThreshold: this.browserOutputReadyThreshold,
+        startupHoldSamples: this.browserOutputHoldSamples,
+        fallbacks: this.diagnostics.fastOutputFallbacks
       },
       stream: {
         generation: this.streamGeneration,
