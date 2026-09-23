@@ -158,6 +158,34 @@
       </div>
     </div>
 
+    <!-- Occasional, non-blocking Chrome Web Store rating prompt -->
+    <div id="usage-review-overlay" class="z-[155000]" role="dialog" aria-modal="true" aria-labelledby="usage-review-title">
+      <div class="win-border-out session-dialog donation-dialog shadow-2xl bg-[#292929]">
+        <div class="theme-bar justify-between mb-2">
+          <span class="flex items-center gap-1 font-bold">
+            <i class="ph-bold ph-star text-amber-300"></i>
+            <span id="usage-review-title">RATE NEXTSONA</span>
+          </span>
+          <button id="btn-close-usage-review" class="win-btn text-red-900 font-bold bg-[#e0e0e0]" aria-label="Close">X</button>
+        </div>
+        <div class="bg-[#222] p-3 flex flex-col gap-2 text-center">
+          <div class="w-9 h-9 rounded-full border border-amber-500/50 bg-amber-500/10 flex items-center justify-center self-center text-amber-400 text-lg">
+            <i class="ph-bold ph-star"></i>
+          </div>
+          <span class="text-[10px] font-bold text-amber-300 font-pixel uppercase tracking-wide">ENJOYING NEXTSONA?</span>
+          <p class="text-white text-[8.5px] font-pixel leading-relaxed">A quick rating helps other people discover NextSona.</p>
+          <div class="flex gap-1.5 w-full mt-1">
+            <button id="btn-usage-review" class="win-btn h-7 flex-1 bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] text-[#4a2810] font-bold font-pixel text-[8px] flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer">
+              <i class="ph-bold ph-star text-[9px]"></i>
+              <span>RATE NOW</span>
+            </button>
+            <button id="btn-usage-review-later" class="win-btn h-7 px-2 bg-gray-700 text-gray-200 hover:bg-gray-600 font-pixel text-[8px] cursor-pointer">LATER</button>
+            <button id="btn-usage-review-dismiss" class="win-btn h-7 px-2 bg-gray-800 text-gray-400 hover:bg-gray-700 font-pixel text-[8px] cursor-pointer">DON'T ASK AGAIN</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- AI Performance / Slow GPU Alert Modal -->
     <div id="ai-slow-overlay" class="z-[170000]">
       <div class="win-border-out session-dialog shadow-2xl bg-[#292929] max-w-[280px]">

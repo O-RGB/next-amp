@@ -91,6 +91,13 @@ const DONATION_MIN_USAGE_MS = 30 * 60 * 1000;
 const DONATION_MIN_SESSIONS = 3;
 const DONATION_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 const DONATION_MAX_PROMPTS = 3;
+const REVIEW_STORE_URL = "https://chromewebstore.google.com/detail/nextsona-pitch-shifter-eq/jghfpkhbcmcbmecbogofjlombgijfbon/reviews";
+const REVIEW_MIN_USAGE_MS = 30 * 60 * 1000;
+const REVIEW_MIN_SESSIONS = 3;
+const REVIEW_COOLDOWN_MS = 45 * 24 * 60 * 60 * 1000;
+const REVIEW_MAX_PROMPTS = 2;
+const REVIEW_DONATION_GAP_MS = 14 * 24 * 60 * 60 * 1000;
+const REVIEW_PROMPT_DELAY_MS = 1500;
 const AI_VOCAL_INFO_SEEN_KEY = "hasSeenAiVocalInfoModal";
 const AUDIO_DISCLOSURE_ACCEPTED_KEY = "hasAcceptedAudioDisclosure";
 const REMOTE_PUBLIC_URL = "https://sona.nextfeeder.com/remote";
@@ -362,6 +369,71 @@ async function maybeShowUsageDonateModal(audioState) {
   overlay.classList.add("active");
 }
 
+async function maybeShowUsageReviewModal(audioState) {
+  // The popup reaches this function only after the initial controls have been
+  // restored and the startup delay has elapsed. Do not require an idle audio
+  // session here: a saved Master=ON preference creates a live session during
+  // initialization, and the review prompt must not disappear just because
+  // audio is already working. The modal never changes the Master preference.
+  if (!isTabReady) return;
+
+  const overlay = $("#usage-review-overlay");
+  if (!overlay || overlay.classList.contains("active")) return;
+  if ($("#usage-donate-overlay")?.classList.contains("active")) return;
+
+  const data = await chrome.storage.local.get(["donationUsage", "reviewPrompt"]);
+  const usage = data.donationUsage || {};
+  const review = data.reviewPrompt || {};
+  const usageMs = Number(usage.usageMs) || 0;
+  const completedSessions = Number(usage.completedSessions) || 0;
+  const promptCount = Number(review.promptCount) || 0;
+  const now = Date.now();
+
+  if (review.dismissedForever || promptCount >= REVIEW_MAX_PROMPTS) return;
+  if (Number(review.snoozeUntil) > now) return;
+  if (Number(review.lastPromptAt) && now - Number(review.lastPromptAt) < REVIEW_COOLDOWN_MS) return;
+  if (Number(usage.lastPromptAt) && now - Number(usage.lastPromptAt) < REVIEW_DONATION_GAP_MS) return;
+  if (usageMs < REVIEW_MIN_USAGE_MS && completedSessions < REVIEW_MIN_SESSIONS) return;
+
+  await chrome.storage.local.set({
+    reviewPrompt: {
+      ...review,
+      promptCount: promptCount + 1,
+      lastPromptAt: now,
+    },
+  });
+
+  const close = () => overlay.classList.remove("active");
+  const updatePromptState = (extra = {}) =>
+    chrome.storage.local.set({
+      reviewPrompt: {
+        ...review,
+        promptCount: promptCount + 1,
+        lastPromptAt: now,
+        ...extra,
+      },
+    });
+  const rateNow = () => {
+    updatePromptState({ dismissedForever: true });
+    close();
+    chrome.tabs.create({ url: REVIEW_STORE_URL });
+  };
+  const later = () => {
+    updatePromptState({ snoozeUntil: now + REVIEW_COOLDOWN_MS });
+    close();
+  };
+  const dismissForever = () => {
+    updatePromptState({ dismissedForever: true });
+    close();
+  };
+
+  $("#btn-usage-review").onclick = rateNow;
+  $("#btn-usage-review-later").onclick = later;
+  $("#btn-usage-review-dismiss").onclick = dismissForever;
+  $("#btn-close-usage-review").onclick = later;
+  overlay.classList.add("active");
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   // Keep the speaker-output label visible from the moment the popup opens.
   // The value is replaced when the audio pipeline reports a measured estimate.
@@ -609,9 +681,14 @@ async function finalizeInitialization() {
   };
   loop();
 
-  // Check only when the user opens the popup and the audio session is idle.
-  // It never interrupts playback or model loading.
-  maybeShowUsageDonateModal(state).catch(() => {});
+  // Wait until the popup controls have settled before considering prompts.
+  // The Master preference has already been restored (and startup requested)
+  // before this delayed, non-state-changing prompt can appear.
+  setTimeout(() => {
+    maybeShowUsageDonateModal(state)
+      .then(() => maybeShowUsageReviewModal(state))
+      .catch(() => {});
+  }, REVIEW_PROMPT_DELAY_MS);
 }
 
 async function ensureVideoContentScripts(tabId) {
