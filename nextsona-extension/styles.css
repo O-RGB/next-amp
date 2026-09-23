@@ -408,6 +408,215 @@ input[type="range"].h-slider::-webkit-slider-thumb {
   display: flex;
 }
 
+/* About tab layout: keep the brand, developer, and support sections aligned
+   as one compact panel instead of letting each card choose its own spacing. */
+.about-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.about-brand {
+  width: 90%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 7px;
+  border-bottom: 1px solid #444;
+  box-sizing: border-box;
+}
+
+.about-brand-logo {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  padding: 2px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1f2937;
+  border: 1px solid #fff;
+}
+
+.about-brand-logo img,
+.about-developer-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.about-brand-copy,
+.about-developer-copy {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.about-brand-title {
+  color: #fff;
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 10px;
+  line-height: 1.1;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.about-brand-version {
+  color: #9ca3af;
+  font-size: 7px;
+  font-weight: 400;
+}
+
+.about-brand-subtitle,
+.about-card-note {
+  color: #9ca3af;
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 7.5px;
+  line-height: 1.25;
+}
+
+.about-card {
+  width: 90%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  border: 1px solid #3f3f46;
+}
+
+.about-developer-card {
+  background: #101820;
+  border-color: #164e63;
+}
+
+.about-developer-logo {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #67e8f9;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.about-eyebrow {
+  color: #67e8f9;
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 7px;
+  line-height: 1.1;
+  font-weight: 700;
+}
+
+.about-developer-name {
+  color: #fff;
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 9px;
+  line-height: 1.2;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.about-socials {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.about-social {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.about-social.youtube {
+  color: #f87171;
+}
+
+.about-social.youtube:hover {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.about-social.facebook {
+  color: #60a5fa;
+}
+
+.about-social.facebook:hover {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.about-support-card {
+  display: block;
+  background: #1e1e1e;
+  border-color: #4b5563;
+}
+
+.about-support-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.about-support-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #facc15;
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.about-privacy {
+  height: 16px;
+  padding: 0 5px;
+  color: #d1d5db;
+  background: #374151;
+  font-size: 7px;
+}
+
+.about-support-card .about-card-note {
+  margin: 6px 0 0;
+}
+
+.about-actions {
+  width: 100%;
+  display: flex;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.about-support-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 7.5px;
+  white-space: nowrap;
+}
+
 .setting-row {
   display: flex;
   justify-content: space-between;

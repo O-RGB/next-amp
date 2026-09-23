@@ -91,7 +91,8 @@ const FILE_NAMES = {
   stylesCss: getMangledName('styles', '.css', 'styles'),
   phosphorCss: getMangledName('phosphor', '.css', 'phosphor'),
   phosphorFont: getMangledName('phosphor-font', '.woff2', 'phosphor-bold'),
-  logo: getMangledName('logo', '.png', 'logo')
+  logo: getMangledName('logo', '.png', 'logo'),
+  nextfeederlabsLogo: getMangledName('nextfeederlabs-logo', '.png', 'nextfeederlabs')
 };
 
 console.log('Profile-specific hashed file mapping table:');
@@ -279,6 +280,8 @@ function removePackagingMetadata(directory) {
 // Rewrite in popup bundle
 const popupTemp = path.join(TEMP_DIR, 'popup.tmp.js');
 replaceInFile(popupTemp, 'assets/libs/mjs/SignalsmithStretch.mjs', FILE_NAMES.signalsmith);
+replaceInFile(popupTemp, 'assets/logo.png', FILE_NAMES.logo);
+replaceInFile(popupTemp, 'assets/nextfeederlabs.png', FILE_NAMES.nextfeederlabsLogo);
 
 // Rewrite dynamically injected video content scripts. The source build uses
 // stable names for readability, while the production manifest uses hashed
@@ -486,6 +489,10 @@ if (STORE_REVIEW_BUILD) {
 
 // Copy Logo
 fs.copyFileSync(path.join(SRC_DIR, 'assets', 'logo.png'), path.join(DIST_DIR, FILE_NAMES.logo));
+fs.copyFileSync(
+  path.join(SRC_DIR, 'assets', 'nextfeederlabs.png'),
+  path.join(DIST_DIR, FILE_NAMES.nextfeederlabsLogo)
+);
 
 // Copy Font
 fs.copyFileSync(path.join(SRC_DIR, 'assets', 'fonts', 'Phosphor-Bold.woff2'), path.join(DIST_DIR, FILE_NAMES.phosphorFont));
@@ -575,6 +582,7 @@ if (STORE_REVIEW_BUILD) {
 popupHtml = popupHtml.replace('./assets/css/phosphor.css', './' + FILE_NAMES.phosphorCss);
 popupHtml = popupHtml.replace('styles.css', FILE_NAMES.stylesCss);
 popupHtml = popupHtml.replace('./assets/logo.png', './' + FILE_NAMES.logo);
+popupHtml = popupHtml.replace('./assets/nextfeederlabs.png', './' + FILE_NAMES.nextfeederlabsLogo);
 popupHtml = popupHtml.replace('src="popup.js"', `src="${FILE_NAMES.popup}"`);
 fs.writeFileSync(path.join(DIST_DIR, 'popup.html'), minifyHtml(popupHtml), 'utf8');
 console.log('    ✓ popup.html minified (1-line .min)');

@@ -195,7 +195,7 @@
               <span id="txt-ai-slow-ms" class="text-red-400 font-bold">564ms / chunk</span>
             </div>
             <div class="flex justify-between items-center pt-0.5">
-              <span class="text-gray-400">Real-time Quota:</span>
+              <span class="text-gray-400">Runtime / quota:</span>
               <span id="txt-ai-slow-api" class="text-green-400 font-bold">185ms (Max)</span>
             </div>
           </div>
@@ -495,39 +495,54 @@
           </div>
           <div id="tab-about" class="tab-content">
              <div
-              class="flex flex-col items-center justify-center h-full text-center gap-2"
+              class="about-content flex flex-col items-center h-full text-center gap-1.5"
             >
               <div
-                class="w-12 h-12 bg-gray-800 border border-white flex items-center justify-center p-1"
+                class="about-brand w-[90%] flex items-center gap-2 min-h-[34px]"
               >
-                <img
-                  src="./assets/logo.png"
-                  alt="Logo"
-                  class="w-full h-full object-contain"
-                />
-              </div>
-              <div>
-                <div class="text-[10px] font-bold text-white">
-                  NEXTSONA EXTENSION
+                <div class="about-brand-logo w-9 h-9 bg-gray-800 border border-white flex items-center justify-center p-0.5 flex-shrink-0">
+                  <img src="./assets/logo.png" alt="NextSona logo" class="w-full h-full object-contain" />
                 </div>
-                <div class="text-[8px] text-gray-400">Version 1.1.1</div>
-              </div>
-              <p class="text-[8px] text-gray-500 px-4">
-                Advanced audio processing & real-time visualizer.
-              </p>
-              <div class="win-border-in bg-[#1e1e1e] p-2 mt-1 w-[90%] flex flex-col items-center gap-1 border border-gray-700">
-                <div class="text-[9px] font-bold text-yellow-400 flex items-center gap-1">
-                  <i class="ph-bold ph-coffee text-amber-400 text-[10px]"></i>
-                  <span>SUPPORT THE PROJECT</span>
+                <div class="about-brand-copy min-w-0 flex-1 text-left">
+                  <div class="about-brand-title text-[9px] font-bold text-white truncate">NEXTSONA EXTENSION <span class="about-brand-version text-[7px] text-gray-400 font-normal">v1.1.1</span></div>
+                  <div class="about-brand-subtitle text-[7px] text-gray-500 leading-tight">Advanced audio processing &amp; real-time visualizer.</div>
                 </div>
-                <p class="text-[7.5px] text-gray-400 leading-tight">
-                  Support ongoing development and future feature updates.
-                </p>
-                <div class="flex gap-1.5 w-full justify-center mt-1">
+              </div>
+              <div class="about-card about-developer-card win-border-in bg-[#101820] p-1.5 w-[90%] flex items-center gap-2 border border-cyan-900">
+                <div class="about-developer-logo w-8 h-8 overflow-hidden flex items-center justify-center flex-shrink-0 text-cyan-300 font-bold text-[9px]">
+                  <img id="nextfeederlabs-logo" src="./assets/nextfeederlabs.png" alt="NextFeederLabs logo" class="w-full h-full object-contain" />
+                  <span id="nextfeederlabs-logo-fallback" class="hidden">NF</span>
+                </div>
+                <div class="about-developer-copy min-w-0 flex-1 text-left">
+                  <div class="about-eyebrow text-[7px] text-cyan-300 font-bold font-pixel">DEVELOPED BY</div>
+                  <div class="about-developer-name text-[9px] text-white font-bold truncate">NextFeeder Labs</div>
+                  <div class="about-card-note text-[7px] text-gray-400 leading-tight">Independent audio tools for everyday use.</div>
+                </div>
+                <div class="about-socials flex items-center gap-1">
+                  <a href="https://www.youtube.com/@nextfeederlabs" target="_blank" rel="noopener noreferrer" class="about-social youtube w-5 h-5 rounded-full flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors" aria-label="NextFeederLabs on YouTube" title="YouTube">
+                    <i class="ph-bold ph-youtube-logo text-[12px]"></i>
+                  </a>
+                  <a href="https://www.facebook.com/nextfeeder.labs" target="_blank" rel="noopener noreferrer" class="about-social facebook w-5 h-5 rounded-full flex items-center justify-center text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors" aria-label="NextFeederLabs on Facebook" title="Facebook">
+                    <i class="ph-bold ph-facebook-logo text-[12px]"></i>
+                  </a>
+                </div>
+              </div>
+              <div class="about-card about-support-card win-border-in bg-[#1e1e1e] p-1.5 mt-0.5 w-[90%] flex flex-col items-center gap-1.5 border border-gray-700">
+                <div class="about-support-header w-full flex items-center justify-between">
+                  <div class="about-support-title text-[8px] font-bold text-yellow-400 flex items-center gap-1">
+                    <i class="ph-bold ph-coffee text-amber-400 text-[9px]"></i>
+                    <span>SUPPORT THE PROJECT</span>
+                  </div>
+                  <button id="btn-privacy-about" class="win-btn about-privacy h-4 px-1 text-[7px] text-gray-300 bg-gray-800 hover:bg-gray-700 cursor-pointer">
+                    PRIVACY
+                  </button>
+                </div>
+                <p class="about-card-note text-[7.5px] text-gray-400 leading-tight m-0">Support ongoing development and future feature updates.</p>
+                <div class="about-actions flex gap-1.5 w-full justify-center">
                   <button
                     id="btn-donate-gank"
                     type="button"
-                    class="win-btn h-5 px-2 text-[7.5px] font-bold text-white bg-gradient-to-b from-[#e056fd] to-[#be2edd] hover:from-[#eb4d4b] hover:to-[#e056fd] active:scale-95 flex items-center justify-center gap-1 border border-[#686de0] shadow cursor-pointer"
+                    class="win-btn about-support-btn h-5 px-2 text-[7.5px] font-bold text-white bg-gradient-to-b from-[#e056fd] to-[#be2edd] hover:from-[#eb4d4b] hover:to-[#e056fd] active:scale-95 flex items-center justify-center gap-1 border border-[#686de0] shadow cursor-pointer"
                     title="Support via Gank (PromptPay / Local Wallets)"
                   >
                     <i class="ph-bold ph-heart text-[8px]"></i>
@@ -536,16 +551,13 @@
                   <button
                     id="btn-donate-coffee"
                     type="button"
-                    class="win-btn h-5 px-2 text-[7.5px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer"
+                    class="win-btn about-support-btn h-5 px-2 text-[7.5px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer"
                     title="Support via Buy Me a Coffee (Cards / International)"
                   >
                     <i class="ph-bold ph-coffee text-[8px]"></i>
                     <span>BUY ME A COFFEE</span>
                   </button>
                 </div>
-                <button id="btn-privacy-about" class="win-btn h-5 px-2 text-[8px] text-gray-300 bg-gray-800 hover:bg-gray-700 cursor-pointer mt-0.5">
-                  <span>PRIVACY POLICY</span>
-                </button>
               </div>
             </div>
           </div>
@@ -668,7 +680,7 @@
                     aria-label="About Dynamics (DYN)"
                     title="About DYN"
                   >
-                    <i class="ph-bold ph-question text-[7px] leading-none relative top-[0.5px]"></i>
+                    <i class="ph-bold ph-question text-[8px] leading-none flex items-center justify-center relative top-[0.25px] right-[0.30px]"></i>
                   </button>
                 </div>
                 <span id="txt-vol">100%</span>
@@ -790,6 +802,14 @@
           <i class="ph-bold ph-microphone-stage"></i>
           <span>AI VOCAL</span>
         </div>
+        <a
+          href="https://sona.nextfeeder.com/guides/chrome-gpu-windows/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="win-btn h-3 px-1.5 text-[7px] text-black font-bold flex items-center justify-center gap-0.5 flex-shrink-0"
+          aria-label="Set Chrome to use a high-performance GPU"
+          title="Set Chrome to use a high-performance GPU"
+        ><i class="ph-bold ph-browser text-[8px]"></i><span>GPU SET</span></a>
       </div>
       <div class="p-1 flex flex-col gap-1 bg-[#222]" id="vocal-controls-area" style="opacity: 0.4; filter: grayscale(100%); pointer-events: none;">
         <!-- Modes & active accelerator -->

@@ -133,6 +133,7 @@ const LIVE_GPU_HEALTH_CLEAR_STREAK = 8;
 const LIVE_GPU_HEALTH_WARN_RATIO = 0.95;
 const LIVE_GPU_HEALTH_CLEAR_RATIO = 0.80;
 const CACHED_GPU_WARNING_MAX_AGE_MS = 10 * 60 * 1000;
+const AI_STARTUP_STALL_TIMEOUT_MS = 5000;
 let webGpuBackendPromise = null;
 
 function describeWebHardware(renderer, backendType) {
@@ -179,6 +180,122 @@ function describeWebHardware(renderer, backendType) {
     .trim();
 
   return { device: device || raw, raw, api };
+}
+
+function compactGpuIdentity(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/\([^)]*\)/g, "")
+    .trim();
+}
+
+function adapterInfoLabel(adapter) {
+  if (!adapter) return "";
+  const info = adapter.info || null;
+  return [
+    info?.description,
+    info?.device,
+    info?.vendor,
+    info?.architecture,
+    adapter.name,
+  ]
+    .filter((value) => value && String(value).trim())
+    .map((value) => String(value).trim())
+    .join(" / ");
+}
+
+function readWebGlRenderer(powerPreference) {
+  if (typeof document === "undefined") return "";
+  let canvas = null;
+  let gl = null;
+  try {
+    canvas = document.createElement("canvas");
+    gl = canvas.getContext("webgl2", {
+      powerPreference,
+      preserveDrawingBuffer: false,
+      antialias: false,
+    }) || canvas.getContext("webgl", {
+      powerPreference,
+      preserveDrawingBuffer: false,
+      antialias: false,
+    });
+    if (!gl) return "";
+    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    return debugInfo
+      ? String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || "")
+      : "";
+  } catch (_) {
+    return "";
+  } finally {
+    try { gl?.getExtension("WEBGL_lose_context")?.loseContext(); } catch (_) {}
+    canvas = null;
+    gl = null;
+  }
+}
+
+function looksIntegratedGpu(label) {
+  return /intel(?:\s+\(r\))?|uhd|iris|integrated|apple\s+m\d|mali|adreno/i.test(String(label || ""));
+}
+
+function looksDiscreteGpu(label) {
+  return /nvidia|geforce|quadro|rtx|gtx|radeon\s*(rx|pro)?|arc\s+a\d|discrete/i.test(String(label || ""));
+}
+
+async function detectGpuProfile(backendType, activeDescription) {
+  const profile = {
+    active: activeDescription?.device || "",
+    activeRaw: activeDescription?.raw || activeDescription?.device || "",
+    lowPower: "",
+    highPerformance: "",
+    hasMultipleCandidates: false,
+    activeLooksIntegrated: false,
+    hasDiscreteCandidate: false,
+    confidence: "unknown",
+    recommendation: "",
+  };
+
+  const backend = String(backendType || "").toLowerCase();
+  const candidates = [];
+  if (backend === "webgpu" && typeof navigator !== "undefined" && navigator.gpu) {
+    for (const powerPreference of ["low-power", "high-performance"]) {
+      try {
+        const adapter = await navigator.gpu.requestAdapter({ powerPreference });
+        const label = adapterInfoLabel(adapter);
+        if (label) profile[powerPreference === "low-power" ? "lowPower" : "highPerformance"] = label;
+        if (label) candidates.push(label);
+      } catch (_) {}
+    }
+  } else if (backend === "webgl") {
+    profile.lowPower = readWebGlRenderer("low-power");
+    profile.highPerformance = readWebGlRenderer("high-performance");
+    if (profile.lowPower) candidates.push(profile.lowPower);
+    if (profile.highPerformance) candidates.push(profile.highPerformance);
+  }
+
+  const identities = new Set(candidates.map(compactGpuIdentity).filter(Boolean));
+  profile.hasMultipleCandidates = identities.size > 1;
+  profile.activeLooksIntegrated = looksIntegratedGpu(profile.activeRaw);
+  profile.hasDiscreteCandidate = [
+    profile.lowPower,
+    profile.highPerformance,
+    profile.activeRaw,
+  ].some(looksDiscreteGpu);
+
+  if (profile.hasMultipleCandidates) {
+    profile.confidence = "likely";
+  } else if (profile.activeLooksIntegrated && profile.hasDiscreteCandidate) {
+    // Some Chrome/Windows configurations expose the same adapter for both
+    // power hints, but the renderer string still reveals Intel + NVIDIA/AMD.
+    profile.confidence = "hint";
+  }
+
+  if ((profile.hasMultipleCandidates || profile.confidence === "hint") &&
+      profile.activeLooksIntegrated && profile.hasDiscreteCandidate) {
+    profile.recommendation =
+      "Chrome appears to be using an integrated GPU. If a discrete GPU is available, set Chrome to High performance in the system graphics settings, then restart Chrome.";
+  }
+  return profile;
 }
 
 function compactNativeHardwareLabel(device) {
@@ -334,8 +451,8 @@ export class AIVocalManager {
       if (this.currentMode !== "bypass") {
         const now = performance.now();
         if (this.lastGoStatusAt === 0 || now - this.lastGoStatusAt >= GO_STATUS_UPDATE_INTERVAL_MS) {
-          const modeLabel = this.currentMode === "karaoke" ? "KARAOKE (GO)" : "ACAPELLA (GO)";
-          this.setStatus(`${modeLabel} [${rttMs}ms]`);
+          const modeLabel = this.currentMode === "karaoke" ? "KARAOKE" : "ACAPELLA";
+          this.setStatus(`${modeLabel} • GO ${rttMs}ms`);
           this.lastGoStatusAt = now;
         }
       }
@@ -420,11 +537,15 @@ export class AIVocalManager {
     this.maxHistoryPos = 0;
 
     this.lastInferMs = 0;
+    this.aiStartupStartedAt = 0;
+    this.aiStartupProcessedBaseline = 0;
+    this.aiStartupStalled = false;
     this.backendName = "GPU";
     this.backendType = "unknown";
     this.hardwareDevice = "Detecting GPU...";
     this.hardwareDeviceRaw = "";
     this.hardwareApi = "WEBGL";
+    this.gpuProfile = null;
     this.benchmarkMs = 0;
     this.isHardwareSlow = false;
     this.startupBenchmarkSlow = false;
@@ -541,6 +662,77 @@ export class AIVocalManager {
     this.hardwareApi = description.api;
     this.backendName = description.device;
     return description;
+  }
+
+  beginAiStartupWatch() {
+    this.aiStartupStartedAt = 0;
+    this.aiStartupProcessedBaseline = this.diagnostics.processedChunks;
+    this.aiStartupStalled = false;
+    this.lastInferMs = 0;
+  }
+
+  clearAiStartupWatch() {
+    this.aiStartupStartedAt = 0;
+    this.aiStartupStalled = false;
+  }
+
+  getGpuProfile() {
+    return this.gpuProfile || {
+      active: this.getHardwareDevice(),
+      activeRaw: this.getHardwareDeviceRaw(),
+      lowPower: "",
+      highPerformance: "",
+      hasMultipleCandidates: false,
+      activeLooksIntegrated: false,
+      hasDiscreteCandidate: false,
+      confidence: "unknown",
+      recommendation: "",
+    };
+  }
+
+  maybeMarkAiStartupStalled(data) {
+    if (this.currentMode === "bypass" || !this.isReady || !data || data.mode === "bypass") {
+      return false;
+    }
+
+    // A quiet/paused tab has no input frame yet. It is waiting for media, not
+    // a broken GPU, so do not show a scary performance warning in that case.
+    const hasInput = Number.isFinite(data.inputFrame);
+    if (!hasInput) {
+      this.clearAiStartupWatch();
+      return false;
+    }
+
+    if (this.aiStartupStartedAt === 0) {
+      this.aiStartupStartedAt = performance.now();
+      this.aiStartupProcessedBaseline = this.diagnostics.processedChunks;
+    }
+
+    const processedSinceStart = this.diagnostics.processedChunks > this.aiStartupProcessedBaseline;
+    if (processedSinceStart || data.isAiReady || Number(data.queueLen) > 0) {
+      if (this.aiStartupStalled) {
+        this.aiStartupStalled = false;
+        this.broadcastHardwareWarning(this.benchmarkMs || this.liveGpuP95Ms, this.backendName, {
+          liveP95Ms: this.liveGpuP95Ms || null,
+          reason: "startup-recovered",
+          active: false
+        });
+      }
+      return false;
+    }
+
+    if (!this.aiStartupStalled &&
+        performance.now() - this.aiStartupStartedAt >= AI_STARTUP_STALL_TIMEOUT_MS) {
+      this.aiStartupStalled = true;
+      this.broadcastHardwareWarning(this.benchmarkMs || null, this.backendName, {
+        liveP95Ms: this.liveGpuP95Ms || null,
+        chunkDeadlineMs: this.getProcessingConfig().chunkSamples /
+          (this.audioCtx?.sampleRate || 44100) * 1000,
+        reason: "startup-stall",
+        active: true
+      });
+    }
+    return this.aiStartupStalled;
   }
 
   getHardwareDevice() {
@@ -812,7 +1004,7 @@ export class AIVocalManager {
         return { ok: true, backend: this.backendType };
       }
 
-      this.setStatus("Switching AI Power Mode...");
+        this.setStatus("Switching AI...");
       this.disposeBrowserEngineResources({ preserveMode: true });
       this.postPowerModeBoundary();
       await this.loadEngine();
@@ -1256,6 +1448,10 @@ export class AIVocalManager {
   }
 
   resetState() {
+    // A new mode/stream must not inherit the previous chunk's processing
+    // time. Otherwise the first status packet can be misreported as
+    // `Buffering 0.0s` even though this stream has not produced a result yet.
+    this.lastInferMs = 0;
     if (this.rollingMags) {
       try { this.rollingMags.dispose(); } catch (_) {}
       this.rollingMags = null;
@@ -2010,6 +2206,13 @@ export class AIVocalManager {
       this.backendType = currentBackend;
       this.attachWebGpuDeviceLossWatcher();
       const hardwareDescription = await this.detectWebHardwareInfo(currentBackend);
+      this.gpuProfile = await detectGpuProfile(currentBackend, hardwareDescription);
+      if (this.gpuProfile.recommendation) {
+        this.broadcastHardwareWarning(this.benchmarkMs || null, this.backendName, {
+          reason: "gpu-selection",
+          active: true
+        });
+      }
       let deviceLabel = hardwareDescription.device;
 
       // Early fast check before loading model. A cached benchmark is only a
@@ -2028,7 +2231,7 @@ export class AIVocalManager {
         // Do not upload the 15MB model or start a CPU inference loop that
         // cannot meet real-time audio. The caller remains in a safe bypass.
         this.engineLoading = false;
-        this.setStatus("⚠️ CPU SLOW (No GPU)");
+        this.setStatus("⚠️ CPU slow • No GPU");
         return;
       } else {
         try {
@@ -2054,7 +2257,7 @@ export class AIVocalManager {
         });
       }
 
-      this.setStatus("Loading Model (15MB)...");
+      this.setStatus("Loading AI...");
 
       const modelUrl = chrome.runtime.getURL("model/model.json");
       const ioHandler = createProtectedModelSource(tf, modelUrl);
@@ -2108,17 +2311,18 @@ export class AIVocalManager {
         currentBackend = await configureWebGL();
         this.backendType = currentBackend;
         const hardwareDescription = await this.detectWebHardwareInfo(currentBackend);
+        this.gpuProfile = await detectGpuProfile(currentBackend, hardwareDescription);
         deviceLabel = hardwareDescription.device;
         if (currentBackend === "cpu") {
           throw new Error("WebGPU unavailable and WebGL fell back to CPU");
         }
-        this.setStatus("Loading Model (15MB)...");
+        this.setStatus("Loading AI...");
         this.model = await modelLoader.load();
         this.modelGraphFoldedBranches = modelLoader.foldedCount;
         this.modelGraphExplicitPads = modelLoader.explicitPadCount;
         this.modelOutputHead = modelLoader.outputHead;
         this.resetState();
-        this.setStatus("Warming up GPU...");
+        this.setStatus("Warming GPU...");
         await warmupWithOriginalFallback();
         return true;
       };
@@ -2134,14 +2338,15 @@ export class AIVocalManager {
         this.backendType = currentBackend;
         if (currentBackend !== "webgpu") return false;
         const hardwareDescription = await this.detectWebHardwareInfo(currentBackend);
+        this.gpuProfile = await detectGpuProfile(currentBackend, hardwareDescription);
         deviceLabel = hardwareDescription.device;
-        this.setStatus("Loading Model (15MB)...");
+        this.setStatus("Loading AI...");
         this.model = await modelLoader.load();
         this.modelGraphFoldedBranches = modelLoader.foldedCount;
         this.modelGraphExplicitPads = modelLoader.explicitPadCount;
         this.modelOutputHead = modelLoader.outputHead;
         this.resetState();
-        this.setStatus("Warming up GPU...");
+        this.setStatus("Warming GPU...");
         await warmupWithOriginalFallback();
         return true;
       };
@@ -2169,7 +2374,7 @@ export class AIVocalManager {
       // Pre-compiles all kernels (conv2d, depthwise, resize, concat, slice,
       // transpose, sigmoid) using the exact runtime dimensions.
       // using the exact graph and dimensions of runtime processChunk to prevent initial JIT compilation freezes!
-      this.setStatus("Warming up GPU...");
+      this.setStatus("Warming GPU...");
       try {
         await warmupWithOriginalFallback();
         if (loadEpoch !== this.engineEpoch || this.destroyed) {
@@ -2267,10 +2472,10 @@ export class AIVocalManager {
       }
 
       if (this.currentMode === "bypass") {
-        this.setStatus(this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "ORIGINAL (AI Ready)");
+        this.setStatus(this.isHardwareSlow ? `⚠️ GPU slow ${this.benchmarkMs}ms` : "ORIGINAL • Ready");
       } else {
         if (this.isHardwareSlow) {
-          this.setStatus(`⚠️ GPU SLOW (${this.benchmarkMs}ms)`);
+          this.setStatus(`⚠️ GPU slow ${this.benchmarkMs}ms`);
         } else {
           this.setStatus("Buffering...");
         }
@@ -2303,24 +2508,30 @@ export class AIVocalManager {
       return;
     }
     if (!this.isReady) {
-      this.setStatus("Loading Model (15MB)...");
+      this.setStatus("Loading AI...");
       return;
     }
-    const backend = this.backendName || "GPU";
-    // Keep the original AI status label. The final speaker-output estimate is
-    // rendered separately in the visualizer, so this label remains focused on
-    // the vocal mode, backend, and model processing time.
-    const msStr = this.lastInferMs ? ` (${backend} ${this.lastInferMs}ms)` : ` [${backend}]`;
+    const modeLabel = data.mode === "karaoke" ? "KARAOKE" : "ACAPELLA";
+    const slowPrefix = this.isHardwareSlow
+      ? `⚠️ GPU slow ${this.benchmarkMs || "?"}ms • `
+      : "";
+    if (this.maybeMarkAiStartupStalled(data)) {
+      this.setStatus(`⚠️ AI stuck • ${modeLabel}`);
+      return;
+    }
+    const msStr = this.lastInferMs ? ` ${this.lastInferMs}ms` : "";
     if (!data.isAiReady) {
       const targetSec = ((data.readyThreshold || 5) * (data.chunkSize || this.getProcessingConfig().chunkSamples) / 44100).toFixed(1);
-      if (parseFloat(data.bufferedSec) === 0 && this.lastInferMs === 0) {
-        const modeLabel = data.mode === "karaoke" ? "KARAOKE" : "ACAPELLA";
-        this.setStatus(`${modeLabel} (Ready - Play audio) [${backend}]`);
+      if (!Number.isFinite(data.inputFrame)) {
+        this.setStatus(`${slowPrefix}${modeLabel} • No audio`);
+      } else if (this.diagnostics.processedChunks === this.aiStartupProcessedBaseline &&
+                 parseFloat(data.bufferedSec) === 0) {
+        this.setStatus(`${slowPrefix}${modeLabel} • Starting`);
       } else {
-        this.setStatus(`Buffering AI: ${data.bufferedSec}s / ${targetSec}s [${backend}]`);
+        this.setStatus(`${slowPrefix}Buffering ${data.bufferedSec}s / ${targetSec}s`);
       }
     } else {
-      this.setStatus(data.mode === "karaoke" ? `KARAOKE (CUT)${msStr}` : `ACAPELLA (ISO)${msStr}`);
+      this.setStatus(`${slowPrefix}${modeLabel} • ${data.mode === "karaoke" ? "CUT" : "ISO"}${msStr}`);
     }
   }
 
@@ -2675,6 +2886,7 @@ export class AIVocalManager {
       chunkDeadlineMs: Number.isFinite(chunkDeadlineMs) ? chunkDeadlineMs : null,
       deviceLabel: deviceLabel || this.backendName || "GPU",
       backend: this.backendType,
+      gpuProfile: this.getGpuProfile(),
       reason,
       active: active === true,
       timestamp: Date.now()
@@ -2772,7 +2984,7 @@ export class AIVocalManager {
         if (!this.isReady && !this.engineLoading) {
           this.loadEngine().catch(() => {});
         } else {
-          this.setStatus(this.isReady ? "Buffering..." : "Loading Model (15MB)...");
+          this.setStatus(this.isReady ? "Buffering..." : "Loading AI...");
         }
       }
     }
@@ -2781,6 +2993,8 @@ export class AIVocalManager {
   setMode(mode) {
     this.streamGeneration++;
     this.currentMode = mode;
+    if (mode !== "bypass") this.beginAiStartupWatch();
+    else this.clearAiStartupWatch();
     this.lastGoStatusAt = 0;
     this.resetGoBufferTuning();
     this.streamChunkFloor = null;
@@ -2803,21 +3017,21 @@ export class AIVocalManager {
           this.broadcastHardwareWarning(this.benchmarkMs, this.backendName);
         }
         if (!this.isReady) {
-          this.setStatus("Loading Model (15MB)...");
+          this.setStatus("Loading AI...");
           if (!this.engineLoading) {
             this.loadEngine().catch((err) => {
               console.error("[NextSona AI] Lazy engine load error:", err);
             });
           }
         } else {
-          this.setStatus(this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "Buffering...");
+          this.setStatus(this.isHardwareSlow ? `⚠️ GPU slow ${this.benchmarkMs}ms` : "Buffering...");
         }
       }
     } else {
       if (GO_ENGINE_ENABLED && this.engineType === ENGINE_TYPE) {
         this.setStatus(this.goClient.isConnected ? "⚡ GO (Ready)" : "ORIGINAL");
       } else {
-        this.setStatus(this.isReady ? (this.isHardwareSlow ? `⚠️ GPU SLOW (${this.benchmarkMs}ms)` : "ORIGINAL (AI Ready)") : "ORIGINAL");
+        this.setStatus(this.isReady ? (this.isHardwareSlow ? `⚠️ GPU slow ${this.benchmarkMs}ms` : "ORIGINAL • Ready") : "ORIGINAL");
       }
     }
     if (this.workletNode) {
@@ -2903,6 +3117,7 @@ export class AIVocalManager {
       hardwareDevice: this.getHardwareDevice(),
       hardwareDeviceRaw: this.getHardwareDeviceRaw(),
       api: this.getHardwareApi(),
+      gpuProfile: this.getGpuProfile(),
       powerMode: this.aiPowerMode,
       backendPolicy: this.getRequestedBackendPolicy(),
       sampleRate,

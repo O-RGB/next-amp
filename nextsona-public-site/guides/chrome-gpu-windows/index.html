@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071411" />
+    <meta name="description" content="Learn how to choose which GPU Chrome uses on Windows 10 and 11 with four clear steps for Graphics settings, chrome.exe, Options and High performance." />
+    <meta name="author" content="NextFeeder Labs" />
+    <link rel="canonical" href="https://sona.nextfeeder.com/guides/chrome-gpu-windows/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="NextSona" />
+    <meta property="og:title" content="How to Choose Which GPU Chrome Uses on Windows | NextSona" />
+    <meta property="og:description" content="A practical guide to Chrome GPU selection, hardware acceleration, verification and NextSona AI Vocal troubleshooting on Windows." />
+    <meta property="og:url" content="https://sona.nextfeeder.com/guides/chrome-gpu-windows/" />
+    <meta property="og:image" content="https://sona.nextfeeder.com/assets/images/guides/3-windows%2010%20%7C%20enable%20high%20performance.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="How to Choose Which GPU Chrome Uses on Windows | NextSona" />
+    <meta name="twitter:description" content="Set Chrome to the right GPU, confirm hardware acceleration and troubleshoot AI Vocal performance." />
+    <meta name="twitter:image" content="https://sona.nextfeeder.com/assets/images/guides/3-windows%2010%20%7C%20enable%20high%20performance.png" />
+    <link rel="icon" href="../../assets/images/logo.png" type="image/png" />
+    <link rel="stylesheet" href="../../assets/css/site.css" />
+    <title>How to Choose Which GPU Chrome Uses on Windows | NextSona</title>
+  </head>
+  <body class="guide-body">
+    <a class="skip-link" href="#guide-content" data-i18n="skip">Skip to content</a>
+    <header class="site-header">
+      <div class="shell nav-wrap">
+        <a class="brand" href="../../" aria-label="NextSona home"><img src="../../assets/images/logo.png" width="40" height="40" alt="NextSona logo" /><span>NextSona</span></a>
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="../../#features" data-i18n="nav.features">Features</a>
+          <a href="../../guides/chrome-gpu-windows/" data-i18n="nav.gpuGuide">GPU guide</a>
+          <a href="../../privacy/" data-i18n="nav.privacy">Privacy</a>
+          <a href="../../terms/" data-i18n="nav.terms">Terms</a>
+        </nav>
+        <div class="nav-actions">
+          <div class="language-switch" role="group" aria-label="Language">
+            <button type="button" class="language-button is-active" data-language="en" aria-pressed="true">EN</button>
+            <button type="button" class="language-button" data-language="th" aria-pressed="false">TH</button>
+          </div>
+          <a class="button button-small button-primary" href="../../#features" data-i18n="nav.getStarted">View features</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="guide-content" class="guide-main">
+      <div class="shell guide-shell">
+        <article class="guide-article" data-language-panel="en">
+          <header class="guide-heading">
+            <div class="eyebrow"><span class="live-dot"></span><span>WINDOWS + CHROME GUIDE</span></div>
+            <h1>How to make Chrome use the right GPU on Windows.</h1>
+            <p class="guide-lede">A practical guide for laptops and desktops with integrated and dedicated graphics — especially when Chrome-based audio tools feel slow, stutter, or stop responding.</p>
+            <div class="guide-meta"><span>Updated September 23, 2026</span><span>·</span><span>NextFeeder Labs</span></div>
+          </header>
+
+          <div class="guide-card guide-intro">
+            <p class="guide-lead">If NextSona shows <strong>GPU Slow</strong>, AI Vocal takes too long to start, or playback appears to sit at <code>Buffering 0.0s</code>, Chrome may be using the power-saving GPU — or hardware acceleration may not be available.</p>
+            <p>This guide follows four simple Windows steps. The menu names can vary slightly between Windows 10 and Windows 11.</p>
+          </div>
+
+          <section class="guide-section guide-main-step">
+            <div class="guide-section-kicker">STEP 1</div>
+            <h2>1. Access Graphics Settings.</h2>
+            <p>Press the Windows key and search for <strong>Graphics settings</strong>. On Windows 11, you can also open Settings → System → Display → Graphics.</p>
+            <figure class="guide-figure">
+              <img src="../../assets/images/guides/1-windows%2010%20%7C%20graphics%20settings.png" width="650" height="402" loading="lazy" decoding="async" alt="Windows 10 Graphics settings" />
+              <figcaption>Open Graphics settings from Windows Settings.</figcaption>
+            </figure>
+          </section>
+
+          <section class="guide-section guide-main-step">
+            <div class="guide-section-kicker">STEP 2</div>
+            <h2>2. Browse for Chrome.</h2>
+            <p>Under the desktop or classic app option, choose <strong>Browse</strong> and locate the Chrome application file.</p>
+            <figure class="guide-figure guide-figure-compact">
+              <img src="../../assets/images/guides/2-windows%2010%20%7C%20choose%20an%20app%20to%20set%20perference.png" width="534" height="589" loading="lazy" decoding="async" alt="Windows 10 Choose an app to set preference screen" />
+              <figcaption>Choose the desktop app option, then browse for Chrome.</figcaption>
+            </figure>
+            <div class="guide-paths"><code>C:\Program Files\Google\Chrome\Application\chrome.exe</code><code>C:\Program Files (x86)\Google\Chrome\Application\chrome.exe</code><code>%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe</code></div>
+            <p class="guide-small-note">If your Chrome installation is in a different folder, select the <code>chrome.exe</code> that belongs to the Chrome you normally open.</p>
+          </section>
+
+          <section class="guide-section guide-main-step">
+            <div class="guide-section-kicker">STEP 3</div>
+            <h2>3. Open Chrome Options.</h2>
+            <p>After Chrome appears in the app list, select it and click <strong>Options</strong>. If several Chrome entries appear, use the one that points to the installation you actually use.</p>
+          </section>
+
+          <section class="guide-section guide-main-step guide-finish">
+            <div class="guide-section-kicker">STEP 4</div>
+            <h2>4. Enable High Performance.</h2>
+            <p>Select <strong>High performance</strong>, confirm the GPU name shown by Windows, and click <strong>Save</strong>. Then close every Chrome window and open Chrome again before testing NextSona.</p>
+            <figure class="guide-figure guide-figure-compact">
+              <img src="../../assets/images/guides/3-windows%2010%20%7C%20enable%20high%20performance.png" width="760" height="565" loading="lazy" decoding="async" alt="Windows 10 Enable high performance graphics preference" />
+              <figcaption>Select High performance, then save the setting.</figcaption>
+            </figure>
+            <p class="guide-source-note">This is an original NextSona guide based on the Windows and Chrome workflow. Menu names may vary slightly between Windows 10 and Windows 11.</p>
+            <div class="guide-sources"><a href="https://support.microsoft.com/en-us/windows/hardware/display-graphics/optimizations-for-windowed-games-in-windows-11" target="_blank" rel="noopener noreferrer">Microsoft: Windows Graphics settings</a><a href="https://support.google.com/chrome/answer/142063" target="_blank" rel="noopener noreferrer">Google Chrome Help: hardware acceleration</a><a href="https://equatorstudios.com/how-to-choose-which-gpu-chrome-uses-on-windows-10/" target="_blank" rel="noopener noreferrer">Related reference: Equator Studios</a></div>
+          </section>
+        </article>
+
+        <article class="guide-article" data-language-panel="th" hidden>
+          <header class="guide-heading">
+            <div class="eyebrow"><span class="live-dot"></span><span>คู่มือ WINDOWS + CHROME</span></div>
+            <h1>ตั้งค่าให้ Chrome ใช้ GPU ที่เหมาะสมบน Windows</h1>
+            <p class="guide-lede">คู่มือสำหรับคอมพิวเตอร์ที่มีทั้งการ์ดจอออนบอร์ดและการ์ดจอแยก โดยเฉพาะกรณี Chrome ทำงานช้า กระตุก หรือ NextSona AI Vocal เริ่มทำงานไม่สำเร็จ</p>
+            <div class="guide-meta"><span>อัปเดต 23 กันยายน 2026</span><span>·</span><span>NextFeeder Labs</span></div>
+          </header>
+
+          <div class="guide-card guide-intro">
+            <p class="guide-lead">ถ้า NextSona ขึ้น <strong>GPU Slow</strong>, AI Vocal ใช้เวลานานกว่าจะเริ่ม หรือค้างที่ <code>Buffering 0.0s</code> สาเหตุหนึ่งอาจเป็น Chrome กำลังใช้ GPU แบบประหยัดพลังงาน หรือระบบไม่สามารถใช้ hardware acceleration ได้</p>
+            <p>คู่มือนี้เรียงตาม 4 ขั้นตอนหลักของ Windows ชื่อเมนูอาจแตกต่างเล็กน้อยระหว่าง Windows 10 และ Windows 11</p>
+          </div>
+
+          <section class="guide-section guide-main-step">
+            <div class="guide-section-kicker">ขั้นตอนที่ 1</div>
+            <h2>1. เปิด Graphics Settings</h2>
+            <p>กดปุ่ม Windows แล้วค้นหา <strong>Graphics settings</strong> หรือใน Windows 11 ไปที่ Settings → System → Display → Graphics</p>
+            <figure class="guide-figure">
+              <img src="../../assets/images/guides/1-windows%2010%20%7C%20graphics%20settings.png" width="650" height="402" loading="lazy" decoding="async" alt="ภาพหน้า Windows 10 Graphics settings" />
+              <figcaption>เปิด Graphics settings จาก Windows Settings</figcaption>
+            </figure>
+          </section>
+
+          <section class="guide-section guide-main-step">
+            <div class="guide-section-kicker">ขั้นตอนที่ 2</div>
+            <h2>2. Browse หา Chrome</h2>
+            <p>ในส่วน Desktop app หรือ Classic app ให้กด <strong>Browse</strong> แล้วเลือกไฟล์ของ Chrome</p>
+            <figure class="guide-figure guide-figure-compact">
+              <img src="../../assets/images/guides/2-windows%2010%20%7C%20choose%20an%20app%20to%20set%20perference.png" width="534" height="589" loading="lazy" decoding="async" alt="ภาพหน้า Windows 10 Choose an app to set preference" />
+              <figcaption>เลือก Desktop app แล้ว Browse หาไฟล์ Chrome</figcaption>
+            </figure>
+            <div class="guide-paths"><code>C:\Program Files\Google\Chrome\Application\chrome.exe</code><code>C:\Program Files (x86)\Google\Chrome\Application\chrome.exe</code><code>%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe</code></div>
+            <p class="guide-small-note">ถ้า Chrome อยู่คนละโฟลเดอร์ ให้เลือกไฟล์ <code>chrome.exe</code> ของ Chrome ที่คุณใช้งานจริง</p>
+          </section>
+
+          <section class="guide-section guide-main-step">
+            <div class="guide-section-kicker">ขั้นตอนที่ 3</div>
+            <h2>3. เปิด Chrome Options</h2>
+            <p>เมื่อ Chrome ปรากฏในรายการ ให้เลือก Chrome แล้วกด <strong>Options</strong> ถ้ามีหลายรายการ ให้เลือกตัวที่ตรงกับ Chrome ที่คุณเปิดใช้งานจริง</p>
+          </section>
+
+          <section class="guide-section guide-main-step guide-finish">
+            <div class="guide-section-kicker">ขั้นตอนที่ 4</div>
+            <h2>4. เลือก High Performance</h2>
+            <p>เลือก <strong>High performance</strong> ตรวจสอบชื่อ GPU ที่ Windows แสดง แล้วกด <strong>Save</strong> จากนั้นปิด Chrome ให้ครบทุกหน้าต่างแล้วเปิดใหม่ก่อนลองใช้ NextSona</p>
+            <figure class="guide-figure guide-figure-compact">
+              <img src="../../assets/images/guides/3-windows%2010%20%7C%20enable%20high%20performance.png" width="760" height="565" loading="lazy" decoding="async" alt="ภาพหน้า Windows 10 Enable high performance" />
+              <figcaption>เลือก High performance แล้วบันทึกการตั้งค่า</figcaption>
+            </figure>
+            <p class="guide-source-note">นี่คือคู่มือฉบับเรียบเรียงใหม่ของ NextSona โดยอ้างอิงขั้นตอน Windows และ Chrome เมนูอาจแตกต่างเล็กน้อยระหว่าง Windows 10 และ Windows 11</p>
+            <div class="guide-sources"><a href="https://support.microsoft.com/en-us/windows/hardware/display-graphics/optimizations-for-windowed-games-in-windows-11" target="_blank" rel="noopener noreferrer">Microsoft: Windows Graphics settings</a><a href="https://support.google.com/chrome/answer/142063" target="_blank" rel="noopener noreferrer">Google Chrome Help: hardware acceleration</a><a href="https://equatorstudios.com/how-to-choose-which-gpu-chrome-uses-on-windows-10/" target="_blank" rel="noopener noreferrer">บทความอ้างอิง: Equator Studios</a></div>
+          </section>
+        </article>
+      </div>
+    </main>
+
+    <footer class="site-footer"><div class="shell footer-grid"><div class="footer-brand"><a class="brand" href="../../"><img src="../../assets/images/logo.png" width="34" height="34" alt="NextSona logo" /><span>NextSona</span></a><p data-i18n="footer.tagline">Browser audio tools by NextFeeder Labs.</p></div><div class="footer-links"><a href="../../" data-i18n="nav.features">Features</a><a href="../../guides/chrome-gpu-windows/" data-i18n="nav.gpuGuide">GPU guide</a><a href="../../privacy/" data-i18n="nav.privacy">Privacy</a><a href="../../terms/" data-i18n="nav.terms">Terms</a><a href="mailto:nextfeeder.ts@gmail.com" data-i18n="footer.contact">Contact</a></div><div class="footer-meta"><span>© <span data-current-year></span> NextFeeder Labs</span><span data-i18n="footer.built">Developed by NextFeeder Labs.</span></div></div></footer>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "name": "How to choose which GPU Chrome uses on Windows",
+        "description": "Choose Chrome's graphics preference on Windows 10 and Windows 11 through Graphics settings, chrome.exe, Options and High performance.",
+        "image": "https://sona.nextfeeder.com/assets/images/guides/3-windows%2010%20%7C%20enable%20high%20performance.png",
+        "totalTime": "PT10M",
+        "tool": [{"@type":"HowToTool","name":"Google Chrome"},{"@type":"HowToTool","name":"Windows 10 or Windows 11"}],
+        "step": [
+          {"@type":"HowToStep","name":"Access Graphics Settings","text":"Open Windows Graphics settings from the Start menu or Settings > System > Display > Graphics."},
+          {"@type":"HowToStep","name":"Browse for Chrome","text":"Choose the desktop app option, click Browse and select the correct chrome.exe file."},
+          {"@type":"HowToStep","name":"Open Chrome Options","text":"Select Google Chrome in the app list and click Options."},
+          {"@type":"HowToStep","name":"Enable High Performance","text":"Choose High performance, save the preference and relaunch Chrome before testing."}
+        ],
+        "author": {"@type":"Organization","name":"NextFeeder Labs"},
+        "publisher": {"@type":"Organization","name":"NextFeeder Labs"},
+        "dateModified": "2026-09-23"
+      }
+    </script>
+    <script src="../../assets/js/site.js" defer></script>
+  </body>
+</html>

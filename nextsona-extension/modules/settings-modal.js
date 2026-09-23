@@ -118,29 +118,49 @@ const MODAL_HTML = `
       </div>
 
       <div id="tab-about" class="tab-content">
-        <div class="flex flex-col items-center justify-center h-full text-center gap-2">
-          <div class="w-12 h-12 bg-gray-800 border border-white flex items-center justify-center p-1">
-            <img src="./assets/logo.png" alt="Logo" class="w-full h-full object-contain" />
-          </div>
-          <div>
-            <div class="text-[10px] font-bold text-white">NEXTSONA EXTENSION</div>
-            <div class="text-[7px] text-cyan-300">NextSona - Pitch Shifter, EQ, AI Vocal &amp; Video Sync</div>
-            <div class="text-[8px] text-gray-400">Version 1.0</div>
-          </div>
-          <p class="text-[8px] text-gray-500 px-4">Advanced audio processing, real-time visualizer, and in-browser audio recording.</p>
-          <div class="win-border-in bg-[#1e1e1e] p-2 mt-1 w-[90%] flex flex-col items-center gap-1 border border-gray-700">
-            <div class="text-[9px] font-bold text-yellow-400 flex items-center gap-1">
-              <i class="ph-bold ph-coffee text-amber-400 text-[10px]"></i>
-              <span>SUPPORT THE PROJECT</span>
+        <div class="about-content flex flex-col items-center h-full text-center gap-1.5">
+          <div class="about-brand w-[90%] flex items-center gap-2 min-h-[34px]">
+            <div class="about-brand-logo w-9 h-9 bg-gray-800 border border-white flex items-center justify-center p-0.5 flex-shrink-0">
+              <img src="./assets/logo.png" alt="NextSona logo" class="w-full h-full object-contain" />
             </div>
-            <p class="text-[7.5px] text-gray-400 leading-tight">
-              Support ongoing development and future feature updates.
-            </p>
-            <div class="flex gap-1.5 w-full justify-center mt-1">
+            <div class="about-brand-copy min-w-0 flex-1 text-left">
+              <div class="about-brand-title text-[9px] font-bold text-white truncate">NEXTSONA EXTENSION <span class="about-brand-version text-[7px] text-gray-400 font-normal">v1.1.1</span></div>
+              <div class="about-brand-subtitle text-[7px] text-gray-500 leading-tight">Advanced audio processing &amp; real-time visualizer.</div>
+            </div>
+          </div>
+          <div class="about-card about-developer-card win-border-in bg-[#101820] p-1.5 w-[90%] flex items-center gap-2 border border-cyan-900">
+            <div class="about-developer-logo w-8 h-8 overflow-hidden flex items-center justify-center flex-shrink-0 text-cyan-300 font-bold text-[9px]">
+              <img id="nextfeederlabs-logo" src="./assets/nextfeederlabs.png" alt="NextFeederLabs logo" class="w-full h-full object-contain" />
+              <span id="nextfeederlabs-logo-fallback" class="hidden">NF</span>
+            </div>
+            <div class="about-developer-copy min-w-0 flex-1 text-left">
+              <div class="about-eyebrow text-[7px] text-cyan-300 font-bold font-pixel">DEVELOPED BY</div>
+              <div class="about-developer-name text-[9px] text-white font-bold truncate">NextFeeder Labs</div>
+              <div class="about-card-note text-[7px] text-gray-400 leading-tight">Independent audio tools for everyday use.</div>
+            </div>
+            <div class="about-socials flex items-center gap-1">
+              <a href="https://www.youtube.com/@nextfeederlabs" target="_blank" rel="noopener noreferrer" class="about-social youtube w-5 h-5 rounded-full flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors" aria-label="NextFeederLabs on YouTube" title="YouTube">
+                <i class="ph-bold ph-youtube-logo text-[12px]"></i>
+              </a>
+              <a href="https://www.facebook.com/nextfeeder.labs" target="_blank" rel="noopener noreferrer" class="about-social facebook w-5 h-5 rounded-full flex items-center justify-center text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors" aria-label="NextFeederLabs on Facebook" title="Facebook">
+                <i class="ph-bold ph-facebook-logo text-[12px]"></i>
+              </a>
+            </div>
+          </div>
+          <div class="about-card about-support-card win-border-in bg-[#1e1e1e] p-1.5 mt-0.5 w-[90%] flex flex-col items-center gap-1.5 border border-gray-700">
+            <div class="about-support-header w-full flex items-center justify-between">
+              <div class="about-support-title text-[8px] font-bold text-yellow-400 flex items-center gap-1">
+                <i class="ph-bold ph-coffee text-amber-400 text-[9px]"></i>
+                <span>SUPPORT THE PROJECT</span>
+              </div>
+              <button id="btn-privacy-about" class="win-btn about-privacy h-4 px-1 text-[7px] text-gray-300 bg-gray-800 hover:bg-gray-700 cursor-pointer">PRIVACY</button>
+            </div>
+            <p class="about-card-note text-[7.5px] text-gray-400 leading-tight m-0">Support ongoing development and future feature updates.</p>
+            <div class="about-actions flex gap-1.5 w-full justify-center">
               <button
                 id="btn-donate-gank"
                 type="button"
-                class="win-btn h-5 px-2 text-[7.5px] font-bold text-white bg-gradient-to-b from-[#e056fd] to-[#be2edd] hover:from-[#eb4d4b] hover:to-[#e056fd] active:scale-95 flex items-center justify-center gap-1 border border-[#686de0] shadow cursor-pointer"
+                class="win-btn about-support-btn h-5 px-2 text-[7.5px] font-bold text-white bg-gradient-to-b from-[#e056fd] to-[#be2edd] hover:from-[#eb4d4b] hover:to-[#e056fd] active:scale-95 flex items-center justify-center gap-1 border border-[#686de0] shadow cursor-pointer"
                 title="Support via Gank (PromptPay / Local Wallets)"
               >
                 <i class="ph-bold ph-heart text-[8px]"></i>
@@ -149,7 +169,7 @@ const MODAL_HTML = `
               <button
                 id="btn-donate-coffee"
                 type="button"
-                class="win-btn h-5 px-2 text-[7.5px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer"
+                class="win-btn about-support-btn h-5 px-2 text-[7.5px] font-bold text-[#4a2810] bg-gradient-to-b from-[#ffd966] to-[#f1c232] hover:from-[#ffe599] hover:to-[#ffd966] active:scale-95 flex items-center justify-center gap-1 border border-[#b48608] shadow cursor-pointer"
                 title="Support via Buy Me a Coffee (Cards / International)"
               >
                 <i class="ph-bold ph-coffee text-[8px]"></i>
@@ -243,6 +263,14 @@ export class SettingsModal {
 
   setupListeners() {
     const overlay = $("#modal-overlay");
+    const developerLogo = $("#nextfeederlabs-logo");
+    const developerLogoFallback = $("#nextfeederlabs-logo-fallback");
+    if (developerLogo && developerLogoFallback) {
+      developerLogo.addEventListener("error", () => {
+        developerLogo.style.display = "none";
+        developerLogoFallback.style.display = "flex";
+      }, { once: true });
+    }
     const btnSettings = $("#btn-settings");
     if (btnSettings) {
       btnSettings.onclick = () => {

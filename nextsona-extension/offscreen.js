@@ -56,6 +56,7 @@ function broadcastAiVocalStatus(tabId, status, aiVocal, session = null) {
     hardwareDevice: aiVocal.getHardwareDevice(),
     hardwareDeviceRaw: aiVocal.getHardwareDeviceRaw(),
     api: aiVocal.getHardwareApi(),
+    gpuProfile: aiVocal.getGpuProfile?.() || null,
     outputLatency: getSessionOutputLatency(aiVocal, targetSession)
   }).catch(() => {});
 }

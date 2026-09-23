@@ -102,6 +102,49 @@ assert.equal(healthManager.liveGpuWarningActive, false);
 assert.equal(healthManager.isHardwareSlow, false);
 healthManager.destroy();
 
+const startupManager = makeManager();
+startupManager.onStatusChange = status => startupManager.testStatuses.push(status);
+startupManager.testStatuses = [];
+startupManager.aiStartupProcessedBaseline = 0;
+startupManager.aiStartupStartedAt = performance.now() - 6000;
+startupManager.handleWorkletStatus({
+  mode: 'karaoke',
+  isAiReady: false,
+  inputFrame: 1,
+  bufferedSec: '0.0',
+  queueLen: 0,
+  readyThreshold: 2,
+  chunkSize: 8192,
+});
+assert.equal(startupManager.aiStartupStalled, true,
+  'AI startup with live input and no processed output must be marked stalled');
+assert.match(startupManager.testStatuses.at(-1), /AI stuck/);
+startupManager.aiStartupStartedAt = performance.now() - 6000;
+startupManager.diagnostics.processedChunks = 1;
+startupManager.handleWorkletStatus({
+  mode: 'karaoke',
+  isAiReady: false,
+  inputFrame: 2,
+  bufferedSec: '0.0',
+  queueLen: 0,
+  readyThreshold: 2,
+  chunkSize: 8192,
+});
+assert.equal(startupManager.aiStartupStalled, false,
+  'a processed result must clear the startup stall');
+startupManager.diagnostics.processedChunks = 0;
+startupManager.handleWorkletStatus({
+  mode: 'karaoke',
+  isAiReady: false,
+  inputFrame: null,
+  bufferedSec: '0.0',
+  queueLen: 0,
+  readyThreshold: 2,
+  chunkSize: 8192,
+});
+assert.match(startupManager.getStatus(), /No audio/);
+startupManager.destroy();
+
 const ecoHeadManager = makeManager();
 ecoHeadManager.modelOutputHead = { start: 34, frames: 15 };
 const exactEcoOutput = {};

@@ -7,7 +7,7 @@
   const translations = {
     en: {
       skip: "Skip to content",
-      "nav.features": "Features", "nav.compatibility": "Compatibility", "nav.remote": "Remote", "nav.privacy": "Privacy", "nav.terms": "Terms", "nav.getStarted": "View features",
+      "nav.features": "Features", "nav.compatibility": "Compatibility", "nav.remote": "Remote", "nav.gpuGuide": "GPU guide", "nav.privacy": "Privacy", "nav.terms": "Terms", "nav.getStarted": "View features",
       "hero.eyebrow": "BROWSER AUDIO TOOLS", "hero.title": "Audio tools for your browser.",
       "hero.lede": "Adjust pitch, AI vocal modes, video sync and recording from a browser extension.",
       "hero.primary": "View features", "hero.microcopy": "AI vocal processing loads only when enabled.",
@@ -25,7 +25,7 @@
       "policy.label": "PRIVACY & TRUST", "policy.title": "Privacy Policy", "policy.intro": "A clear description of how NextSona handles information.", "policy.effective": "Effective date: September 13, 2026", "policy.version": "Version 1.1", "terms.label": "TERMS & USE", "terms.title": "Terms of Use", "terms.intro": "The basic terms for using NextSona.", "terms.effective": "Effective date: September 13, 2026", "terms.version": "Version 1.0"
     },
     th: {
-      skip: "ข้ามไปยังเนื้อหา", "nav.features": "ฟีเจอร์", "nav.compatibility": "อุปกรณ์ที่รองรับ", "nav.remote": "รีโมต", "nav.privacy": "ความเป็นส่วนตัว", "nav.terms": "ข้อกำหนด", "nav.getStarted": "ดูฟีเจอร์",
+      skip: "ข้ามไปยังเนื้อหา", "nav.features": "ฟีเจอร์", "nav.compatibility": "อุปกรณ์ที่รองรับ", "nav.remote": "รีโมต", "nav.gpuGuide": "คู่มือ GPU", "nav.privacy": "ความเป็นส่วนตัว", "nav.terms": "ข้อกำหนด", "nav.getStarted": "ดูฟีเจอร์",
       "hero.eyebrow": "เครื่องมือเสียงบน BROWSER", "hero.title": "เครื่องมือเสียงสำหรับ BROWSER",
       "hero.lede": "ปรับคีย์ โหมดเสียงร้อง เอฟเฟกต์ วิดีโอ และบันทึกเสียงจาก browser extension",
       "hero.primary": "ดูฟีเจอร์", "hero.microcopy": "AI vocal จะโหลดเมื่อเปิดใช้เท่านั้น", "proof.realtime": "Pitch", "proof.aiVocal": "AI Vocal", "proof.remote": "Remote", "strip.label": "ฟีเจอร์ที่มีให้ใช้",
