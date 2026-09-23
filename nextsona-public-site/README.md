@@ -10,6 +10,8 @@ the AI model, Extension package, source maps, certificates or private keys.
 - `/remote/` — data-only Remote Controller
 - `/privacy/` — English-first Privacy Policy with Thai translation
 - `/terms/` — Terms of Use with Thai translation
+- `/welcome/` — First-run welcome page opened after Extension installation
+- `/getting-started/` — First-run guide for installing and using the Chrome extension
 
 ## Direct deployment
 

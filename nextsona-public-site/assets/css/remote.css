@@ -354,3 +354,32 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* Keep the Remote page compact enough for a phone, but use readable public
+   page typography instead of the original tiny dashboard labels. */
+html { font-size: 16px; }
+body { font-size: 1rem; line-height: 1.55; }
+.panel-header h2 { font-size: .875rem; }
+.site-button-small { font-size: .75rem; }
+.status-button { font-size: .75rem; }
+.ping-readout { font-size: .75rem; }
+.control-name { font-size: .8125rem; }
+.control-value { font-size: .875rem; }
+.control-value-secondary { font-size: .8125rem; }
+.utility-button { font-size: .75rem; }
+.reconnect-banner { font-size: .875rem; }
+.donate-strip { font-size: .8125rem; }
+.header-select { font-size: .8125rem; }
+.panel-state { font-size: .75rem; }
+.eq-value, .eq-label { font-size: .6875rem; }
+.mode-button { font-size: .8125rem; }
+.micro-label { font-size: .6875rem; }
+.delay-actions .site-button, .preset-button, .angle-button { font-size: .6875rem; }
+.action-button { font-size: .8125rem; }
+.remote-footer { font-size: .75rem; }
+
+@media (max-width: 360px) {
+  .panel-header h2 { font-size: .75rem; }
+  .header-select { font-size: .75rem; }
+  .delay-actions .site-button { font-size: .625rem; }
+}

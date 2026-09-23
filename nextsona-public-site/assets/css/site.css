@@ -147,3 +147,89 @@ h1 span { color: var(--green); }
 @media (max-width: 920px) { .site-nav { gap: 15px; }.hero-grid, .capability-grid, .workflow-grid, .faq-grid { grid-template-columns: 1fr; gap: 52px; }.hero-copy { max-width: 700px; }.hero-visual { max-width: 700px; margin-inline: auto; width: 100%; }.split-heading { grid-template-columns: 1fr; gap: 22px; }.capability-copy { max-width: 600px; }.workflow-grid { gap: 46px; }.faq-grid { gap: 34px; }.cta-card { align-items: flex-start; flex-direction: column; }.footer-grid { grid-template-columns: 1fr; }.footer-links { justify-content: flex-start; }.footer-meta { flex-wrap: wrap; } }
 @media (max-width: 650px) { .shell { width: min(100% - 32px, var(--max)); }.site-header { position: relative; }.nav-wrap { flex-wrap: wrap; padding: 13px 0; }.site-nav { order: 3; width: 100%; justify-content: space-between; gap: 8px; overflow-x: auto; padding-bottom: 3px; font-size: 12px; }.nav-actions { margin-left: auto; }.nav-actions .button { display: none; }.section-pad { padding: 78px 0; }.hero { padding-top: 70px; }.hero-grid { gap: 38px; }.hero-lede { font-size: 16px; }.hero-proof { margin-top: 36px; gap: 12px 20px; }.hero-visual { padding: 20px 2px 45px; }.hero-banner-image { transform: none; }.studio-window { transform: none; }.window-content { padding: 21px 16px 13px; }.window-title-row strong { font-size: 22px; }.mode-chip { font-size: 8px; }.waveform { height: 78px; margin: 22px 0 16px; }.meter-row { grid-template-columns: 83px 1fr; }.meter-value { display: none; }.window-footer { font-size: 7px; }.floating-note { transform: scale(.85); }.note-latency { right: -19px; top: 3%; }.note-local { left: -20px; bottom: 2%; }.signal-inner { align-items: flex-start; flex-direction: column; gap: 10px; }.signal-items { justify-content: flex-start; gap: 9px; font-size: 11px; }.feature-grid { grid-template-columns: 1fr; }.feature-card, .feature-card-wide, .feature-wide-bottom { min-height: 380px; }.feature-wide-bottom { display: block; }.remote-visual { right: 18px; bottom: 24px; width: 47%; transform: none; }.capability-panel { padding-inline: 16px; }.capability-row { grid-template-columns: 30px 1fr auto; gap: 11px; min-height: 83px; }.capability-row strong { font-size: 13px; }.capability-row span { font-size: 11px; }.capability-foot { align-items: flex-start; flex-direction: column; }.cta-card { padding: 34px 25px; }.cta-actions, .cta-actions .button { width: 100%; }.cta-actions { flex-direction: column; }.footer-links { gap: 14px; }.guide-main { padding: 64px 0 85px; }.guide-heading h1 { font-size: clamp(40px, 13vw, 62px); }.guide-lede { font-size: 16px; }.guide-intro { margin-bottom: 54px; }.guide-intro .guide-lead { font-size: 18px; }.guide-section { margin-top: 62px; }.guide-section h2 { font-size: clamp(30px, 9vw, 44px); }.guide-check-grid { grid-template-columns: 1fr; }.guide-callout { grid-template-columns: 1fr; gap: 4px; }.guide-steps li { grid-template-columns: 28px 1fr; gap: 10px; padding: 14px; }.guide-summary { grid-template-columns: 32px 1fr; gap: 0 10px; }.guide-sources { display: grid; gap: 10px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+
+/* Public-site typography baseline.
+   The first pass used a deliberately compact product-dashboard scale. Keep
+   the visual language, but use normal browser-readable sizes for every public
+   page: home, guides, policies and terms. */
+html { font-size: 16px; }
+body { font-size: 1rem; line-height: 1.6; }
+.site-nav { font-size: .9375rem; }
+.language-button { font-size: .75rem; }
+.button { font-size: .9375rem; }
+.button-small { font-size: .875rem; }
+.eyebrow { font-size: .75rem; }
+.hero-lede { font-size: 1.25rem; }
+.microcopy { font-size: .875rem; }
+.hero-proof { font-size: .875rem; }
+.hero-proof b { font-size: .75rem; }
+.signal-strip { font-size: .875rem; }
+.section-heading h2, .capability-copy h2, .workflow-intro h2, .faq-grid h2, .cta-card h2 { font-size: clamp(2.5rem, 4.4vw, 4rem); }
+.split-heading > p { font-size: 1.0625rem; }
+.feature-card h3 { font-size: 2.25rem; }
+.feature-card p { font-size: 1rem; }
+.card-kicker { font-size: .75rem; }
+.capability-copy p { font-size: 1.0625rem; }
+.text-link { font-size: 1rem; }
+.capability-row strong { font-size: 1rem; }
+.capability-row span { font-size: .875rem; }
+.capability-tag { font-size: .6875rem; }
+.capability-foot { font-size: .8125rem; }
+.workflow-list > li > span { font-size: .75rem; }
+.workflow-list strong { font-size: 1.25rem; }
+.workflow-list p { font-size: 1rem; }
+.faq-list summary { font-size: 1.125rem; }
+.faq-list p { font-size: 1rem; }
+.footer-brand p, .footer-links { font-size: .875rem; }
+.footer-meta { font-size: .8125rem; }
+
+.guide-lede { font-size: 1.25rem; }
+.guide-meta { font-size: .875rem; }
+.guide-intro p { font-size: 1.0625rem; }
+.guide-intro .guide-lead { font-size: 1.25rem; }
+.guide-section-kicker { font-size: .75rem; }
+.guide-section h2 { font-size: clamp(2.125rem, 4.5vw, 3.5rem); }
+.guide-section > p { font-size: 1.0625rem; }
+.guide-callout { font-size: .9375rem; }
+.guide-figure figcaption { font-size: .875rem; }
+.guide-steps li > span { font-size: .75rem; }
+.guide-steps strong { font-size: 1.0625rem; }
+.guide-steps p { font-size: .9375rem; }
+.guide-paths code { font-size: .8125rem; }
+.guide-check-number { font-size: .75rem; }
+.guide-check-card h3 { font-size: 1.125rem; }
+.guide-check-card p { font-size: .9375rem; }
+.guide-list { font-size: 1rem; }
+.guide-summary span { font-size: .75rem; }
+.guide-summary p { font-size: 1rem; }
+.guide-source-note, .guide-sources a { font-size: .875rem !important; }
+
+.policy-heading > p { font-size: 1.125rem; }
+.policy-meta { font-size: .875rem; }
+.policy-copy { font-size: 1.0625rem; }
+.policy-copy h2 { font-size: 1.5rem; }
+.policy-lead { font-size: 1.25rem !important; }
+.policy-notice { font-size: .9375rem; }
+
+@media (max-width: 650px) {
+  .site-nav { font-size: .8125rem; }
+  .hero-lede { font-size: 1.0625rem; }
+  .hero-proof { font-size: .8125rem; }
+  .section-heading h2, .capability-copy h2, .workflow-intro h2, .faq-grid h2, .cta-card h2 { font-size: clamp(2.25rem, 9vw, 3.25rem); }
+  .split-heading > p { font-size: 1rem; }
+  .feature-card h3 { font-size: 2rem; }
+  .feature-card p { font-size: .9375rem; }
+  .capability-copy p { font-size: 1rem; }
+  .capability-row strong { font-size: .9375rem; }
+  .capability-row span { font-size: .8125rem; }
+  .workflow-list strong { font-size: 1.125rem; }
+  .workflow-list p, .faq-list p { font-size: .9375rem; }
+  .faq-list summary { font-size: 1.0625rem; }
+  .guide-lede { font-size: 1.0625rem; }
+  .guide-intro p, .guide-section > p { font-size: 1rem; }
+  .guide-intro .guide-lead { font-size: 1.125rem; }
+  .guide-section h2 { font-size: clamp(2rem, 9vw, 2.75rem); }
+  .policy-heading > p { font-size: 1.0625rem; }
+  .policy-copy { font-size: 1rem; }
+  .policy-copy h2 { font-size: 1.375rem; }
+}

@@ -16,7 +16,7 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
     },
     {
-      "source": "/(index.html|remote/|privacy/|terms/|404.html|robots.txt|sitemap.xml)",
+      "source": "/(index.html|remote/|privacy/|terms/|welcome/|getting-started/|404.html|robots.txt|sitemap.xml)",
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     }
   ],

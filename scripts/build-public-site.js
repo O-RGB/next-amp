@@ -9,11 +9,12 @@ const output = path.join(root, "dist", "nextsona-public-site");
 const publicOrigin = (process.env.PUBLIC_SITE_ORIGIN || "http://localhost:5500").replace(/\/$/, "");
 const allowedFiles = [
   "index.html", "404.html", "robots.txt", "sitemap.xml", "site.webmanifest", "vercel.json", "README.md", "THIRD-PARTY-NOTICES.txt",
-  "remote/index.html", "privacy/index.html", "terms/index.html", "guides/chrome-gpu-windows/index.html",
-  "assets/css/site.css", "assets/css/remote.css", "assets/js/site.js", "assets/js/remote.js", "assets/js/remote-protocol.js", "assets/vendor/peerjs.min.js",
+  "remote/index.html", "privacy/index.html", "terms/index.html", "welcome/index.html", "getting-started/index.html", "guides/chrome-gpu-windows/index.html",
+  "assets/css/site.css", "assets/css/remote.css", "assets/js/site.js", "assets/js/donation.js", "assets/js/remote.js", "assets/js/remote-protocol.js", "assets/vendor/peerjs.min.js",
   "assets/images/logo.png", "assets/images/og-image.png", "assets/images/nextsona-showcase.png",
   "assets/images/screenshots/extension-detail.png", "assets/images/screenshots/remote-preview.png", "assets/images/screenshots/video-preview.png",
-  "assets/images/guides/1-windows 10 | graphics settings.png", "assets/images/guides/2-windows 10 | choose an app to set perference.png", "assets/images/guides/3-windows 10 | enable high performance.png"
+  "assets/images/guides/1-windows 10 | graphics settings.png", "assets/images/guides/2-windows 10 | choose an app to set perference.png", "assets/images/guides/3-windows 10 | enable high performance.png",
+  "assets/images/guides/welcome/1-open extension list.png", "assets/images/guides/welcome/2-set pin nextsona.png", "assets/images/guides/welcome/3-click-nextsona-icon and enjoy.png"
 ];
 
 function fail(message) {

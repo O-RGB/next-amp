@@ -207,12 +207,14 @@ async function ensureVideoContentScripts(tabId) {
   }
 }
 
-// Open a small first-run welcome page after a real installation. Chrome only
+// Open the public first-run guide after a real installation. Chrome only
 // emits reason="install" once for an extension install, so normal popup use,
 // service-worker wakeups, and extension reloads do not interrupt the user.
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason !== "install") return;
-  chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
+  chrome.tabs.create({
+    url: "https://sona.nextfeeder.com/welcome/?installed=1",
+  });
 });
 
 async function setMap(playerTabId, sourceTabId) {
